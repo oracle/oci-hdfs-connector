@@ -3,7 +3,7 @@
 
 ## About
 
-oci-hdfs-connector provides the public HDFS connector that integrates with Oracle Cloud Infrastructure Object Storage Service.
+oci-hdfs-connector provides the public HDFS connector that integrates with the Oracle Cloud Infrastructure Object Storage Service.
 
 The project is open source and maintained by Oracle Corp. The home page for the project is [here](https://docs.us-phoenix-1.oraclecloud.com/Content/API/SDKDocs/hdfsconnector.htm).
 
@@ -23,7 +23,7 @@ API reference can be found [here](https://docs.us-phoenix-1.oraclecloud.com/tool
 
 ## Help
 
-See the “Questions or Feedback?” section [here](https://docs.us-phoenix-1.oraclecloud.com/Content/API/SDKDocs/hdfsconnector.htm).
+See the “Questions or Feedback?” section [here](https://docs.us-phoenix-1.oraclecloud.com/Content/API/SDKDocs/hdfsconnector.htm#questions).
 
 ## Changes
 
@@ -37,7 +37,7 @@ Oracle gratefully acknowledges the contributions to oci-hdfs-connector that have
 
 ## Known Issues
 
-You can find information on any known issues with the SDK [here](https://docs.us-phoenix-1.oraclecloud.com/Content/knownissues.htm) and under the “Issues” tab of this GitHub repository.
+You can find information on any known issues with the connector [here](https://docs.us-phoenix-1.oraclecloud.com/Content/knownissues.htm) and under the “Issues” tab of this GitHub repository.
 
 ## License
 
