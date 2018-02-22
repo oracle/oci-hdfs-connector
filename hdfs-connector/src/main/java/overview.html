@@ -1,0 +1,83 @@
+<body>
+<h1>Quick Start Guide</h1>
+
+<h2>User Documentation</h2>
+<p>More complete user documentation is available on the <a href="https://docs.us-phoenix-1.oraclecloud.com/Content/API/SDKDocs/hdfsconnector.htm">Oracle Cloud Infrastructure documentation portal</a>.
+
+<h2>HDFS Connector Properties</h2>
+<p>The following table details the HDFS properties you can set to connect to Oracle Cloud Infrastructure Object Storage.  Additional properties can be found in the user documentation
+or by looking through the Javadocs for BmcProperties.</p>
+
+<table>
+  <thead>
+    <tr>
+      <td>Name</td>
+      <td>Description</td>
+      <td>Type</td>
+      <td>Default</td>
+      <td>Required?</td>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><pre>fs.oci.client.hostname</pre></td>
+      <td>Host endpoint for the Object Storage Service. For example <code>https://objectstorage.us-phoenix-1.oraclecloud.com</code>.</td>
+      <td>string</td>
+      <td></td>
+      <td>yes</td>
+    </tr>
+    <tr>
+      <td><pre>fs.oci.client.auth.tenantId</pre></td>
+      <td>Tenant OCID of the account.  Required unless a custom authenticator is provided.</td>
+      <td>string</td>
+      <td></td>
+      <td>yes</td>
+    </tr>
+    <tr>
+      <td><pre>fs.oci.client.auth.userId</pre></td>
+      <td>User OCID of the user making the request.  Required unless a custom authenticator is provided.</td>
+      <td>string</td>
+      <td></td>
+      <td>yes</td>
+    </tr>
+    <tr>
+      <td><pre>fs.oci.client.auth.fingerprint</pre></td>
+      <td>Fingerprint for the PEM file being used.  Required unless a custom authenticator is provided.</td>
+      <td>string</td>
+      <td></td>
+      <td>yes</td>
+    </tr>
+    <tr>
+      <td><pre>fs.oci.client.auth.pemfilepath</pre></td>
+      <td>Path to the PEM file used for authentication.  Required unless a custom authenticator is provided.</td>
+      <td>string</td>
+      <td></td>
+      <td>yes</td>
+    </tr>
+    <tr>
+      <td><pre>fs.oci.client.auth.passphrase</pre></td>
+      <td>Pass phrase to use if the PEM file is in encrypted format.</td>
+      <td>string</td>
+      <td></td>
+      <td>no</td>
+    </tr>
+  </tbody>
+</table>
+
+
+<h2>URI Format</h2>
+<p>HDFS filesystems and files are referenced through URIs.  Oracle Cloud Infrastructure Object Storage filesystem uses the scheme 'oci'.</p>
+<p>Note: The scheme 'oraclebmc' is deprecated but still supported.</p>
+
+<h3>Root</h3>
+<p>The root of the Object Storage Service filesystem is denoted by a path where the authority component comprises the bucket and the namespace:</p>
+
+<pre><code>oci://bucket@namespace/</code></pre>
+
+<h3>Objects/Files</h3>
+<p>An object named <code>a/b/c/foo.json</code> is referenced as:</p>
+
+<pre><code>oci://bucket@namespace/a/b/c/foo.json</code></pre>
+
+
+</body>
