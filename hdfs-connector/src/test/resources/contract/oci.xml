@@ -1,0 +1,124 @@
+<configuration>
+
+  <!-- Config settings for contract tests (listed in order of ContractOptions.java), should not need to change these. Not 
+    all of these are needed, but they're listed and set for posterity. Add actual credential properties to oci-credentials.xml 
+    (see oci-credentials-template.xml) -->
+
+  <property>
+    <name>fs.contract.is-case-sensitive</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <name>fs.contract.is-blobstore</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <name>fs.contract.rename-creates-dest-dirs</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>fs.contract.rename-overwrites-dest</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>fs.contract.rename-returns-false-if-dest-exists</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <name>fs.contract.rename-returns-false-if-source-missing</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <name>fs.contract.rename-remove-dest-if-empty-dir</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>fs.contract.supports-append</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>fs.contract.supports-atomic-rename</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>fs.contract.supports-atomic-directory-delete</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>fs.contract.supports-block-locality</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>fs.contract.supports-concat</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>fs.contract.supports-seek</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <name>fs.contract.rejects-seek-past-eof</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <name>fs.contract.supports-seek-on-closed-file</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>fs.contract.supports-strict-exceptions</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <name>fs.contract.supports-unix-permissions</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>fs.contract.max-path</name>
+    <value>1000</value>
+  </property>
+
+  <property>
+    <name>fs.contract.max-filesize</name>
+    <value>-1</value>
+  </property>
+
+  <property>
+    <name>fs.contract.test.root-tests-enabled</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <name>fs.contract.test.random-seek-count</name>
+    <value>50</value>
+  </property>
+
+  <!-- Also uncomment below to test inmemory versions -->
+  <!--
+  <property>
+    <name>fs.oci.io.write.inmemory</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <name>fs.oci.io.read.inmemory</name>
+    <value>true</value>
+  </property>
+   -->
+</configuration>
