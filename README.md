@@ -13,7 +13,7 @@ See [the documentation](https://docs.us-phoenix-1.oraclecloud.com/Content/API/SD
 
 ## Examples
 
-Examples can be found [here](/hdfs-examples/src/main/java/).
+Examples can be found [here](https://github.com/oracle/oci-hdfs-connector/blob/master/hdfs-example/src/main/java/com/oracle/bmc/hadoop/example/SampleOracleBmcHadoopJob.java).
 
 ## Documentation
 
@@ -24,6 +24,16 @@ API reference can be found [here](https://docs.us-phoenix-1.oraclecloud.com/tool
 ## Help
 
 See the “Questions or Feedback?” section [here](https://docs.us-phoenix-1.oraclecloud.com/Content/API/SDKDocs/hdfsconnector.htm#questions).
+
+## Version
+
+The first three numbers of HDFS connector version are Hadoop version that the connector was compiled and tested against.
+
+## Build
+
+Building HDFS connector relies on Maven artifacts that are provided by the Java SDK. To obtain the artifacts, you must [download the Java SDK](https://github.com/oracle/oci-java-sdk/) and build it locally. You can then build the HDFS connector.
+ 
+Important: The Java SDK file version that you download from the [Oracle Releases page](https://github.com/oracle/oci-java-sdk/releases) must match the HDFS connector version, which you can find in the [hdfs-connector/pom.xml](/blob/8cd12e68d27e1c76b01abafccb0bcc795d0a8e04/hdfs-connector/pom.xml#L110) file in the <dependency> tag block that has the groupId attribute com.oracle.oci.sdk.
 
 ## Changes
 

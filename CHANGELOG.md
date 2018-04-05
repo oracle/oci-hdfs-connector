@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ### Added
 
+## 2.7.2.0 - 2018-04-05
+### Fixed
+- Added build instruction and fixed broken GitHub links in README
+
+### Changed
+- Updated version number to stem from Hadoop version 2.7.2
+
 ## 1.2.10 - 2018-03-27
 ### Changed
 - Release to [GitHub](https://github.com/oracle/oci-hdfs-connector)
