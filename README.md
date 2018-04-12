@@ -1,5 +1,4 @@
 # Oracle Cloud Infrastructure HDFS Connector for Object Storage
-[![Build Status](https://travis-ci.org/oracle/oci-hdfs-connector.svg?branch=master)](https://travis-ci.org/oracle/oci-hdfs-connector)
 
 ## About
 
