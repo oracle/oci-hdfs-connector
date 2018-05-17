@@ -9,8 +9,11 @@ import java.util.concurrent.ExecutorService;
 
 import javax.annotation.Nullable;
 
+import com.oracle.bmc.objectstorage.ObjectStorage;
+import com.oracle.bmc.objectstorage.model.MultipartUpload;
 import com.oracle.bmc.objectstorage.model.RenameObjectDetails;
 import com.oracle.bmc.objectstorage.requests.*;
+import com.oracle.bmc.objectstorage.transfer.MultipartObjectAssembler;
 import com.oracle.bmc.objectstorage.transfer.UploadManager.UploadRequest;
 
 import lombok.AccessLevel;

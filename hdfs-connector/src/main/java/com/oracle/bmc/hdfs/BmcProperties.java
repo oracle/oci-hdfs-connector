@@ -117,7 +117,13 @@ public enum BmcProperties {
      * interpreted as using the default Java SDK value. See {@link BmcConstants#MULTIPART_MIN_PART_SIZE_IN_MB_KEY} for
      * config key name.
      */
-    MULTIPART_MIN_PART_SIZE_IN_MB(MULTIPART_MIN_PART_SIZE_IN_MB_KEY, null);
+    MULTIPART_MIN_PART_SIZE_IN_MB(MULTIPART_MIN_PART_SIZE_IN_MB_KEY, null),
+
+    /**
+     * (boolean, optional) Flag to enable reading all files to memory first (instead streaming from Object Store), to
+     * allow faster seeking. See {@link BmcConstants#IN_MEMORY_READ_BUFFER_KEY} for config key name. Default is false.
+     */
+    MULTIPART_IN_MEMORY_WRITE_BUFFER(MULTIPART_IN_MEMORY_WRITE_BUFFER_KEY, false);
 
     @Getter private final String propertyName;
     @Getter private final Object defaultValue;

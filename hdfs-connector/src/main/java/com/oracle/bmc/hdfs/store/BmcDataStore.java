@@ -14,7 +14,9 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.oracle.bmc.objectstorage.model.MultipartUpload;
 import com.oracle.bmc.objectstorage.model.RenameObjectDetails;
+import com.oracle.bmc.objectstorage.transfer.MultipartObjectAssembler;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem.Statistics;
@@ -69,6 +71,8 @@ public class BmcDataStore {
     private final long blockSizeInBytes;
     private final boolean useInMemoryReadBuffer;
     private final boolean useInMemoryWriteBuffer;
+    private final boolean useMultipartUploadWriteBuffer;
+    private final MultipartUploadRequest.Builder multipartUploadRequestBuilder;
 
     public BmcDataStore(
             final BmcPropertyAccessor propertyAccessor,
@@ -88,11 +92,17 @@ public class BmcDataStore {
         LOG.info("Using upload configuration: %s", uploadConfiguration);
         this.uploadManager = new UploadManager(objectStorage, uploadConfiguration);
         this.requestBuilder = new RequestBuilder(namespace, bucket);
+        this.multipartUploadRequestBuilder =
+                MultipartUploadRequest.builder().uploadConfiguration(uploadConfiguration)
+                        .bucketName(bucket).namespaceName(namespace)
+                        .executorService(parallelUploadExecutor).objectStorage(objectStorage);
         this.blockSizeInBytes = propertyAccessor.asLong().get(BmcProperties.BLOCK_SIZE_IN_MB) * MiB;
         this.useInMemoryReadBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_READ_BUFFER);
         this.useInMemoryWriteBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_WRITE_BUFFER);
+        this.useMultipartUploadWriteBuffer =
+                propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER);
     }
 
     private UploadConfigurationBuilder createUploadConfiguration(
@@ -635,7 +645,13 @@ public class BmcDataStore {
         final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn =
                 new UploadDetailsFunction(this.pathToObject(path));
 
-        if (this.useInMemoryWriteBuffer) {
+        // takes precedence
+        if (this.useMultipartUploadWriteBuffer) {
+            this.multipartUploadRequestBuilder.objectName(this.pathToObject(path));
+            return new BmcMultipartOutputStream(
+                    this.multipartUploadRequestBuilder.build(), progress, bufferSizeInBytes);
+        }
+        else if (this.useInMemoryWriteBuffer) {
             return new BmcInMemoryOutputStream(
                     this.uploadManager, progress, bufferSizeInBytes, requestBuilderFn);
         } else {
