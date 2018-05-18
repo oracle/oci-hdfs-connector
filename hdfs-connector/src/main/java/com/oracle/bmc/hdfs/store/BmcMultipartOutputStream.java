@@ -3,27 +3,26 @@ package com.oracle.bmc.hdfs.store;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.oracle.bmc.model.BmcException;
 import com.oracle.bmc.objectstorage.transfer.MultipartManifest;
 import com.oracle.bmc.objectstorage.transfer.MultipartObjectAssembler;
 import com.oracle.bmc.objectstorage.transfer.internal.StreamHelper;
 import com.oracle.bmc.util.StreamUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.ArrayUtils;
-import org.apache.commons.net.util.Base64;
 import org.apache.hadoop.util.Progressable;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.security.DigestOutputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 public class BmcMultipartOutputStream extends BmcOutputStream {
     private final int bufferSizeInBytes;
+    private final int maxInflight;
     private final MultipartUploadRequest request;
     private ByteBufferOutputStream bbos;
     private MultipartObjectAssembler assembler;
@@ -31,6 +30,7 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
     private MultipartManifest manifest;
     private ExecutorService executor;
     private boolean shutdownExecutor;
+    private volatile AtomicInteger inFlightParts;
 
     /**
      * Inner class which handles circular buffer writes to OCI via a ByteBuffer.
@@ -116,22 +116,23 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
             return !isEmpty();
         }
 
-        private String getMD5() {
-            byte[] hashBytes = (buffer.hasRemaining())
-                    ? ArrayUtils.subarray(buffer.array(), 0, this.length()) : buffer.array();
-            return StreamHelper.base64EncodeMd5Digest(hashBytes);
+        private byte[] toByteArray() {
+            return ArrayUtils.subarray(this.buffer.array(), 0, this.length());
         }
     }
 
     public BmcMultipartOutputStream(
             final MultipartUploadRequest request,
             final Progressable progress,
-            final int bufferSizeInBytes) {
+            final int bufferSizeInBytes,
+            final int maxInflight) {
         super(null, progress, null);
 
         // delay creation until called in createOutputBufferStream
         this.bufferSizeInBytes = bufferSizeInBytes;
         this.request = request;
+        this.maxInflight = maxInflight;
+        this.inFlightParts = new AtomicInteger(0);
     }
 
     /**
@@ -171,35 +172,24 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         }
     }
 
-    private static String performMd5Calculation(
-            InputStream stream, OutputStream outputStream, long contentLength) throws NoSuchAlgorithmException {
-        DigestOutputStream digestOutputStream =
-                new DigestOutputStream(outputStream, MessageDigest.getInstance("MD5"));
-        long bytesCopied;
-        try {
-            bytesCopied = StreamHelper.copy(stream, digestOutputStream);
-        } catch (IOException e) {
-            throw new BmcException(false, "Unable to calculate MD5", e, null);
-        }
-        if (bytesCopied != contentLength) {
-            throw new BmcException(
-                    false,
-                    "Failed to read all bytes while calculating MD5: "
-                            + bytesCopied
-                            + ", "
-                            + contentLength,
-                    null,
-                    null);
-        }
-        return StreamHelper.base64Encode(digestOutputStream.getMessageDigest());
-    }
-
     private synchronized void doUpload() throws IOException {
+        // here we need to back-pressure on if we have too much inflight to avoid copying too many buffers
+        this.inFlightParts.incrementAndGet();
+        if (this.inFlightParts.get() >= this.maxInflight) {
+            LOG.info("Performing backpressure on streaming Multipart");
+            System.out.println("Performing backpressure on streaming Multipart");
+            while (this.manifest.listInProgressParts().size() >= this.maxInflight) { }
+        } else {
+            System.out.println("Starting new upload...");
+            LOG.info("Starting new upload");
+        }
+
         InputStream is = null;
         try {
             if (this.bbos.nonEmpty()) {
-                is = this.getInputStreamFromBufferedStream();
-                this.assembler.addPart(is, this.bbos.length(), this.bbos.getMD5());
+                byte[] bytesToWrite = this.bbos.toByteArray();
+                is = this.internalGetInputStreamFromBufferedStream(bytesToWrite);
+                this.assembler.addPart(is, this.bbos.length(), StreamHelper.base64EncodeMd5Digest(bytesToWrite));
             }
         } catch (final Exception e) {
             throw new IOException("Unable to put object via multipart upload", e);
@@ -255,10 +245,14 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         return this.bbos.length();
     }
 
+    private InputStream internalGetInputStreamFromBufferedStream(byte[] bytes) {
+        return StreamUtils.createByteArrayInputStream(bytes);
+    }
+
     @Override
     protected InputStream getInputStreamFromBufferedStream() {
-        byte[] theBytes =
-                ArrayUtils.subarray(this.bbos.buffer.array(), 0, this.bbos.length());
-        return StreamUtils.createByteArrayInputStream(theBytes);
+//        byte[] theBytes =
+//                ArrayUtils.subarray(this.bbos.buffer.array(), 0, this.bbos.length());
+        return internalGetInputStreamFromBufferedStream(this.bbos.toByteArray());
     }
 }

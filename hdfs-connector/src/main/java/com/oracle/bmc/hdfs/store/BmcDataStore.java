@@ -87,6 +87,7 @@ public class BmcDataStore {
     private final boolean useInMemoryReadBuffer;
     private final boolean useInMemoryWriteBuffer;
     private final boolean useMultipartUploadWriteBuffer;
+    private final int maxInFlightMultipartWrites;
     private final MultipartUploadRequest.Builder multipartUploadRequestBuilder;
 
     private final LoadingCache<String, HeadPair> objectMetadataCache;
@@ -123,6 +124,8 @@ public class BmcDataStore {
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_WRITE_BUFFER);
         this.useMultipartUploadWriteBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER);
+        this.maxInFlightMultipartWrites =
+                propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT);
 
         this.useReadAhead =
                 propertyAccessor.asBoolean().get(BmcProperties.READ_AHEAD);
@@ -777,7 +780,10 @@ public class BmcDataStore {
         if (this.useMultipartUploadWriteBuffer) {
             this.multipartUploadRequestBuilder.objectName(this.pathToObject(path));
             return new BmcMultipartOutputStream(
-                    this.multipartUploadRequestBuilder.build(), progress, bufferSizeInBytes);
+                    this.multipartUploadRequestBuilder.build(),
+                    progress,
+                    bufferSizeInBytes,
+                    this.maxInFlightMultipartWrites);
         }
         else if (this.useInMemoryWriteBuffer) {
             return new BmcInMemoryOutputStream(
