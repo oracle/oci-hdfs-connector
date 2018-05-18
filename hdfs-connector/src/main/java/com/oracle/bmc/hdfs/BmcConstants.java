@@ -24,6 +24,9 @@ public final class BmcConstants {
 
     public static final String MULTIPART_IN_MEMORY_WRITE_BUFFER_KEY = "fs.oci.io.write.multipart.inmemory";
 
+    public static final String MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT_KEY =
+            "fs.oci.io.write.multipart.inmemory.maxinflight";
+
     public static final String OBJECT_STORE_CLIENT_CLASS_KEY = "fs.oci.client.custom.client";
 
     public static final String OBJECT_STORE_AUTHENTICATOR_CLASS_KEY =

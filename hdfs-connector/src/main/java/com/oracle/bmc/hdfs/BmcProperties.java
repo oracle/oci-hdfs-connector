@@ -113,17 +113,23 @@ public enum BmcProperties {
      */
     MULTIPART_MIN_SIZE_OF_OBJECT_IN_MB(MULTIPART_MIN_SIZE_OF_OBJECT_IN_MB_KEY, null),
     /**
-     * (int, optional) The minimum size, in mebibytes, each part should be uploaded as. Note, any value <= 0 is
+     * (int, optional) The minimum size, in megabytes, each part should be uploaded as. Note, any value <= 0 is
      * interpreted as using the default Java SDK value. See {@link BmcConstants#MULTIPART_MIN_PART_SIZE_IN_MB_KEY} for
      * config key name.
      */
     MULTIPART_MIN_PART_SIZE_IN_MB(MULTIPART_MIN_PART_SIZE_IN_MB_KEY, null),
 
     /**
-     * (boolean, optional) Flag to enable reading all files to memory first (instead streaming from Object Store), to
-     * allow faster seeking. See {@link BmcConstants#IN_MEMORY_READ_BUFFER_KEY} for config key name. Default is false.
+     * (boolean, optional) Flag to enable pseudo-streaming to OCI via Multipart Uploads backed by a circular buffer.
+     * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_BUFFER_KEY} for config key name. Default is false.
      */
-    MULTIPART_IN_MEMORY_WRITE_BUFFER(MULTIPART_IN_MEMORY_WRITE_BUFFER_KEY, false);
+    MULTIPART_IN_MEMORY_WRITE_BUFFER(MULTIPART_IN_MEMORY_WRITE_BUFFER_KEY, false),
+
+    /**
+     * (boolean, optional) Flag to enable pseudo-streaming to OCI via Multipart Uploads backed by a circular buffer.
+     * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT_KEY} for config key name. Default is false.
+     */
+    MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT(MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT_KEY, false);
 
     @Getter private final String propertyName;
     @Getter private final Object defaultValue;
