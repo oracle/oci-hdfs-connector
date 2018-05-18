@@ -7,7 +7,9 @@ import com.oracle.bmc.model.BmcException;
 import com.oracle.bmc.objectstorage.transfer.MultipartManifest;
 import com.oracle.bmc.objectstorage.transfer.MultipartObjectAssembler;
 import com.oracle.bmc.util.StreamUtils;
+import com.sun.java.util.jar.pack.ConstantPool;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.hadoop.util.Progressable;
 
 import java.io.IOException;
@@ -28,6 +30,11 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
     private ExecutorService executor;
     private boolean shutdownExecutor;
 
+    /**
+     * Inner class which handles circular buffer writes to OCI via a ByteBuffer.
+     * Once the buffer is filled it is spilled to OCI using the Multipart Upload API.
+     * Once this OutputStream is closed, the Multipart upload is completed or aborted.
+     */
     private class ByteBufferOutputStream extends OutputStream {
         private final ByteBuffer buffer;
         private final int size;
@@ -38,6 +45,12 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
             this.buffer = ByteBuffer.allocate(this.size);
         }
 
+        /**
+         * Writes a byte to a fixed ByteBuffer, this will create a new Multipart Upload once full
+         * @param b The byte to write
+         * @throws IOException if any upload error happens
+         * {@inheritDoc}
+         */
         @Override
         public void write(final int b) throws IOException {
             buffer.put((byte)b);
@@ -48,8 +61,28 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
             }
         }
 
+        /**
+         * Writes an array of bytes to a fixed ByteBuffer, this will create a new Multipart upload once full
+         * @param b The byte array to write
+         * @param off the offset to start at in the byte array
+         * @param len the length of bytes to copy from the offset
+         * @throws IOException if
+         * * {@inheritDoc}
+         */
+
+        /**
+         * * Writes an array of bytes to a fixed ByteBuffer, this will create a new Multipart upload once full
+         * @param b The byte array to write
+         * @param off the offset to start at in the byte array
+         * @param len the length of bytes to copy from the offset
+         * @throws IOException if we fail creating the multipart upload
+         * @throws NullPointerException if the buffer is null
+         * @throws IndexOutOfBoundsException if the offset+index is somehow out of bounds of the buffer
+         * {@inheritDoc}
+         */
         @Override
-        public void write(byte b[], int off, int len) throws IOException {
+        public void write(byte b[], int off, int len) throws IOException,
+                NullPointerException, IndexOutOfBoundsException {
             if (b == null) {
                 throw new NullPointerException();
             } else if (outOfRange(off, b.length) || len < 0 || outOfRange(off + len, b.length)) {
@@ -106,6 +139,12 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         this.request = request;
     }
 
+    /**
+     * On close, this class will attempt to commit a multipart upload to Object Store using the data written to this
+     * output stream so far. If any parts have failed, an IOException will be raised.
+     * <p>
+     * {@inheritDoc}
+     */
     @Override
     public void close() throws IOException {
         if (this.closed || this.manifest == null) {
@@ -169,6 +208,11 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         return Executors.newFixedThreadPool(3, (new ThreadFactoryBuilder()).setNameFormat("multipart-upload-" + System.currentTimeMillis() + "-%d").setDaemon(true).build());
     }
 
+    /**
+     * This method delays initialization of resources included any thread pools used by the multipart upload API.
+     * This will also create the underlying ByteBuffer OutputStream
+     * {@inheritDoc}
+     */
     @Override
     protected OutputStream createOutputBufferStream() {
         // this is delayed creation of our objects based on OCI semantics

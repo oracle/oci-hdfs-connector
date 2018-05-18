@@ -4,6 +4,9 @@ import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.transfer.UploadConfiguration;
 import java.util.concurrent.ExecutorService;
 
+/**
+ * Helper class to encapsulate the needed info to do a Multipart Upload OutputStream
+ */
 class MultipartUploadRequest {
     private String namespaceName;
     private String bucketName;
