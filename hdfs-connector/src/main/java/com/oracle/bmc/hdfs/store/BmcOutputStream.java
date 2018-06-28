@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
+import com.oracle.bmc.hdfs.util.ProgressReporterService;
 import org.apache.hadoop.fs.FSExceptionMessages;
 import org.apache.hadoop.util.Progressable;
 
@@ -29,9 +30,13 @@ import lombok.extern.slf4j.Slf4j;
 abstract class BmcOutputStream extends OutputStream {
     private final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn;
     private final UploadManager uploadManager;
+    private final Progressable progressable;
 
     private OutputStream outputBufferStream;
     private boolean closed = false;
+    private static final int PROGRESS_NOTIFICATION_INTERVAL_IN_SECONDS = 10;
+    private static final int CORE_POOL_SIZE = 5;
+    private static final ProgressReporterService PROGRESS_REPORTER_SERVICE = new ProgressReporterService(CORE_POOL_SIZE);
 
     public BmcOutputStream(
             final UploadManager uploadManager,
@@ -39,6 +44,7 @@ abstract class BmcOutputStream extends OutputStream {
             final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn) {
         this.uploadManager = uploadManager;
         this.requestBuilderFn = requestBuilderFn;
+        this.progressable = progress;
     }
 
     @Override
@@ -81,6 +87,11 @@ abstract class BmcOutputStream extends OutputStream {
         this.outputBufferStream.close();
         this.outputBufferStream = null;
 
+        // Ideally the report of progress should begin on the first write call and stop after the flush during close,
+        // but future writes or the invocation of close itself is not guaranteed, so starting progress report here.
+        final ProgressReporterService.ProgressHandle progressHandle =
+                PROGRESS_REPORTER_SERVICE.register(progressable, PROGRESS_NOTIFICATION_INTERVAL_IN_SECONDS);
+
         InputStream fromBufferedStream = null;
         try {
             fromBufferedStream = this.getInputStreamFromBufferedStream();
@@ -88,11 +99,12 @@ abstract class BmcOutputStream extends OutputStream {
                     this.requestBuilderFn.apply(
                             this.getInputStreamLengthInBytes(), fromBufferedStream);
             final UploadResponse response = this.uploadManager.upload(request);
-            LOG.debug("Put new file with etag {}", response.getETag());
+            LOG.info("Put new file with etag {}", response.getETag());
         } catch (final BmcException e) {
             throw new IOException("Unable to put object", e);
         } finally {
             StreamUtils.closeQuietly(fromBufferedStream);
+            PROGRESS_REPORTER_SERVICE.unregister(progressHandle);
             super.close();
         }
     }

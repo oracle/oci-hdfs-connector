@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ### Added
 
+## 2.7.2.1 - 2018-06-28
+### Fixed
+- Enabled progress reporting to Application Master during upload operation
+- Enabled usage in a Hadoop deployment with kerberos
+
+### Changed
+- Updated to latest Java SDK (1.2.41) to pick up bug fixes
+
 ## 2.7.2.0 - 2018-04-05
 ### Fixed
 - Added build instruction and fixed broken GitHub links in README
