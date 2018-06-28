@@ -453,6 +453,11 @@ public class BmcFilesystem extends FileSystem {
         return BmcConstants.DEFAULT_PORT;
     }
 
+    @Override
+    public String getCanonicalServiceName() {
+        return null;
+    }
+
     private Path ensureAbsolutePath(final Path path) {
         if (path.isAbsolute()) {
             return path;
