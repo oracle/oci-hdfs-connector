@@ -33,9 +33,8 @@ public class BmcFileBackedOutputStream extends BmcOutputStream {
     public BmcFileBackedOutputStream(
             final BmcPropertyAccessor propertyAccessor,
             final UploadManager uploadManager,
-            final Progressable progress,
             final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn) {
-        super(uploadManager, progress, requestBuilderFn);
+        super(uploadManager, requestBuilderFn);
         this.propertyAccessor = propertyAccessor;
     }
 

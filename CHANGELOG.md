@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ### Added
 
+## 2.7.2.2 - 2018-07-12
+### Fixed
+- Disabled caching of stale key id and private key in the `InstancePrincipalsCustomAuthenticator` class
+
+### Changed
+- Updated to latest Java SDK (1.2.42) to pick up bug fixes
+
 ## 2.7.2.1 - 2018-06-28
 ### Fixed
 - Enabled progress reporting to Application Master during upload operation
