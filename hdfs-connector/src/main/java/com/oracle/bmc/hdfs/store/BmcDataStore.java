@@ -633,14 +633,14 @@ public class BmcDataStore {
             final Path path, final int bufferSizeInBytes, final Progressable progress) {
         LOG.debug("Opening write stream to {}", path);
         final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn =
-                new UploadDetailsFunction(this.pathToObject(path));
+                new UploadDetailsFunction(this.pathToObject(path), progress);
 
         if (this.useInMemoryWriteBuffer) {
             return new BmcInMemoryOutputStream(
-                    this.uploadManager, progress, bufferSizeInBytes, requestBuilderFn);
+                    this.uploadManager, bufferSizeInBytes, requestBuilderFn);
         } else {
             return new BmcFileBackedOutputStream(
-                    this.propertyAccessor, this.uploadManager, progress, requestBuilderFn);
+                    this.propertyAccessor, this.uploadManager, requestBuilderFn);
         }
     }
 
@@ -719,6 +719,7 @@ public class BmcDataStore {
     private final class UploadDetailsFunction
             implements BiFunction<Long, InputStream, UploadRequest> {
         private final String objectName;
+        private final Progressable progressable;
 
         @Override
         public UploadRequest apply(Long contentLengthInBytes, InputStream inputStream) {
@@ -726,6 +727,7 @@ public class BmcDataStore {
                     objectName,
                     inputStream,
                     contentLengthInBytes,
+                    progressable,
                     BmcDataStore.this.parallelUploadExecutor);
         }
     }

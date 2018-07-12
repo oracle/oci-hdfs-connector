@@ -6,6 +6,7 @@ package com.oracle.bmc.hdfs.auth;
 import java.io.InputStream;
 
 import com.oracle.bmc.Region;
+import com.oracle.bmc.auth.AuthCachingPolicy;
 import com.oracle.bmc.auth.BasicAuthenticationDetailsProvider;
 import com.oracle.bmc.auth.InstancePrincipalsAuthenticationDetailsProvider;
 import com.oracle.bmc.auth.RefreshableOnNotAuthenticatedProvider;
@@ -17,8 +18,10 @@ import org.apache.hadoop.conf.Configuration;
  * A custom authenticator which uses instance principals authentication to communicate with
  * Object Storage
  */
+@AuthCachingPolicy(cacheKeyId = false, cachePrivateKey = false)
 public class InstancePrincipalsCustomAuthenticator
-    implements BasicAuthenticationDetailsProvider, RegionProvider, RefreshableOnNotAuthenticatedProvider<String> {
+        implements BasicAuthenticationDetailsProvider, RegionProvider,
+                RefreshableOnNotAuthenticatedProvider<String> {
 
     private InstancePrincipalsAuthenticationDetailsProvider provider;
 
