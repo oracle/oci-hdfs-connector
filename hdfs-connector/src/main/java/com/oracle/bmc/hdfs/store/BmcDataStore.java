@@ -14,7 +14,6 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import com.oracle.bmc.objectstorage.model.RenameObjectDetails;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem.Statistics;
@@ -85,7 +84,7 @@ public class BmcDataStore {
         this.parallelUploadExecutor =
                 this.createExecutor(propertyAccessor, uploadConfigurationBuilder);
         final UploadConfiguration uploadConfiguration = uploadConfigurationBuilder.build();
-        LOG.info("Using upload configuration: %s", uploadConfiguration);
+        LOG.info("Using upload configuration: {}", uploadConfiguration);
         this.uploadManager = new UploadManager(objectStorage, uploadConfiguration);
         this.requestBuilder = new RequestBuilder(namespace, bucket);
         this.blockSizeInBytes = propertyAccessor.asLong().get(BmcProperties.BLOCK_SIZE_IN_MB) * MiB;
@@ -97,29 +96,30 @@ public class BmcDataStore {
 
     private UploadConfigurationBuilder createUploadConfiguration(
             final BmcPropertyAccessor propertyAccessor) {
-        UploadConfigurationBuilder uploadConfigurationBuilder = UploadConfiguration.builder();
+        final UploadConfigurationBuilder uploadConfigurationBuilder = UploadConfiguration.builder();
 
-        boolean allowMultipartUploads =
+        final boolean allowMultipartUploads =
                 propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_ALLOWED);
         uploadConfigurationBuilder.allowMultipartUploads(allowMultipartUploads);
 
-        Integer minimumLengthForMultipartUpload =
+        final Integer minimumLengthForMultipartUpload =
                 propertyAccessor.asInteger().get(BmcProperties.MULTIPART_MIN_SIZE_OF_OBJECT_IN_MB);
-        if (minimumLengthForMultipartUpload != null && minimumLengthForMultipartUpload > 0) {
-            uploadConfigurationBuilder.minimumLengthForMultipartUpload(
-                    minimumLengthForMultipartUpload);
-        }
+        uploadConfigurationBuilder.minimumLengthForMultipartUpload(minimumLengthForMultipartUpload);
 
-        Integer minimumLengthPerUploadPart =
+        final Integer deprecatedMinLengthPerUploadPart =
                 propertyAccessor.asInteger().get(BmcProperties.MULTIPART_MIN_PART_SIZE_IN_MB);
-        if (minimumLengthPerUploadPart != null && minimumLengthPerUploadPart > 0) {
-            uploadConfigurationBuilder.minimumLengthPerUploadPart(minimumLengthPerUploadPart);
-        }
+        final Integer lengthPerUploadPart =
+                propertyAccessor.asInteger().get(BmcProperties.MULTIPART_PART_SIZE_IN_MB);
 
-        Integer maxPartsForMultipartUpload =
-                propertyAccessor.asInteger().get(BmcProperties.MULTIPART_MAX_PARTS);
-        if (maxPartsForMultipartUpload != null && maxPartsForMultipartUpload > 0) {
-            uploadConfigurationBuilder.maxPartsForMultipartUpload(maxPartsForMultipartUpload);
+        if (lengthPerUploadPart != null) {
+            uploadConfigurationBuilder.lengthPerUploadPart(lengthPerUploadPart);
+        } else if (deprecatedMinLengthPerUploadPart != null) {
+            LOG.warn(
+                    "Using deprecated configuration option to specify the length per upload part: [{}]"
+                            + " Consider defining the value for {} instead",
+                    deprecatedMinLengthPerUploadPart,
+                    BmcProperties.MULTIPART_PART_SIZE_IN_MB.getPropertyName());
+            uploadConfigurationBuilder.lengthPerUploadPart(deprecatedMinLengthPerUploadPart);
         }
 
         return uploadConfigurationBuilder;

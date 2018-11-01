@@ -276,7 +276,7 @@ public class BmcFilesystem extends FileSystem {
 
     @Override
     public FileStatus[] listStatus(final Path path) throws FileNotFoundException, IOException {
-        LOG.debug("Requeted listStatus for {}", path);
+        LOG.debug("Requested listStatus for {}", path);
         final FileStatus status = this.getFileStatus(path);
 
         if (status.isFile()) {

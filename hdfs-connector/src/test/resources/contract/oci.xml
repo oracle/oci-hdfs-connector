@@ -1,7 +1,7 @@
 <configuration>
 
-  <!-- Config settings for contract tests (listed in order of ContractOptions.java), should not need to change these. Not 
-    all of these are needed, but they're listed and set for posterity. Add actual credential properties to oci-credentials.xml 
+  <!-- Config settings for contract tests (listed in order of ContractOptions.java), should not need to change these. Not
+    all of these are needed, but they're listed and set for posterity. Add actual credential properties to oci-credentials.xml
     (see oci-credentials-template.xml) -->
 
   <property>

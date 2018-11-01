@@ -49,13 +49,22 @@ public final class BmcConstants {
     public static final String MULTIPART_NUM_UPLOAD_THREADS_KEY =
             "fs.oci.client.multipart.numthreads";
 
-    public static final String MULTIPART_MAX_PARTS_KEY = "fs.oci.client.multipart.maxparts";
-
     public static final String MULTIPART_MIN_SIZE_OF_OBJECT_IN_MB_KEY =
             "fs.oci.client.multipart.minobjectsize.mb";
 
+    /** @deprecated use {@link #MULTIPART_PART_SIZE_IN_MB_KEY} instead */
+    @java.lang.Deprecated
     public static final String MULTIPART_MIN_PART_SIZE_IN_MB_KEY =
             "fs.oci.client.multipart.minpartsize.mb";
+
+    public static final String MULTIPART_PART_SIZE_IN_MB_KEY =
+            "fs.oci.client.multipart.partsize.mb";
+
+    public static final String HTTP_PROXY_URI_KEY = "fs.oci.client.proxy.uri";
+
+    public static final String HTTP_PROXY_USERNAME_KEY = "fs.oci.client.proxy.username";
+
+    public static final String HTTP_PROXY_PASSWORD_KEY = "fs.oci.client.proxy.password";
 
     /**
      * This class contains constants with deprecated values. The HDFS connector will first try the current values
@@ -88,13 +97,19 @@ public final class BmcConstants {
                         .put(
                                 MULTIPART_NUM_UPLOAD_THREADS_KEY,
                                 "fs.oraclebmc.client.multipart.numthreads")
-                        .put(MULTIPART_MAX_PARTS_KEY, "fs.oraclebmc.client.multipart.maxparts")
                         .put(
                                 MULTIPART_MIN_SIZE_OF_OBJECT_IN_MB_KEY,
                                 "fs.oraclebmc.client.multipart.minobjectsize.mb")
                         .put(
+                                MULTIPART_PART_SIZE_IN_MB_KEY,
+                                "fs.oraclebmc.client.multipart.partsize.mb")
+                        /* Deprecated */
+                        .put(
                                 MULTIPART_MIN_PART_SIZE_IN_MB_KEY,
                                 "fs.oraclebmc.client.multipart.minpartsize.mb")
+                        .put(HTTP_PROXY_URI_KEY, "fs.oraclebmc.client.proxy.uri")
+                        .put(HTTP_PROXY_USERNAME_KEY, "fs.oraclebmc.client.proxy.username")
+                        .put(HTTP_PROXY_PASSWORD_KEY, "fs.oraclebmc.client.proxy.password")
                         .build();
 
         public static String getDeprecatedKey(String newKey) {
