@@ -13,6 +13,8 @@ import com.oracle.bmc.ClientConfiguration;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
+import java.lang.Deprecated;
+
 /**
  * Enum to encapsulate all of the configuration options available to users.
  */
@@ -102,11 +104,6 @@ public enum BmcProperties {
      */
     MULTIPART_NUM_UPLOAD_THREADS(MULTIPART_NUM_UPLOAD_THREADS_KEY, null),
     /**
-     * (int, optional) The maximum number of parts to split an object into. Note, any value <= 0 is interpreted as using
-     * the default Java SDK value. See {@link BmcConstants#MULTIPART_MAX_PARTS_KEY} for config key name.
-     */
-    MULTIPART_MAX_PARTS(MULTIPART_MAX_PARTS_KEY, null),
-    /**
      * (int, optional) The minimum size, in mebibytes, an object must be before its eligible for multi-part uploads.
      * Note, any value <= 0 is interpreted as using the default Java SDK value. See
      * {@link BmcConstants#MULTIPART_MIN_SIZE_OF_OBJECT_IN_MB_KEY} for config key name.
@@ -116,8 +113,33 @@ public enum BmcProperties {
      * (int, optional) The minimum size, in mebibytes, each part should be uploaded as. Note, any value <= 0 is
      * interpreted as using the default Java SDK value. See {@link BmcConstants#MULTIPART_MIN_PART_SIZE_IN_MB_KEY} for
      * config key name.
+     * @deprecated use {@link #MULTIPART_PART_SIZE_IN_MB} instead
      */
-    MULTIPART_MIN_PART_SIZE_IN_MB(MULTIPART_MIN_PART_SIZE_IN_MB_KEY, null);
+    @Deprecated
+    MULTIPART_MIN_PART_SIZE_IN_MB(MULTIPART_MIN_PART_SIZE_IN_MB_KEY, null),
+    /**
+     * (int, optional) The part size, in mebibytes that each part should be uploaded as. Note, any value <= 0 is
+     * interpreted as using the default Java SDK value. See {@link BmcConstants#MULTIPART_PART_SIZE_IN_MB_KEY} for
+     * config key name.
+     */
+    MULTIPART_PART_SIZE_IN_MB(MULTIPART_PART_SIZE_IN_MB_KEY, null),
+    /**
+     * (string, optional) The HTTP proxy URI if using a proxy to connect to Object Storage Service.  If configured,
+     * then an ObjectStorageClient will be configured to use the ApacheConnector provider add-on in order to configure
+     * the proxy for the client.  Note: This buffers all requests (uploads) and can impact memory utiliziation.
+     * See {@link BmcConstants#HTTP_PROXY_URI_KEY} for the config key name.
+     */
+    HTTP_PROXY_URI(HTTP_PROXY_URI_KEY, null),
+    /**
+     * (string, optional) The username to use for the configured HTTP proxy via {@link #HTTP_PROXY_URI}.
+     * See {@link BmcConstants#HTTP_PROXY_USERNAME_KEY} for the config key name.
+     */
+    HTTP_PROXY_USERNAME(HTTP_PROXY_USERNAME_KEY, null),
+    /**
+     * (string, option) The password to use with the associated {@link #HTTP_PROXY_USERNAME}.
+     * See {@link BmcConstants#HTTP_PROXY_PASSWORD_KEY} for the config key name.
+     */
+    HTTP_PROXY_PASSWORD(HTTP_PROXY_PASSWORD_KEY, null);
 
     @Getter private final String propertyName;
     @Getter private final Object defaultValue;

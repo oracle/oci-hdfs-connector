@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ### Added
 
+## 2.7.7.0 - 2018-11-01
+### Changed
+- Updated version number to stem from Hadoop version 2.7.7
+- Updated to latest Java SDK (1.2.49) to leverage the updated Object Storage UploadManager with HTTP proxy support
+- The configuration option of `MULTIPART_MIN_PART_SIZE_IN_MB` is now deprecated in favor of `MULTIPART_PART_SIZE_IN_MB` to correspond with the configuration changes for the UploadManager in the java SDK
+- Bouncy castle and JSR-305 jars are no longer bundled within the distribution jar and now must be included in the Hadoop CLASSPATH.  Required third party jars are bundled under the `third-party/lib` folder of the distribution zip archive
+
+### Added
+- Support for configuring an HTTP proxy.  More information can be found [here](https://docs.cloud.oracle.com/iaas/Content/API/SDKDocs/hdfsconnector.htm)
+
 ## 2.7.2.2 - 2018-07-12
 ### Fixed
 - Disabled caching of stale key id and private key in the `InstancePrincipalsCustomAuthenticator` class
@@ -91,7 +101,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 - Bug with seek operation
 
 ### Changed
-- Updated to Oracle BMCS Java SDK 1.2.0
+- Updated to Oracle Cloud Infrastructure Java SDK 1.2.0
 - Shading a few more dependencies (h2k)
 - Doc updates
 
@@ -108,7 +118,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## 1.0.1 - 2016-11-15
 ### Fixed
-- Updated to Oracle BMCS Java SDK 1.0.1 to pick up bug fixes
+- Updated to Oracle Cloud Infrastructure Java SDK 1.0.1 to pick up bug fixes
 
 ### Added
 - Including MD5 validation during copy operations
@@ -116,4 +126,4 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 ## 1.0.0 - 2016-10-20
 ### Added
 - Initial Release
-- Support added for Hadoop 2.7.2 using Oracle Bare Metal Cloud Services Java SDK 1.0.0
+- Support added for Hadoop 2.7.2 using Oracle Cloud Infrastructure Services Java SDK 1.0.0

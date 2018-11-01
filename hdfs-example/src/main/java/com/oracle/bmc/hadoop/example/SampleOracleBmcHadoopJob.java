@@ -54,10 +54,6 @@ public class SampleOracleBmcHadoopJob {
                     "Must have 3 args: 1) path to config file, 2) object storage namespace, 3) object storage bucket");
         }
 
-        // redirect all logs to sysout
-        System.setProperty("org.slf4j.simpleLogger.logFile", "System.out");
-        System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "debug");
-
         final SampleOracleBmcHadoopJob job =
                 new SampleOracleBmcHadoopJob(args[0], args[1], args[2]);
         System.exit(job.execute());
