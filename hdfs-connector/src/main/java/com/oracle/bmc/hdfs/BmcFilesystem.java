@@ -10,7 +10,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -52,10 +55,64 @@ public class BmcFilesystem extends FileSystem {
     @Getter(onMethod = @__({@Override}))
     private URI uri;
 
+    @VisibleForTesting
+    static class UriParser {
+
+        // This pattern parses filesystem uris and matches groups for the bucket and namespace.
+        // The uris follow the format oci://{bucket}@{namespace}[:port]/{path} where
+        // {bucket} should not contain '/' or ':' characters
+        // {namespace} should not contain '/' or ':' characters
+        private final static Pattern URI_PATTERN =
+                Pattern.compile("^(?:oci|oraclebmc):\\/\\/([^:\\/]+)@([^:\\/]+)");
+
+        private final URI uri;
+        private final Matcher uriMatcher;
+
+        UriParser(final URI uri) {
+            this.uri = uri;
+            uriMatcher = URI_PATTERN.matcher(uri.toString());
+            if (!(uriMatcher.find() && uriMatcher.groupCount() == 2)) {
+                throw new IllegalArgumentException("Unknown uri pattern: " + uri.toString());
+            }
+        }
+
+        String getScheme() {
+            return uri.getScheme();
+        }
+
+        String getAuthority() {
+            return uri.getAuthority();
+        }
+
+        String getNamespace() {
+            final String namespace = uri.getHost();
+            if (namespace != null) {
+                return namespace.trim();
+            }
+
+            // The above would fail if the namespace contains underscores,
+            // fallback to regex matching
+            return uriMatcher.group(2).trim();
+        }
+
+        String getBucket() {
+            final String bucket = uri.getUserInfo();
+            if (bucket != null) {
+                return bucket.trim();
+            }
+
+            // The above would fail if the namespace contains underscores,
+            // fallback to regex matching
+            return uriMatcher.group(1).trim();
+        }
+
+    }
     @Override
     public void initialize(URI uri, final Configuration configuration) throws IOException {
         LOG.info("Attempting to initialize filesystem with URI {}", uri);
-        if (uri.getScheme().equals(BmcConstants.Deprecated.BMC_SCHEME)) {
+        final UriParser uriParser = new UriParser(uri);
+        final String scheme = uriParser.getScheme();
+        if (scheme.equals(BmcConstants.Deprecated.BMC_SCHEME)) {
             LOG.warn("Using deprecated scheme {}", uri.getScheme());
         }
 
@@ -64,18 +121,18 @@ public class BmcFilesystem extends FileSystem {
 
         // URI should be oci://bucket@namesapce
         // HDFS only allows the scheme and authority to be used, so we need to fit both variables in there
-        final String namespace = this.getNamespace(uri);
+        final String namespace = uriParser.getNamespace();
         if (namespace == null) {
             throw new IllegalArgumentException("Namespace cannot be empty");
         }
-        final String bucket = this.getBucket(uri);
+        final String bucket = uriParser.getBucket();
         if (bucket == null) {
             throw new IllegalArgumentException("Bucket cannot be empty");
         }
         LOG.info("Initialized filesystem for namespace {} and bucket {}", namespace, bucket);
 
         // only scheme and authority define this filesystem
-        this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());
+        this.uri = URI.create(scheme + "://" + uriParser.getAuthority());
 
         this.dataStore =
                 new BmcDataStoreFactory(configuration)
@@ -96,22 +153,6 @@ public class BmcFilesystem extends FileSystem {
     @Override
     public String getScheme() {
         return BmcConstants.OCI_SCHEME;
-    }
-
-    private String getNamespace(final URI uri) {
-        final String namespace = uri.getHost();
-        if (namespace == null) {
-            return null;
-        }
-        return namespace.trim();
-    }
-
-    private String getBucket(final URI uri) {
-        final String bucket = uri.getUserInfo();
-        if (bucket == null) {
-            return null;
-        }
-        return bucket.trim();
     }
 
     /**
