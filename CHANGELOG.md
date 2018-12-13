@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ### Added
 
+## 2.7.7.1 - 2018-12-13
+### Changed
+- Added relocation for shaded packages `javax.annotation`, `javax.validation` and `javax.inject`
+
 ## 2.7.7.0 - 2018-11-01
 ### Changed
 - Updated version number to stem from Hadoop version 2.7.7
