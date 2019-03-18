@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ### Added
 
+## 2.7.7.2 - 2019-03-19
+### Fixed
+- BmcDirectFSInputStream#read now attempts to retry the read from the service when an IOException is thrown
+
+### Changed
+- Updated to Java SDK version 1.4.2
+
 ## 2.7.7.1 - 2018-12-13
 ### Changed
 - Added relocation for shaded packages `javax.annotation`, `javax.validation` and `javax.inject`

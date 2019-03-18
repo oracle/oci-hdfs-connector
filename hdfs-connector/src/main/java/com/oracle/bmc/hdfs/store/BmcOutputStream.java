@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
  */
 package com.oracle.bmc.hdfs.store;
 
@@ -8,7 +8,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 import org.apache.hadoop.fs.FSExceptionMessages;
-import org.apache.hadoop.util.Progressable;
 
 import com.oracle.bmc.hdfs.util.BiFunction;
 import com.oracle.bmc.model.BmcException;
