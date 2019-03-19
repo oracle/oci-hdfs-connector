@@ -1,3 +1,6 @@
+/**
+ * Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
+ */
 package com.oracle.bmc.hdfs;
 
 import static org.junit.Assert.*;

@@ -4,12 +4,12 @@
 
   <groupId>com.oracle.oci.sdk</groupId>
   <artifactId>oci-hdfs</artifactId>
-  <version>2.7.7.1</version>
+  <version>2.7.7.2</version>
   <packaging>pom</packaging>
 
   <name>Oracle Cloud Infrastructure HDFS Connector for Storage Service</name>
   <description>This project contains the HDFS connector used to integrate with the Oracle Cloud Infrastructure Object Storage Service</description>
-  <url>https://docs.us-phoenix-1.oraclecloud.com/Content/API/SDKDocs/hdfsconnector.htm</url>
+  <url>https://docs.cloud.oracle.com/Content/API/SDKDocs/hdfsconnector.htm</url>
   <inceptionYear>2016</inceptionYear>
 
   <properties>

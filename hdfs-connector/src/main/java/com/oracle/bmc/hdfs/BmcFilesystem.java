@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
  */
 package com.oracle.bmc.hdfs;
 
@@ -105,8 +105,8 @@ public class BmcFilesystem extends FileSystem {
             // fallback to regex matching
             return uriMatcher.group(1).trim();
         }
-
     }
+
     @Override
     public void initialize(URI uri, final Configuration configuration) throws IOException {
         LOG.info("Attempting to initialize filesystem with URI {}", uri);

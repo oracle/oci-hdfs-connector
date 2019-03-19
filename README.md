@@ -4,11 +4,11 @@
 
 oci-hdfs-connector provides the public HDFS connector that integrates with the Oracle Cloud Infrastructure Object Storage Service.
 
-The project is open source and maintained by Oracle Corp. The home page for the project is [here](https://docs.us-phoenix-1.oraclecloud.com/Content/API/SDKDocs/hdfsconnector.htm).
+The project is open source and maintained by Oracle Corp. The home page for the project is [here](https://docs.cloud.oracle.com/Content/API/SDKDocs/hdfsconnector.htm).
 
 ## Installation
 
-See [the documentation](https://docs.us-phoenix-1.oraclecloud.com/Content/API/SDKDocs/hdfsconnector.htm) for details.
+See [the documentation](https://docs.cloud.oracle.com/Content/API/SDKDocs/hdfsconnector.htm) for details.
 
 ## Examples
 
@@ -16,13 +16,13 @@ Examples can be found [here](https://github.com/oracle/oci-hdfs-connector/blob/m
 
 ## Documentation
 
-Full documentation, including prerequisites and installation and configuration instructions, can be found [here](https://docs.us-phoenix-1.oraclecloud.com/Content/API/SDKDocs/hdfsconnector.htm).
+Full documentation, including prerequisites and installation and configuration instructions, can be found [here](https://docs.cloud.oracle.com/Content/API/SDKDocs/hdfsconnector.htm).
 
-API reference can be found [here](https://docs.us-phoenix-1.oraclecloud.com/tools/hdfs/latest/).
+API reference can be found [here](https://docs.cloud.oracle.com/tools/hdfs/latest/).
 
 ## Help
 
-See the “Questions or Feedback?” section [here](https://docs.us-phoenix-1.oraclecloud.com/Content/API/SDKDocs/hdfsconnector.htm#questions).
+See the “Questions or Feedback?” section [here](https://docs.cloud.oracle.com/Content/API/SDKDocs/hdfsconnector.htm#questions).
 
 ## Version
 
@@ -46,11 +46,11 @@ Oracle gratefully acknowledges the contributions to oci-hdfs-connector that have
 
 ## Known Issues
 
-You can find information on any known issues with the connector [here](https://docs.us-phoenix-1.oraclecloud.com/Content/knownissues.htm) and under the “Issues” tab of this GitHub repository.
+You can find information on any known issues with the connector [here](https://docs.cloud.oracle.com/Content/knownissues.htm) and under the “Issues” tab of this GitHub repository.
 
 ## License
 
-Copyright (c) 2016, 2018, Oracle and/or its affiliates. All rights reserved.
+Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
 
 This SDK and sample is dual licensed under the Universal Permissive License 1.0 and the Apache License 2.0.
 

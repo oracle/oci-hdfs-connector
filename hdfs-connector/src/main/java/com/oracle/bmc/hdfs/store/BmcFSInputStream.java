@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
  */
 package com.oracle.bmc.hdfs.store;
 
@@ -7,7 +7,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 
-import org.apache.commons.io.IOUtils;
+import com.oracle.bmc.hdfs.util.FSStreamUtils;
 import org.apache.hadoop.fs.FSExceptionMessages;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileStatus;
@@ -140,7 +140,7 @@ abstract class BmcFSInputStream extends FSInputStream {
         this.closed = true;
         if (this.sourceInputStream != null) {
             // specifications says close should not throw any IOExceptions
-            IOUtils.closeQuietly(this.sourceInputStream);
+            FSStreamUtils.closeQuietly(this.sourceInputStream);
             this.sourceInputStream = null;
         }
     }
