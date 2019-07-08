@@ -136,10 +136,16 @@ public enum BmcProperties {
      */
     HTTP_PROXY_USERNAME(HTTP_PROXY_USERNAME_KEY, null),
     /**
-     * (string, option) The password to use with the associated {@link #HTTP_PROXY_USERNAME}.
+     * (string, optional) The password to use with the associated {@link #HTTP_PROXY_USERNAME}.
      * See {@link BmcConstants#HTTP_PROXY_PASSWORD_KEY} for the config key name.
      */
-    HTTP_PROXY_PASSWORD(HTTP_PROXY_PASSWORD_KEY, null);
+    HTTP_PROXY_PASSWORD(HTTP_PROXY_PASSWORD_KEY, null),
+    /**
+     * (long, optional) The timeout to use for exponential delay retries for retryable service errors. This value is
+     * ignored if {@link BmcProperties#OBJECT_STORE_CLIENT_CLASS} is specified. See
+     * {@link BmcConstants#RETRY_TIMEOUT_IN_SECONDS_KEY} for config key name. Default is 30.
+     */
+    RETRY_TIMEOUT_IN_SECONDS(RETRY_TIMEOUT_IN_SECONDS_KEY, 30L);
 
     @Getter private final String propertyName;
     @Getter private final Object defaultValue;
