@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ### Added
 
+## 2.7.7.3 - 2019-07-09
+### Added
+- Support for retries upon failures. Retry timeout is configurable via `fs.oci.client.retry.timeout.seconds`
+
+### Changed
+- Updated to Java SDK version 1.5.12
+
 ## 2.7.7.2 - 2019-03-19
 ### Fixed
 - BmcDirectFSInputStream#read now attempts to retry the read from the service when an IOException is thrown

@@ -43,6 +43,7 @@ public class BmcDataStoreFactoryTest {
     @Mock private BmcPropertyAccessor mockPropAccessor;
     @Mock private BmcPropertyAccessor.Accessor<String> mockStringAccessor;
     @Mock private BmcPropertyAccessor.Accessor<Integer> mockIntegerAccessor;
+    @Mock private BmcPropertyAccessor.Accessor<Long> mockLongAccessor;
     @Mock private ObjectStorageClient mockObjectStorageClient;
     @Mock private ObjectStorageClient.Builder mockObjectStorageClientBuilder;
 
@@ -58,8 +59,12 @@ public class BmcDataStoreFactoryTest {
         when(mockIntegerAccessor.get(eq(BmcProperties.CONNECTION_TIMEOUT_MILLIS))).thenReturn(null);
         when(mockIntegerAccessor.get(eq(BmcProperties.READ_TIMEOUT_MILLIS))).thenReturn(null);
 
+        // Setup mockLongAccessor
+        when(mockLongAccessor.get(eq(BmcProperties.RETRY_TIMEOUT_IN_SECONDS))).thenReturn(30L);
+
         when(mockPropAccessor.asString()).thenReturn(mockStringAccessor);
         when(mockPropAccessor.asInteger()).thenReturn(mockIntegerAccessor);
+        when(mockPropAccessor.asLong()).thenReturn(mockLongAccessor);
 
         // Allow stubbing of other methods inside the factory
         factoryUnderTest = spy(new BmcDataStoreFactory(mockConfiguration));

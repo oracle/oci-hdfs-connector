@@ -66,6 +66,8 @@ public final class BmcConstants {
 
     public static final String HTTP_PROXY_PASSWORD_KEY = "fs.oci.client.proxy.password";
 
+    public static final String RETRY_TIMEOUT_IN_SECONDS_KEY = "fs.oci.client.retry.timeout.seconds";
+
     /**
      * This class contains constants with deprecated values. The HDFS connector will first try the current values
      * in {@link com.oracle.bmc.hdfs.BmcConstants}.
@@ -110,6 +112,7 @@ public final class BmcConstants {
                         .put(HTTP_PROXY_URI_KEY, "fs.oraclebmc.client.proxy.uri")
                         .put(HTTP_PROXY_USERNAME_KEY, "fs.oraclebmc.client.proxy.username")
                         .put(HTTP_PROXY_PASSWORD_KEY, "fs.oraclebmc.client.proxy.password")
+                        .put(RETRY_TIMEOUT_IN_SECONDS_KEY, "fs.oraclebmc.client.retry.timeout.seconds")
                         .build();
 
         public static String getDeprecatedKey(String newKey) {

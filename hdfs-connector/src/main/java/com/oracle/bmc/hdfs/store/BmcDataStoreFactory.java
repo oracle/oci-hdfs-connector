@@ -6,6 +6,7 @@ package com.oracle.bmc.hdfs.store;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Properties;
 
@@ -27,7 +28,10 @@ import com.oracle.bmc.http.ClientConfigDecorator;
 import com.oracle.bmc.http.ClientConfigurator;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.ObjectStorageClient;
+import com.oracle.bmc.retrier.RetryConfiguration;
 import com.oracle.bmc.util.StreamUtils;
+import com.oracle.bmc.waiter.ExponentialBackoffDelayStrategy;
+import com.oracle.bmc.waiter.MaxTimeTerminationStrategy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -104,6 +108,14 @@ public class BmcDataStoreFactory {
             LOG.info("Setting read timeout to {}", readTimeoutMillis);
             clientConfigurationBuilder.readTimeoutMillis(readTimeoutMillis);
         }
+
+        // Set the retry strategy for the client
+        final long retryTimeoutInSeconds = propertyAccessor.asLong().get(BmcProperties.RETRY_TIMEOUT_IN_SECONDS);
+        LOG.info("Setting retry timeout to {} seconds", retryTimeoutInSeconds);
+        clientConfigurationBuilder.retryConfiguration(RetryConfiguration.builder()
+                .terminationStrategy(MaxTimeTerminationStrategy.ofSeconds(retryTimeoutInSeconds))
+                .delayStrategy(new ExponentialBackoffDelayStrategy(Duration.ofSeconds(retryTimeoutInSeconds).toMillis()))
+                .build());
 
         final ClientConfiguration clientConfig = clientConfigurationBuilder.build();
         final BasicAuthenticationDetailsProvider authDetailsProvider =
