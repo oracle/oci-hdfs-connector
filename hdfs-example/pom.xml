@@ -5,11 +5,40 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>2.7.7.3</version>
+    <version>2.9.2.0</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <artifactId>oci-hdfs-example</artifactId>
+
+  <profiles>
+    <profile>
+        <id>bintray-deploy</id>
+        <build>
+          <plugins>
+            <plugin>
+              <artifactId>maven-deploy-plugin</artifactId>
+              <version>3.0.0-M1</version>
+              <executions>
+                <execution>
+                  <id>deploy-file</id>
+                  <phase>deploy</phase>
+                  <configuration>
+                    <file>${project.build.directory}/${project.artifactId}-${project.version}.jar</file>
+                    <sources>${project.build.directory}/${project.artifactId}-${project.version}-sources.jar</sources>
+                    <javadoc>${project.build.directory}/${project.artifactId}-${project.version}-javadoc.jar</javadoc>
+                    <pomFile>pom.xml</pomFile>
+                    <url>https://api.bintray.com/maven/${env.BINTRAY_GROUPNAME}/${env.BINTRAY_REPOSITORY_NAME}/${env.JAVA_PROJECT_NAME}/;publish=${env.BINTRAY_PUBLISH}</url>
+                    <repositoryId>bintray-${env.BINTRAY_GROUPNAME}-${env.BINTRAY_REPOSITORY_NAME}</repositoryId>
+                    <retryFailedDeploymentCount>5</retryFailedDeploymentCount>
+                  </configuration>
+                </execution>
+              </executions>
+            </plugin>
+          </plugins>
+        </build>
+      </profile>
+  </profiles>
 
   <build>
     <plugins>
@@ -24,6 +53,9 @@
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok-maven-plugin</artifactId>
       </plugin>
+      <plugin>
+        <artifactId>maven-javadoc-plugin</artifactId>
+      </plugin>
     </plugins>
   </build>
 
@@ -32,7 +64,7 @@
     <dependency>
         <groupId>com.oracle.oci.sdk</groupId>
         <artifactId>oci-hdfs-connector</artifactId>
-        <version>2.7.7.3</version>
+        <version>2.9.2.0</version>
     </dependency>
     <!-- For setting up an HTTP proxy -->
     <dependency>
@@ -47,9 +79,10 @@
       <version>2.33</version>
     </dependency>
     <dependency>
-      <groupId>log4j</groupId>
+      <groupId>org.apache.logging.log4j</groupId>
       <artifactId>log4j</artifactId>
-      <version>1.2.17</version>
+      <version>2.11.2</version>
+      <type>pom</type>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>

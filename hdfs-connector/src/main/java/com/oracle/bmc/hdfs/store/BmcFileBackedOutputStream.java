@@ -62,8 +62,11 @@ public class BmcFileBackedOutputStream extends BmcOutputStream {
 
     private File createBufferFile() throws IOException {
         final File dir = new File(this.propertyAccessor.get("hadoop.tmp.dir"));
-        if (!dir.exists() && !dir.mkdirs()) {
-            throw new IOException("Unable to create temp file: " + dir);
+        if (!dir.exists()) {
+            dir.mkdirs();
+            if (!dir.exists()) {
+                throw new IOException("Unable to create temp file: " + dir);
+            }
         }
         final File result = File.createTempFile("oci-", ".tmp", dir);
         LOG.debug("Created temp file {}", result.getAbsolutePath());
