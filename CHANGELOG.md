@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ### Added
 
+## 2.9.2.0 - 2019-08-13
+### Changed
+- Updated version number to stem from Hadoop version 2.9.2
+
+### Fixed
+- Fix race condition in `BmcFileBackedOutputStream#createBufferFile`
+
 ## 2.7.7.3 - 2019-07-09
 ### Added
 - Support for retries upon failures. Retry timeout is configurable via `fs.oci.client.retry.timeout.seconds`

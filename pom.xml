@@ -4,7 +4,7 @@
 
   <groupId>com.oracle.oci.sdk</groupId>
   <artifactId>oci-hdfs</artifactId>
-  <version>2.7.7.3</version>
+  <version>2.9.2.0</version>
   <packaging>pom</packaging>
 
   <name>Oracle Cloud Infrastructure HDFS Connector for Storage Service</name>
@@ -12,8 +12,39 @@
   <url>https://docs.cloud.oracle.com/Content/API/SDKDocs/hdfsconnector.htm</url>
   <inceptionYear>2016</inceptionYear>
 
+  <licenses>
+    <license>
+      <name>The Universal Permissive License (UPL), Version 1.0</name>
+      <url>http://www.oracle.com/technetwork/licenses/upl-license-2927578.html</url>
+      <distribution>repo</distribution>
+    </license>
+    <license>
+      <name>Apache License 2.0</name>
+      <url>http://apache.org/licenses/LICENSE-2.0.html</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <id>oracle</id>
+      <name>Oracle</name>
+      <organizationUrl>https://www.oracle.com</organizationUrl>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:git@github.com:oracle/oci-hdfs-connector.git</connection>
+    <url>https://github.com/oracle/oci-hdfs-connector</url>
+  </scm>
+  <distributionManagement>
+    <repository>
+        <id>bintray-${env.BINTRAY_GROUPNAME}-${env.BINTRAY_REPOSITORY_NAME}</id>
+        <name>${env.BINTRAY_GROUPNAME}-${env.BINTRAY_REPOSITORY_NAME}</name>
+        <url>https://api.bintray.com/maven/${env.BINTRAY_GROUPNAME}/${env.BINTRAY_REPOSITORY_NAME}/${env.JAVA_PROJECT_NAME}/;publish=${env.BINTRAY_PUBLISH}</url>
+    </repository>
+  </distributionManagement>
+
   <properties>
-    <hadoop.version>2.7.7</hadoop.version>
+    <hadoop.version>2.9.2</hadoop.version>
   </properties>
 
   <profiles>
@@ -55,6 +86,30 @@
                   <properties>
                     <current.year>${current.year}</current.year>
                   </properties>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>bintray-deploy</id>
+      <build>
+        <plugins>
+          <plugin>
+            <artifactId>maven-deploy-plugin</artifactId>
+            <version>3.0.0-M1</version>
+            <executions>
+              <execution>
+                <id>deploy-file</id>
+                <phase>deploy</phase>
+                <configuration>
+                  <file>pom.xml</file>
+                  <pomFile>pom.xml</pomFile>
+                  <url>https://api.bintray.com/maven/${env.BINTRAY_GROUPNAME}/${env.BINTRAY_REPOSITORY_NAME}/${env.JAVA_PROJECT_NAME}/;publish=${env.BINTRAY_PUBLISH}</url>
+                  <repositoryId>bintray-${env.BINTRAY_GROUPNAME}-${env.BINTRAY_REPOSITORY_NAME}</repositoryId>
+                  <retryFailedDeploymentCount>5</retryFailedDeploymentCount>
                 </configuration>
               </execution>
             </executions>
@@ -187,7 +242,7 @@
             <additionalparam>-Xdoclint:none</additionalparam>
             <sourcepath>target/generated-sources-for-docs/delombok</sourcepath>
             <links>
-              <link>https://hadoop.apache.org/docs/r2.7.2/api/</link>
+              <link>https://hadoop.apache.org/docs/r${hadoop.version}/api/</link>
             </links>
           </configuration>
         </plugin>
