@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ### Added
 
+## 2.9.2.1 - 2019-08-27
+### Changed
+- Updated to Java SDK version 1.6.2
+
 ## 2.9.2.0 - 2019-08-13
 ### Changed
 - Updated version number to stem from Hadoop version 2.9.2
