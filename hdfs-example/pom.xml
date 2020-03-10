@@ -5,7 +5,7 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>2.9.2.1</version>
+    <version>2.9.2.2.2</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -56,6 +56,12 @@
       <plugin>
         <artifactId>maven-javadoc-plugin</artifactId>
       </plugin>
+      <!-- START: Delete Public GitHub -->
+      <plugin>
+        <groupId>com.oracle.oci.sdk.utilities</groupId>
+        <artifactId>dex-add-files-to-jar-files-plugin</artifactId>
+      </plugin>
+      <!-- END: Delete Public GitHub -->
     </plugins>
   </build>
 
@@ -64,7 +70,7 @@
     <dependency>
         <groupId>com.oracle.oci.sdk</groupId>
         <artifactId>oci-hdfs-connector</artifactId>
-        <version>2.9.2.1</version>
+        <version>2.9.2.2.2</version>
     </dependency>
     <!-- For setting up an HTTP proxy -->
     <dependency>
