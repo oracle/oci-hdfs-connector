@@ -100,12 +100,6 @@
       <plugin>
         <artifactId>maven-javadoc-plugin</artifactId>
       </plugin>
-      <!-- START: Delete Public GitHub -->
-      <plugin>
-        <groupId>com.oracle.oci.sdk.utilities</groupId>
-        <artifactId>dex-add-files-to-jar-files-plugin</artifactId>
-      </plugin>
-      <!-- END: Delete Public GitHub -->
     </plugins>
 
     <!-- Substitutes maven properties into the connector properties -->
