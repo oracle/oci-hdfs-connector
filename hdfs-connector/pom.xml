@@ -5,14 +5,14 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>2.9.2.1</version>
+    <version>2.9.2.4</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <artifactId>oci-hdfs-connector</artifactId>
 
   <properties>
-    <oci.java.sdk.version>1.6.2</oci.java.sdk.version>
+    <oci.java.sdk.version>1.14.0</oci.java.sdk.version>
     <powermock.version>1.7.4</powermock.version>
   </properties>
 
@@ -50,6 +50,9 @@
               <execution>
                 <id>deploy-file</id>
                 <phase>deploy</phase>
+                <goals>
+                    <goal>deploy-file</goal>
+                </goals>
                 <configuration>
                   <file>${project.build.directory}/${project.artifactId}-${project.version}.jar</file>
                   <sources>${project.build.directory}/${project.artifactId}-${project.version}-sources.jar</sources>

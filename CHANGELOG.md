@@ -3,12 +3,9 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
-## Unreleased
-### Fixed
-
+## 2.9.2.4 - 2019-03-12
 ### Changed
-
-### Added
+- Updated to Java SDK version 1.14.0
 
 ## 2.9.2.1 - 2019-08-27
 ### Changed
