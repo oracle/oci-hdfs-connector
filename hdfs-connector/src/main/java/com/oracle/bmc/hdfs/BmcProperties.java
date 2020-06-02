@@ -1,5 +1,7 @@
 /**
- * Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2020, Oracle and/or its affiliates.  All rights reserved.
+ * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
+ * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
 package com.oracle.bmc.hdfs;
 
@@ -96,31 +98,31 @@ public enum BmcProperties {
      */
     MULTIPART_ALLOWED(MULTIPART_ALLOWED_KEY, true),
     /**
-     * (int, optional) The number of threads to use for parallel multi-part uploads. Note, any value <= 0 is interpreted
-     * as using the default Java SDK value. A value of 1 means do not use parallel uploads (you can still use multi-part
-     * if the "allowed" property is true, but each part will be uploaded serially. This will be one thread per upload).
-     * Otherwise, this represents the total number of threads shared amongst all requests (not per request). See
-     * {@link BmcConstants#MULTIPART_NUM_UPLOAD_THREADS_KEY} for config key name.
+     * (int, optional) The number of threads to use for parallel multi-part uploads. Note, any value less than or equal
+     * to 0 is interpreted as using the default Java SDK value. A value of 1 means do not use parallel uploads (you can
+     * still use multi-part if the "allowed" property is true, but each part will be uploaded serially. This will be
+     * one thread per upload). Otherwise, this represents the total number of threads shared amongst all requests (not
+     * per request). See {@link BmcConstants#MULTIPART_NUM_UPLOAD_THREADS_KEY} for config key name.
      */
     MULTIPART_NUM_UPLOAD_THREADS(MULTIPART_NUM_UPLOAD_THREADS_KEY, null),
     /**
      * (int, optional) The minimum size, in mebibytes, an object must be before its eligible for multi-part uploads.
-     * Note, any value <= 0 is interpreted as using the default Java SDK value. See
+     * Note, any value less than or equal to 0 is interpreted as using the default Java SDK value. See
      * {@link BmcConstants#MULTIPART_MIN_SIZE_OF_OBJECT_IN_MB_KEY} for config key name.
      */
     MULTIPART_MIN_SIZE_OF_OBJECT_IN_MB(MULTIPART_MIN_SIZE_OF_OBJECT_IN_MB_KEY, null),
     /**
-     * (int, optional) The minimum size, in mebibytes, each part should be uploaded as. Note, any value <= 0 is
-     * interpreted as using the default Java SDK value. See {@link BmcConstants#MULTIPART_MIN_PART_SIZE_IN_MB_KEY} for
-     * config key name.
+     * (int, optional) The minimum size, in mebibytes, each part should be uploaded as. Note, any value less than or
+     * equal to 0 is interpreted as using the default Java SDK value. See
+     * {@link BmcConstants#MULTIPART_MIN_PART_SIZE_IN_MB_KEY} for config key name.
      * @deprecated use {@link #MULTIPART_PART_SIZE_IN_MB} instead
      */
     @Deprecated
     MULTIPART_MIN_PART_SIZE_IN_MB(MULTIPART_MIN_PART_SIZE_IN_MB_KEY, null),
     /**
-     * (int, optional) The part size, in mebibytes that each part should be uploaded as. Note, any value <= 0 is
-     * interpreted as using the default Java SDK value. See {@link BmcConstants#MULTIPART_PART_SIZE_IN_MB_KEY} for
-     * config key name.
+     * (int, optional) The part size, in mebibytes that each part should be uploaded as. Note, any value less than or
+     * equal to 0 is interpreted as using the default Java SDK value. See
+     * {@link BmcConstants#MULTIPART_PART_SIZE_IN_MB_KEY} for config key name.
      */
     MULTIPART_PART_SIZE_IN_MB(MULTIPART_PART_SIZE_IN_MB_KEY, null),
     /**
@@ -145,7 +147,14 @@ public enum BmcProperties {
      * ignored if {@link BmcProperties#OBJECT_STORE_CLIENT_CLASS} is specified. See
      * {@link BmcConstants#RETRY_TIMEOUT_IN_SECONDS_KEY} for config key name. Default is 30.
      */
-    RETRY_TIMEOUT_IN_SECONDS(RETRY_TIMEOUT_IN_SECONDS_KEY, 30L);
+    RETRY_TIMEOUT_IN_SECONDS(RETRY_TIMEOUT_IN_SECONDS_KEY, 30L),
+    /**
+     * (long, optional) The max sleep for delays in between retries for retryable service errors.
+     * If the exponential delay crosses this threshold, then the delay time is reset to initial delay. This value is
+     * ignored if {@link BmcProperties#OBJECT_STORE_CLIENT_CLASS} is specified. See
+     * {@link BmcConstants#RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS_KEY} for config key name. Default is 0.
+     */
+    RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS(RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS_KEY, 0L);
 
     @Getter private final String propertyName;
     @Getter private final Object defaultValue;

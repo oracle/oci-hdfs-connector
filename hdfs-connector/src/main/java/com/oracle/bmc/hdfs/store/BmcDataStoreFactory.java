@@ -1,5 +1,7 @@
 /**
- * Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2020, Oracle and/or its affiliates.  All rights reserved.
+ * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
+ * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
 package com.oracle.bmc.hdfs.store;
 
@@ -19,6 +21,7 @@ import com.oracle.bmc.auth.BasicAuthenticationDetailsProvider;
 import com.oracle.bmc.auth.SimpleAuthenticationDetailsProvider;
 import com.oracle.bmc.auth.SimplePrivateKeySupplier;
 import com.oracle.bmc.hdfs.BmcProperties;
+import com.oracle.bmc.hdfs.waiter.ResettingExponentialBackoffStrategy;
 import com.oracle.bmc.http.ApacheConfigurator;
 import com.oracle.bmc.http.ApacheConnectionPoolConfig;
 import com.oracle.bmc.http.ApacheConnectionPoolingClientConfigDecorator;
@@ -110,12 +113,29 @@ public class BmcDataStoreFactory {
         }
 
         // Set the retry strategy for the client
-        final long retryTimeoutInSeconds = propertyAccessor.asLong().get(BmcProperties.RETRY_TIMEOUT_IN_SECONDS);
+        final long retryTimeoutInSeconds =
+                propertyAccessor.asLong().get(BmcProperties.RETRY_TIMEOUT_IN_SECONDS);
+
+        // If the retryMaxSleepInSeconds is not defined, then go for ExponentialBackOffDelayStrategy, otherwise
+        // go for ResettingExponential (Delay exponentially goes up till retryMaxSleepInSeconds and then resets)
+        final long resetThresholdInSeconds =
+                propertyAccessor
+                        .asLong()
+                        .get(BmcProperties.RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS);
+
         LOG.info("Setting retry timeout to {} seconds", retryTimeoutInSeconds);
-        clientConfigurationBuilder.retryConfiguration(RetryConfiguration.builder()
-                .terminationStrategy(MaxTimeTerminationStrategy.ofSeconds(retryTimeoutInSeconds))
-                .delayStrategy(new ExponentialBackoffDelayStrategy(Duration.ofSeconds(retryTimeoutInSeconds).toMillis()))
-                .build());
+        clientConfigurationBuilder.retryConfiguration(
+                RetryConfiguration.builder()
+                        .terminationStrategy(
+                                MaxTimeTerminationStrategy.ofSeconds(retryTimeoutInSeconds))
+                        .delayStrategy(
+                                resetThresholdInSeconds <= 0
+                                        ? new ExponentialBackoffDelayStrategy(
+                                                Duration.ofSeconds(retryTimeoutInSeconds)
+                                                        .toMillis())
+                                        : new ResettingExponentialBackoffStrategy(
+                                                resetThresholdInSeconds))
+                        .build());
 
         final ClientConfiguration clientConfig = clientConfigurationBuilder.build();
         final BasicAuthenticationDetailsProvider authDetailsProvider =
