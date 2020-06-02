@@ -3,6 +3,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 2.9.2.6 - 2020-06-02
+### Changed
+- Updated to OCI Java SDK version 1.17.5
+
+## 2.9.2.5 - 2020-05-05
+### Changed
+- Updated to OCI Java SDK version 1.17.0
+
+### Added
+- Added DelayStrategy that resets the exponential backoff between retries after reaching a maximum time, configuratble using `fs.oraclebmc.client.retry.reset.threshold.seconds`
+
 ## 2.9.2.4 - 2019-03-12
 ### Changed
 - Updated to Java SDK version 1.14.0
