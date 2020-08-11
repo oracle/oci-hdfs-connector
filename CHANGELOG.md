@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 2.9.2.7 - 2020-08-11
+### Added
+- Release incorporates `hdfs-full` module.
+
+### Changed
+- Updated to OCI Java SDK version 1.22.0
+
 ## 2.9.2.6 - 2020-06-02
 ### Changed
 - Updated to OCI Java SDK version 1.17.5
