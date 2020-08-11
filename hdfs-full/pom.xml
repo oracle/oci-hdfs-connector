@@ -1,0 +1,202 @@
+<!--
+
+    Copyright (c) 2016, 2020, Oracle and/or its affiliates.  All rights reserved.
+    This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
+    or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
+
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.oracle.oci.sdk</groupId>
+    <artifactId>oci-hdfs</artifactId>
+    <version>2.9.2.7</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>oci-hdfs-full</artifactId>
+
+  <profiles>
+    <profile>
+      <id>ziponly</id>
+      <build>
+        <plugins>
+          <plugin>
+            <artifactId>maven-assembly-plugin</artifactId>
+            <configuration>
+              <appendAssemblyId>false</appendAssemblyId>
+              <descriptors>
+                <descriptor>src/main/assembly/assembly.xml</descriptor>
+              </descriptors>
+            </configuration>
+            <executions>
+              <execution>
+                <phase>install</phase>
+                <goals>
+                  <goal>single</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+
+  <build>
+    <plugins>
+      <!-- First create the single jar -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.1.1</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <minimizeJar>false</minimizeJar>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <dependencyReducedPomLocation>
+                ${java.io.tmpdir}/dependency-reduced-pom.xml
+              </dependencyReducedPomLocation>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
+              </transformers>
+              <relocations>
+                <relocation>
+                  <pattern>org.apache.http</pattern>
+                  <shadedPattern>shaded.oracle.org.apache.http</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.commons</pattern>
+                  <shadedPattern>shaded.oracle.org.apache.commons</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.fasterxml</pattern>
+                  <shadedPattern>shaded.oracle.com.fasterxml</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.google</pattern>
+                  <shadedPattern>shaded.oracle.com.google</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax.ws.rs</pattern>
+                  <shadedPattern>shaded.oracle.javax.ws.rs</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.glassfish</pattern>
+                  <shadedPattern>shaded.oracle.org.glassfish</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.jvnet</pattern>
+                  <shadedPattern>shaded.oracle.org.jvnet</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax.annotation</pattern>
+                  <shadedPattern>shaded.oracle.javax.annotation</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax.validation</pattern>
+                  <shadedPattern>shaded.oracle.javax.validation</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax.inject</pattern>
+                  <shadedPattern>shaded.oracle.javax.inject</shadedPattern>
+                </relocation>
+              </relocations>
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                    <exclude>**/pom.xml</exclude>
+                    <exclude>**/pom.properties</exclude>
+                  </excludes>
+                </filter>
+              </filters>
+              <artifactSet>
+                <excludes>
+                  <exclude>org.bouncycastle:bcpkix-jdk15on</exclude>
+                  <exclude>org.bouncycastle:bcprov-jdk15on</exclude>
+                  <!-- Including jsr305 in the shaded jar causes a SecurityException due to signer
+                       mismatch for class "javax.annotation.Nonnull" -->
+                  <exclude>com.google.code.findbugs:jsr305</exclude>
+                  <!-- Jersey uses two different version of the javax.inject libraries.  Exclude the one
+                       pulled in through the apache connector dependency tree in order to only shade
+                       javax.inject:javax.inject -->
+                  <exclude>org.glassfish.hk2.external:javax.inject</exclude>
+                </excludes>
+              </artifactSet>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- Second, create the aggregated javadocs -->
+      <!-- TODO: this method needs to be cleaned up -->
+      <plugin>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>3.2.0</version>
+        <configuration>
+          <source>8</source>
+          <additionalOptions>
+            <additionalOption>-Xdoclint:none</additionalOption>
+          </additionalOptions>
+          <includeDependencySources>true</includeDependencySources>
+          <windowtitle>Oracle Cloud Infrastructure Object Storage Service HDFS Connector - ${project.version}</windowtitle>
+          <doctitle>Oracle Cloud Infrastructure Object Storage Service HDFS Connector - ${project.version}</doctitle>
+          <packagesheader>Oracle Cloud Infrastructure SDK</packagesheader>
+          <sourcepath>
+            ../hdfs-connector/target/generated-sources-for-docs/delombok
+          </sourcepath>
+
+          <overview>../hdfs-connector/target/generated-sources-for-docs/delombok/overview.html</overview>
+          <additionalDependencies>
+            <additionalDependency>
+              <groupId>org.apache.hadoop</groupId>
+              <artifactId>hadoop-common</artifactId>
+              <version>${hadoop.version}</version>
+            </additionalDependency>
+            <additionalDependency>
+              <groupId>org.apache.hadoop</groupId>
+              <artifactId>hadoop-common</artifactId>
+              <version>${hadoop.version}</version>
+            </additionalDependency>
+            <additionalDependency>
+              <groupId>org.apache.hadoop</groupId>
+              <artifactId>hadoop-annotations</artifactId>
+              <version>${hadoop.version}</version>
+            </additionalDependency>
+          </additionalDependencies>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.oracle.oci.sdk</groupId>
+      <artifactId>oci-hdfs-connector</artifactId>
+      <version>2.9.2.7</version>
+      <!-- We don't want to bundle any hadoop packages -->
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-common</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-hdfs</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+  </dependencies>
+
+</project>
