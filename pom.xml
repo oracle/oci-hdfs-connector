@@ -11,7 +11,7 @@
 
   <groupId>com.oracle.oci.sdk</groupId>
   <artifactId>oci-hdfs</artifactId>
-  <version>2.9.2.7</version>
+  <version>3.2.1.0</version>
   <packaging>pom</packaging>
 
   <name>Oracle Cloud Infrastructure HDFS Connector for Storage Service</name>
@@ -51,7 +51,7 @@
   </distributionManagement>
 
   <properties>
-    <hadoop.version>2.9.2</hadoop.version>
+    <hadoop.version>3.2.1</hadoop.version>
   </properties>
 
   <profiles>
