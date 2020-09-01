@@ -8,19 +8,23 @@ package com.oracle.bmc.hdfs;
 import java.util.HashSet;
 import java.util.Set;
 
+import com.oracle.bmc.hdfs.contract.BmcContract;
+import com.oracle.bmc.hdfs.store.BmcDataStore;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystemContractBaseTest;
 import org.apache.hadoop.fs.Path;
+import org.junit.Before;
 import org.junit.experimental.categories.Category;
 
-import com.oracle.bmc.hdfs.BmcFilesystem;
-import com.oracle.bmc.hdfs.contract.BmcContract;
-import com.oracle.bmc.hdfs.store.BmcDataStore;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 @Category({IntegrationTestCategory.class})
 public class TestBmcFileSystemContract extends FileSystemContractBaseTest {
-    @Override
+
+    @Before
     protected void setUp() throws Exception {
         final Configuration configuration = new Configuration();
         final BmcContract contract = new BmcContract(configuration);
@@ -29,7 +33,7 @@ public class TestBmcFileSystemContract extends FileSystemContractBaseTest {
     }
 
     @Override
-    protected void tearDown() throws Exception {
+    public void tearDown() throws Exception {
         super.tearDown();
 
         super.fs.delete(new Path("/existingobjects"), true);

@@ -12,14 +12,14 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>2.9.2.7</version>
+    <version>3.2.1.0</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <artifactId>oci-hdfs-connector</artifactId>
 
   <properties>
-    <oci.java.sdk.version>1.22.0</oci.java.sdk.version>
+    <oci.java.sdk.version>1.22.1</oci.java.sdk.version>
     <powermock.version>1.7.4</powermock.version>
   </properties>
 
@@ -126,6 +126,12 @@
 
   <dependencies>
     <!-- Test dependencies -->
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>4.12</version>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>org.hamcrest</groupId>
       <artifactId>hamcrest-junit</artifactId>

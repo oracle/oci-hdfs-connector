@@ -3,6 +3,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.2.1.0 - 2020-09-01
+### Changed
+- Updated to Hadoop version 3.2.1 
+- Updated to OCI Java SDK version 1.22.1
+
 ## 2.9.2.7 - 2020-08-11
 ### Added
 - Release incorporates `hdfs-full` module.
