@@ -12,14 +12,14 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.2.1.0</version>
+    <version>3.2.1.1</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <artifactId>oci-hdfs-connector</artifactId>
 
   <properties>
-    <oci.java.sdk.version>1.22.1</oci.java.sdk.version>
+    <oci.java.sdk.version>1.23.1</oci.java.sdk.version>
     <powermock.version>1.7.4</powermock.version>
   </properties>
 
