@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.2.1.1 - 2020-09-15
+### Changed
+- Updated to OCI Java SDK version 1.23.1
+
 ## 3.2.1.0 - 2020-09-01
 ### Changed
 - Updated to Hadoop version 3.2.1 
