@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.2.1.3 - 2020-11-03
+### Changed
+- Updated to OCI Java SDK version 1.25.2
+
+### Fixed
+- Fixed a potential data curruption problem with `RefreshableOnNotAuthenticatedProvider`. We recommend that you update to this version 3.2.1.3 or later. For details, see https://github.com/oracle/oci-hdfs-connector/issues/35
+
 ## 3.2.1.1 - 2020-09-15
 ### Changed
 - Updated to OCI Java SDK version 1.23.1
