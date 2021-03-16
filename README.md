@@ -47,6 +47,16 @@ Oracle gratefully acknowledges the contributions to oci-hdfs-connector that have
 ## Known Issues
 
 You can find information on any known issues with the connector [here](https://docs.cloud.oracle.com/Content/knownissues.htm) and under the “Issues” tab of this GitHub repository.
+  You can find information on any known issues with the SDK [here](https://docs.cloud.oracle.com/iaas/Content/knownissues.htm) and under the [“Issues” tab of this GitHub repository](https://github.com/oracle/oci-hdfs-connector/issues).
+
+### Potential data corruption issue for OCI HDFS Connector with `RefreshableOnNotAuthenticatedProvider`
+
+**Details**: If you are using version 3.2.1.1 or earlier of the OCI HDFS Connector and you use a `RefreshableOnNotAuthenticatedProvider` (e.g. `InstancePrincipalsCustomAuthenticator`, or generally for Resource Principals or Instance Principals) you may be affected by **silent data corruption**.
+
+**Workaround**: Update the OCI HDFS Connector to version 3.2.1.3 or later. For more information about this issue and workarounds, see [Potential data corruption issue for OCI HDFS Connector with `RefreshableOnNotAuthenticatedProvider`](https://github.com/oracle/oci-hdfs-connector/issues/35).
+
+**Direct link to this issue**: [Potential data corruption issue with OCI HDFS Connector on binary data upload with `RefreshableOnNotAuthenticatedProvider`](https://docs.cloud.oracle.com/en-us/iaas/Content/knownissues.htm#knownissues_topic_Potential_data_corruption_with_OCI_Java_SDK_on_binary_data_upload_with_RefreshableOnNotAuthenticatedProvider_HDFS)
+
 
 ## License
 

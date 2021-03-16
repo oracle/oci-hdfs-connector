@@ -24,6 +24,10 @@ public final class BmcConstants {
 
     public static final String IN_MEMORY_READ_BUFFER_KEY = "fs.oci.io.read.inmemory";
 
+    public static final String READ_AHEAD_KEY = "fs.oci.io.read.ahead";
+
+    public static final String READ_AHEAD_BLOCK_SIZE_KEY = "fs.oci.io.read.ahead.blocksize";
+
     public static final String OBJECT_STORE_CLIENT_CLASS_KEY = "fs.oci.client.custom.client";
 
     public static final String OBJECT_STORE_AUTHENTICATOR_CLASS_KEY =
@@ -73,6 +77,27 @@ public final class BmcConstants {
     public static final String RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS_KEY =
             "fs.oci.client.retry.reset.threshold.seconds";
 
+    public static final String OBJECT_METADATA_CACHING_ENABLED_KEY =
+            "fs.oci.caching.object.metadata.enabled";
+
+    public static final String OBJECT_METADATA_CACHING_SPEC_KEY =
+            "fs.oci.caching.object.metadata.spec";
+
+    public static final String JERSEY_CLIENT_LOGGING_ENABLED_KEY =
+            "fs.oci.client.jersey.logging.enabled";
+
+    public static final String JERSEY_CLIENT_LOGGING_LEVEL_KEY =
+            "fs.oci.client.jersey.logging.level";
+
+    public static final String JERSEY_CLIENT_LOGGING_VERBOSITY_KEY =
+            "fs.oci.client.jersey.logging.verbosity";
+
+    public static final String OBJECT_PARQUET_CACHING_ENABLED_KEY =
+            "fs.oci.caching.object.parquet.enabled";
+
+    public static final String OBJECT_PARQUET_CACHING_SPEC_KEY =
+            "fs.oci.caching.object.parquet.spec";
+
     /**
      * This class contains constants with deprecated values. The HDFS connector will first try the current values
      * in {@link com.oracle.bmc.hdfs.BmcConstants}.
@@ -81,6 +106,8 @@ public final class BmcConstants {
         ; // no-value enum to prevent instantiation
         public static final String BMC_SCHEME = "oraclebmc";
 
+        // you only have to add mappings from new key to old key if the mapping doesn't follow the
+        // "fs.oci.<REST>" -> "fs.oraclebmc.<REST>" rule
         private static final Map<String, String> NEW_TO_OLD_KEYS =
                 ImmutableMap.<String, String>builder()
                         .put(BLOCK_SIZE_IN_MB_KEY, "fs.oraclebmc.blocksize.mb")
@@ -123,10 +150,29 @@ public final class BmcConstants {
                         .put(
                                 RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS_KEY,
                                 "fs.oraclebmc.client.retry.reset.threshold.seconds")
+                        .put(OBJECT_METADATA_CACHING_ENABLED_KEY,
+                             "fs.oraclebmc.caching.object.metadata.enabled")
+                        .put(OBJECT_METADATA_CACHING_SPEC_KEY,
+                             "fs.oraclebmc.caching.object.metadata.spec")
+                        .put(JERSEY_CLIENT_LOGGING_ENABLED_KEY,
+                                "fs.oraclebmc.client.jersey.logging.enabled")
+                        .put(JERSEY_CLIENT_LOGGING_LEVEL_KEY,
+                                "fs.oraclebmc.client.jersey.logging.level")
+                        .put(JERSEY_CLIENT_LOGGING_VERBOSITY_KEY,
+                                "fs.oraclebmc.client.jersey.logging.verbosity")
                         .build();
 
+        private static final String FS_OCI_PREFIX = "fs.oci.";
+
         public static String getDeprecatedKey(String newKey) {
-            return NEW_TO_OLD_KEYS.get(newKey);
+            String oldKey = NEW_TO_OLD_KEYS.get(newKey);
+            if (oldKey == null) {
+                if (!newKey.startsWith(FS_OCI_PREFIX)) {
+                    throw new IllegalArgumentException("Cannot determine old key for '" + newKey + "'");
+                }
+                oldKey = "fs.oraclebmc." + newKey.substring(FS_OCI_PREFIX.length());
+            }
+            return oldKey;
         }
     }
 }

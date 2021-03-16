@@ -12,42 +12,44 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.2.1.3</version>
+    <version>3.3.0.0</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <artifactId>oci-hdfs-example</artifactId>
+  <name>Oracle Cloud Infrastructure HDFS Connector for Storage Service - Example</name>
+  <description>This project contains an example for the HDFS connector used to integrate with the Oracle Cloud Infrastructure Object Storage Service</description>
 
   <profiles>
     <profile>
-        <id>bintray-deploy</id>
-        <build>
-          <plugins>
-            <plugin>
-              <artifactId>maven-deploy-plugin</artifactId>
-              <version>3.0.0-M1</version>
-              <executions>
-                <execution>
-                  <id>deploy-file</id>
-                  <phase>deploy</phase>
-                  <goals>
-                      <goal>deploy-file</goal>
-                  </goals>
-                  <configuration>
-                    <file>${project.build.directory}/${project.artifactId}-${project.version}.jar</file>
-                    <sources>${project.build.directory}/${project.artifactId}-${project.version}-sources.jar</sources>
-                    <javadoc>${project.build.directory}/${project.artifactId}-${project.version}-javadoc.jar</javadoc>
-                    <pomFile>pom.xml</pomFile>
-                    <url>https://api.bintray.com/maven/${env.BINTRAY_GROUPNAME}/${env.BINTRAY_REPOSITORY_NAME}/${env.JAVA_PROJECT_NAME}/;publish=${env.BINTRAY_PUBLISH}</url>
-                    <repositoryId>bintray-${env.BINTRAY_GROUPNAME}-${env.BINTRAY_REPOSITORY_NAME}</repositoryId>
-                    <retryFailedDeploymentCount>5</retryFailedDeploymentCount>
-                  </configuration>
-                </execution>
-              </executions>
-            </plugin>
-          </plugins>
-        </build>
-      </profile>
+      <id>bintray-deploy</id>
+      <build>
+        <plugins>
+          <plugin>
+            <artifactId>maven-deploy-plugin</artifactId>
+            <version>3.0.0-M1</version>
+            <executions>
+              <execution>
+                <id>deploy-file</id>
+                <phase>deploy</phase>
+                <goals>
+                    <goal>deploy-file</goal>
+                </goals>
+                <configuration>
+                  <file>${project.build.directory}/${project.artifactId}-${project.version}.jar</file>
+                  <sources>${project.build.directory}/${project.artifactId}-${project.version}-sources.jar</sources>
+                  <javadoc>${project.build.directory}/${project.artifactId}-${project.version}-javadoc.jar</javadoc>
+                  <pomFile>pom.xml</pomFile>
+                  <url>https://api.bintray.com/maven/${env.BINTRAY_GROUPNAME}/${env.BINTRAY_REPOSITORY_NAME}/${env.JAVA_PROJECT_NAME}/;publish=${env.BINTRAY_PUBLISH}</url>
+                  <repositoryId>bintray-${env.BINTRAY_GROUPNAME}-${env.BINTRAY_REPOSITORY_NAME}</repositoryId>
+                  <retryFailedDeploymentCount>5</retryFailedDeploymentCount>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
   </profiles>
 
   <build>
@@ -80,13 +82,19 @@
     <dependency>
         <groupId>com.oracle.oci.sdk</groupId>
         <artifactId>oci-hdfs-connector</artifactId>
-        <version>3.2.1.3</version>
+        <version>3.3.0.0</version>
     </dependency>
     <!-- For setting up an HTTP proxy -->
     <dependency>
       <groupId>org.littleshoot</groupId>
       <artifactId>littleproxy</artifactId>
       <version>1.1.2</version>
+      <exclusions>
+        <exclusion>
+          <groupId>io.netty</groupId>
+          <artifactId>netty-all</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <!-- For parsing CLI arguments -->
     <dependency>
@@ -104,6 +112,12 @@
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client</artifactId>
       <version>${hadoop.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>log4j</groupId>
+          <artifactId>log4j</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
   </dependencies>
 </project>

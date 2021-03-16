@@ -19,6 +19,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
@@ -50,7 +51,7 @@ public class BmcDataStoreFactoryTest {
     @Mock private BmcPropertyAccessor.Accessor<Long> mockLongAccessor;
     @Mock private ObjectStorageClient mockObjectStorageClient;
     @Mock private ObjectStorageClient.Builder mockObjectStorageClientBuilder;
-
+    @Mock private BmcPropertyAccessor.Accessor<Boolean> mockBooleanAccessor;
     private BmcDataStoreFactory factoryUnderTest;
 
     @Before
@@ -67,8 +68,15 @@ public class BmcDataStoreFactoryTest {
         when(mockLongAccessor.get(eq(BmcProperties.RETRY_TIMEOUT_IN_SECONDS))).thenReturn(30L);
         when(mockLongAccessor.get(eq(BmcProperties.RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS)))
                 .thenReturn(0L);
+        when(mockStringAccessor.get(eq(BmcProperties.JERSEY_CLIENT_LOGGING_VERBOSITY)))
+                .thenReturn("PAYLOAD_ANY");
+        when(mockStringAccessor.get(eq(BmcProperties.JERSEY_CLIENT_LOGGING_LEVEL)))
+                .thenReturn("WARNING");
+        when(mockBooleanAccessor.get(eq(BmcProperties.JERSEY_CLIENT_LOGGING_ENABLED)))
+                .thenReturn(false);
 
         when(mockPropAccessor.asString()).thenReturn(mockStringAccessor);
+        when(mockPropAccessor.asBoolean()).thenReturn(mockBooleanAccessor);
         when(mockPropAccessor.asInteger()).thenReturn(mockIntegerAccessor);
         when(mockPropAccessor.asLong()).thenReturn(mockLongAccessor);
 
@@ -86,10 +94,7 @@ public class BmcDataStoreFactoryTest {
         final ObjectStorage client = factoryUnderTest.createClient(mockPropAccessor);
 
         assertEquals("ObjectStorage should be equal", mockObjectStorageClient, client);
-        verifyNew(ObjectStorageClient.class)
-                .withArguments(
-                        isA(BasicAuthenticationDetailsProvider.class),
-                        isA(ClientConfiguration.class));
+        verifyNew(ObjectStorageClient.class);
     }
 
     @Test
@@ -106,9 +111,9 @@ public class BmcDataStoreFactoryTest {
 
         assertEquals("ObjectStorage should be equal", mockObjectStorageClient, client);
 
-        verifyStatic(ObjectStorageClient.class);
+        verifyStatic(ObjectStorageClient.class, Mockito.times(2));
         ObjectStorageClient.builder();
-        verify(mockObjectStorageClientBuilder).configuration(isA(ClientConfiguration.class));
+        verify(mockObjectStorageClientBuilder, Mockito.times(2)).configuration(isA(ClientConfiguration.class));
 
         final ArgumentCaptor<ClientConfigurator> configuratorCaptor =
                 ArgumentCaptor.forClass(ClientConfigurator.class);

@@ -29,7 +29,7 @@ public class DeprecatedBmcContract extends AbstractBondedFSContract {
         Map<String, String> ociConfig =
                 conf.getValByRegex(".*\\." + BmcConstants.OCI_SCHEME + ".*");
         for (Map.Entry<String, String> e : ociConfig.entrySet()) {
-            // replaee ".oci" with the deprecated ".oraclebmc"
+            // replace ".oci" with the deprecated ".oraclebmc"
             String deprecatedKey =
                     e.getKey()
                             .replaceAll(

@@ -22,4 +22,20 @@ public class BmcContract extends AbstractBondedFSContract {
     public String getScheme() {
         return "oci";
     }
+
+    public static class InMemory extends BmcContract {
+        public static final String CONTRACT_IN_MEMORY_XML = "contract/oci-inmemory.xml";
+        public InMemory(Configuration conf) {
+            super(conf);
+            this.addConfResource(CONTRACT_IN_MEMORY_XML);
+        }
+    }
+
+    public static class ReadAhead extends BmcContract {
+        public static final String CONTRACT_READ_AHEAD_XML = "contract/oxi-readahead.xml";
+        public ReadAhead(Configuration conf) {
+            super(conf);
+            this.addConfResource(CONTRACT_READ_AHEAD_XML);
+        }
+    }
 }
