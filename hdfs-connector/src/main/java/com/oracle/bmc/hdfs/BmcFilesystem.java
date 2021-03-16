@@ -11,12 +11,14 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileAlreadyExistsException;
@@ -183,6 +185,25 @@ public class BmcFilesystem extends FileSystem {
             final long blockSize,
             final Progressable progress)
             throws IOException {
+        return create(path, permission, overwrite, bufferSize, replication, blockSize, progress, true);
+    }
+
+
+    /**
+     * Creates a new output stream. Permissions are not used.
+     * <p>
+     * {@inheritDoc}
+     */
+    protected FSDataOutputStream create(
+            final Path path,
+            final FsPermission permission,
+            final boolean overwrite,
+            final int bufferSize,
+            final short replication,
+            final long blockSize,
+            final Progressable progress,
+            final boolean isRecursive)
+            throws IOException {
         LOG.debug(
                 "Attempting to create path {}, overwrite {}, bufferSize {}",
                 path,
@@ -205,16 +226,27 @@ public class BmcFilesystem extends FileSystem {
             LOG.debug("Found existing file at path, deleting");
             this.dataStore.delete(path);
         } else {
-            LOG.debug(
-                    "No existing file at path {}, verifying all directories exist with mkdirs",
-                    path);
-            // no existing file, so make sure all of the parent "directories"
-            // are created
-            this.mkdirs(path.getParent(), permission);
+            if (isRecursive) {
+                LOG.debug(
+                        "No existing file at path {}, verifying all directories exist with mkdirs",
+                        path);
+                // no existing file, so make sure all of the parent "directories" are created
+                this.mkdirs(path.getParent(), permission);
+            } else {
+                if (this.getNullableFileStatus(path.getParent()) == null) {
+                    throw new FileNotFoundException("Cannot create file " + path +
+                                                            ", the parent directory does not exist");
+                }
+            }
         }
 
         return new FSDataOutputStream(
                 this.dataStore.openWriteStream(path, bufferSize, progress), super.statistics);
+    }
+
+    @Override
+    public FSDataOutputStream createNonRecursive(Path f, FsPermission permission, EnumSet<CreateFlag> flags, int bufferSize, short replication, long blockSize, Progressable progress) throws IOException {
+        return create(f, permission, flags.contains(CreateFlag.OVERWRITE), bufferSize, replication, blockSize, progress, false);
     }
 
     @Override
@@ -417,8 +449,13 @@ public class BmcFilesystem extends FileSystem {
 
         // trivial check, need to check resolved path later still
         if (absoluteSource.equals(absoluteDestination)) {
-            LOG.debug("Destination is the same as source");
-            return true;
+            if (sourceStatus.isDirectory()) {
+                LOG.debug("Destination is the same as source, renaming directory to itself not allowed");
+                return false;
+            } else {
+                LOG.debug("Destination is the same as source, renaming file to itself is allowed");
+                return true;
+            }
         }
 
         final FileStatus destinationStatus = this.getNullableFileStatus(absoluteDestination);
@@ -448,14 +485,20 @@ public class BmcFilesystem extends FileSystem {
         // test again now that it's resolved
         // ex, moving /foo/bar.json to /foo/, or /foo/bar/ to /foo/
         if (absoluteSource.equals(destinationPathToUse)) {
-            LOG.debug("Resolved destination is the same as source");
-            return true;
+            if (sourceStatus.isDirectory()) {
+                LOG.debug("Resolved destination is the same as source, renaming directory to itself not allowed");
+                return false;
+            } else {
+                LOG.debug("Resolved destination is the same as source, renaming file to itself is allowed");
+                return true;
+            }
         }
 
         // cannot rename something to be a descendant of itself
         // ex, moving /foo/bar.json to /foo/bar.json/bar.json, or /foo/bar/ to /foo/bar/bar/
         if (this.isDescendant(absoluteSource, absoluteDestination)) {
-            throw new IOException("destination cannot be a child of src");
+            LOG.debug("Destination cannot be a child of src");
+            return false;
         }
 
         if (sourceStatus.isFile()) {

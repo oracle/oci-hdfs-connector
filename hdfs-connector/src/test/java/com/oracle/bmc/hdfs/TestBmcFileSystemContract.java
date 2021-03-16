@@ -7,6 +7,7 @@ package com.oracle.bmc.hdfs;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import com.oracle.bmc.hdfs.contract.BmcContract;
 import com.oracle.bmc.hdfs.store.BmcDataStore;
@@ -15,6 +16,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystemContractBaseTest;
 import org.apache.hadoop.fs.Path;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 
 import static org.junit.Assert.assertEquals;
@@ -24,12 +26,25 @@ import static org.junit.Assert.assertTrue;
 @Category({IntegrationTestCategory.class})
 public class TestBmcFileSystemContract extends FileSystemContractBaseTest {
 
+    public static Path INITIAL_WORKING_DIRECTORY;
+
+    @BeforeClass
+    public static void setUpStatic() throws Exception {
+        final Configuration configuration = new Configuration();
+        final BmcContract contract = new BmcContract(configuration);
+        contract.init();
+        INITIAL_WORKING_DIRECTORY = contract.getTestFileSystem().getWorkingDirectory();
+    }
+
     @Before
-    protected void setUp() throws Exception {
+    public void setUp() throws Exception {
         final Configuration configuration = new Configuration();
         final BmcContract contract = new BmcContract(configuration);
         contract.init();
         super.fs = contract.getTestFileSystem();
+
+        // reset the working directory to avoid test-to-test influence
+        fs.setWorkingDirectory(INITIAL_WORKING_DIRECTORY);
     }
 
     @Override
@@ -37,6 +52,11 @@ public class TestBmcFileSystemContract extends FileSystemContractBaseTest {
         super.tearDown();
 
         super.fs.delete(new Path("/existingobjects"), true);
+    }
+
+    @Override
+    protected int getGlobalTimeout() {
+        return (int) TimeUnit.SECONDS.toMillis(60);
     }
 
     @Override

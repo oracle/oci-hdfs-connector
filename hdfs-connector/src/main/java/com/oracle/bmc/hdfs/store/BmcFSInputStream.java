@@ -38,19 +38,19 @@ import lombok.extern.slf4j.Slf4j;
 abstract class BmcFSInputStream extends FSInputStream {
     private static final int EOF = -1;
 
-    private final ObjectStorage objectStorage;
-    private final FileStatus status;
-    private final Supplier<GetObjectRequest.Builder> requestBuilder;
+    protected final ObjectStorage objectStorage;
+    protected final FileStatus status;
+    protected final Supplier<GetObjectRequest.Builder> requestBuilder;
 
     @Getter(value = AccessLevel.PROTECTED)
-    private final Statistics statistics;
+    protected final Statistics statistics;
 
     @Setter(value = AccessLevel.PROTECTED)
     @Getter(value = AccessLevel.PROTECTED)
-    private InputStream sourceInputStream;
+    protected InputStream sourceInputStream;
 
-    private long currentPosition = 0;
-    private boolean closed = false;
+    protected long currentPosition = 0;
+    protected boolean closed = false;
 
     @Override
     public long getPos() throws IOException {
@@ -119,6 +119,11 @@ abstract class BmcFSInputStream extends FSInputStream {
     @Override
     public int read(final byte[] b, final int off, final int len) throws IOException {
         this.validateState(this.currentPosition);
+
+        // see https://issues.apache.org/jira/browse/HDFS-10277
+        if (len == 0) {
+            return 0;
+        }
 
         final int bytesRead = this.sourceInputStream.read(b, off, len);
         if (bytesRead != EOF) {

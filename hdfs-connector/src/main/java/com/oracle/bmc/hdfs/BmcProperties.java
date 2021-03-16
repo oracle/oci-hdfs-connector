@@ -8,14 +8,15 @@ package com.oracle.bmc.hdfs;
 import com.oracle.bmc.auth.BasicAuthenticationDetailsProvider;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 
-import static com.oracle.bmc.hdfs.BmcConstants.*;
-
 import com.oracle.bmc.ClientConfiguration;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.lang.Deprecated;
+
+import static com.oracle.bmc.hdfs.BmcConstants.*;
+import static com.oracle.bmc.hdfs.BmcConstants.JERSEY_CLIENT_LOGGING_VERBOSITY_KEY;
 
 /**
  * Enum to encapsulate all of the configuration options available to users.
@@ -37,6 +38,7 @@ public enum BmcProperties {
     /**
      * (boolean, optional) Flag to enable reading all files to memory first (instead streaming from Object Store), to
      * allow faster seeking. See {@link BmcConstants#IN_MEMORY_READ_BUFFER_KEY} for config key name. Default is false.
+     * Incompatible with READ_AHEAD.
      */
     IN_MEMORY_READ_BUFFER(IN_MEMORY_READ_BUFFER_KEY, false),
     /**
@@ -154,7 +156,95 @@ public enum BmcProperties {
      * ignored if {@link BmcProperties#OBJECT_STORE_CLIENT_CLASS} is specified. See
      * {@link BmcConstants#RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS_KEY} for config key name. Default is 0.
      */
-    RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS(RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS_KEY, 0L);
+    RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS(RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS_KEY, 0L),
+
+    /**
+     * (boolean, optional) Flag to enable object metadata caching. See
+     * {@link BmcConstants#OBJECT_METADATA_CACHING_ENABLED_KEY} for config key name. Default is false.
+     *
+     * Note: If this is enabled, the OCI HDFS Connector will cache object metadata, and queries will not necessarily
+     * reflect the actual data in Object Storage.
+     */
+    OBJECT_METADATA_CACHING_ENABLED(OBJECT_METADATA_CACHING_ENABLED_KEY, false),
+
+    /**
+     * (string, optional) Controls object metadata caching and eviction. See Guava's CacheBuilderSpec for details.
+     * See <a href="https://guava.dev/releases/22.0/api/docs/com/google/common/cache/CacheBuilderSpec.html">https://guava.dev/releases/22.0/api/docs/com/google/common/cache/CacheBuilderSpec.html</a>
+     *
+     * See {@link BmcConstants#OBJECT_METADATA_CACHING_SPEC_KEY} for config key name. Default is
+     * "maximumSize=1024,expireAfterWrite=5m", which caches up to 1024 HEAD object responses for up to 5 minutes.
+     *
+     * To cache values for an infinite amount of time, do not list any setting for "expireAfterWrite",
+     * "expireAfterAccess", or "refreshAfterWrite". For example, "maximumSize=1024" will cache up to 1024 HEAD object
+     * responses for an unlimited amount of time, and only re-requesting them if they had to be evicted because of
+     * the maximum cache size.
+     */
+    OBJECT_METADATA_CACHING_SPEC(OBJECT_METADATA_CACHING_SPEC_KEY, "maximumSize=1024,expireAfterWrite=5m"),
+
+    /**
+     * (boolean, optional) Flag to enable jersey client logging. See
+     * {@link BmcConstants#JERSEY_CLIENT_LOGGING_ENABLED_KEY} for config key name. Default is false.
+     *
+     * Note: If this is enabled, the OCI HDFS Connector will enable the JerseyClientLoggingConfigurator in the underlying
+     * java sdk and logs jersey client calls
+     */
+    JERSEY_CLIENT_LOGGING_ENABLED(JERSEY_CLIENT_LOGGING_ENABLED_KEY, false),
+
+    /**
+     * (string, optional) Log Level for jersey client logger. See
+     * {@link BmcConstants#JERSEY_CLIENT_LOGGING_LEVEL_KEY} for config key name. Default is Warning.
+     *
+     * Note: The log level can only be set if jersey client logging flag is enabled
+     */
+    JERSEY_CLIENT_LOGGING_LEVEL(JERSEY_CLIENT_LOGGING_LEVEL_KEY, "WARNING"),
+
+    /**
+     * (string, optional) Verbosity for jersey client logger. See
+     * {@link BmcConstants#JERSEY_CLIENT_LOGGING_VERBOSITY_KEY} for config key name. Default is false.
+     *
+     * Note: The verbosity can only be set if jersey client logging flag is enabled
+     */
+    JERSEY_CLIENT_LOGGING_VERBOSITY(JERSEY_CLIENT_LOGGING_VERBOSITY_KEY, "PAYLOAD_ANY"),
+
+    /*
+     * (boolean, optional) Flag to enable read ahead. This reads bigger blocks from Object Storage, resulting in
+     * fewer requests. See {@link BmcConstants#READ_AHEAD_KEY} for config key name. Default is false.
+     * Incompatible with IN_MEMORY_READ_.
+     */
+    READ_AHEAD(READ_AHEAD_KEY, false),
+
+    /**
+     * (int, optional) Size in bytes of the blocks to read if READ_AHEAD is enabled.
+     * See {@link BmcConstants#READ_AHEAD_BLOCK_SIZE_KEY} for config key name. Default is 6 MiB.
+     */
+    READ_AHEAD_BLOCK_SIZE(READ_AHEAD_BLOCK_SIZE_KEY, 6 * 1024 * 1024),
+
+    /**
+     * (boolean, optional) Flag to enable parquet caching. See
+     * {@link BmcConstants#OBJECT_PARQUET_CACHING_ENABLED_KEY} for config key name. Default is false.
+     *
+     * Requires READ_AHEAD to be enabled.
+     *
+     * Note: If this is enabled, the OCI HDFS Connector will cache object parquet data, and queries will not necessarily
+     * reflect the actual data in Object Storage.
+     */
+    OBJECT_PARQUET_CACHING_ENABLED(OBJECT_PARQUET_CACHING_ENABLED_KEY, false),
+
+    /**
+     * (string, optional) Controls object parquet caching and eviction. See Guava's CacheBuilderSpec for details.
+     * See <a href="https://guava.dev/releases/22.0/api/docs/com/google/common/cache/CacheBuilderSpec.html">https://guava.dev/releases/22.0/api/docs/com/google/common/cache/CacheBuilderSpec.html</a>
+     *
+     * See {@link BmcConstants#OBJECT_PARQUET_CACHING_SPEC_KEY} for config key name. Default is
+     * "maximumSize=10240,expireAfterWrite=15m", which caches up to 10240 parquet objects for up to 15 minutes.
+     *
+     * To cache values for an infinite amount of time, do not list any setting for "expireAfterWrite",
+     * "expireAfterAccess", or "refreshAfterWrite". For example, "maximumSize=1024" will cache up to 1024 parquet
+     * objects for an unlimited amount of time, and only re-requesting them if they had to be evicted because of
+     * the maximum cache size.
+     */
+    OBJECT_PARQUET_CACHING_SPEC(OBJECT_PARQUET_CACHING_SPEC_KEY, "maximumSize=10240,expireAfterWrite=15m"),
+
+    ;
 
     @Getter private final String propertyName;
     @Getter private final Object defaultValue;

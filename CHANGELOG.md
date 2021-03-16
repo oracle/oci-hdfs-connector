@@ -3,6 +3,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.0.0 - 2021-03-16
+### Added
+- Added metadata caching using the `fs.oci.caching.object.metadata.enabled` and `fs.oci.caching.object.metadata.spec` configuration keys. Note that there is no check for consistency, and if your data in Object Storage changes, the cache may return outdated data. Therefore, it is most appropriate when your data is read-only and does not change. Use caution when applying these settings.
+- Added read-ahead and parquet caching. The read-ahead feature is configured using `fs.oci.io.read.ahead` and `fs.oci.io.read.ahead.blocksize`. Parquet caching, which requires `fs.oci.io.read.ahead=true`, is controlled using `fs.oci.caching.object.parquet.enabled` and `fs.oci.caching.object.parquet.spec`. Note that there is no check for consistency, and if your data in Object Storage changes, the cache may return outdated data. Therefore, it is most appropriate when your data is read-only and does not change. Use caution when applying these settings.
+- Added Jersey client logging, configured using `fs.oci.client.jersey.logging.enabled`, `fs.oci.client.jersey.logging.level`, and `fs.oci.client.jersey.logging.verbosity`.
+
+### Changed
+- Updated to Hadoop version 3.3.0
+- Updated to OCI Java SDK version 1.33.1
+
 ## 3.2.1.3 - 2020-11-03
 ### Changed
 - Updated to OCI Java SDK version 1.25.2

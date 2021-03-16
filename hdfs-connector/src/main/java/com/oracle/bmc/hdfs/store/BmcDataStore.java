@@ -16,15 +16,17 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import org.apache.hadoop.fs.FSInputStream;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem.Statistics;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.util.Progressable;
-
 import com.google.common.base.Function;
 import com.google.common.base.Supplier;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheBuilderSpec;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+import com.google.common.cache.RemovalListener;
+import com.google.common.cache.RemovalNotification;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.util.BiFunction;
 import com.oracle.bmc.model.BmcException;
@@ -41,9 +43,14 @@ import com.oracle.bmc.objectstorage.transfer.UploadConfiguration;
 import com.oracle.bmc.objectstorage.transfer.UploadConfiguration.UploadConfigurationBuilder;
 import com.oracle.bmc.objectstorage.transfer.UploadManager;
 import com.oracle.bmc.objectstorage.transfer.UploadManager.UploadRequest;
-
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.hadoop.fs.FSInputStream;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem.Statistics;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.util.Progressable;
 
 /**
  * BmcDataStore is a facade to Object Store that provides CRUD operations for objects by {@link Path} references.
@@ -71,6 +78,11 @@ public class BmcDataStore {
     private final boolean useInMemoryReadBuffer;
     private final boolean useInMemoryWriteBuffer;
 
+    private final LoadingCache<String, HeadPair> objectMetadataCache;
+    private final boolean useReadAhead;
+    private final int readAheadSizeInBytes;
+    private final Cache<String, BmcReadAheadFSInputStream.ParquetFooterInfo> parquetCache;
+
     public BmcDataStore(
             final BmcPropertyAccessor propertyAccessor,
             final ObjectStorage objectStorage,
@@ -94,6 +106,74 @@ public class BmcDataStore {
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_READ_BUFFER);
         this.useInMemoryWriteBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_WRITE_BUFFER);
+
+        this.useReadAhead =
+                propertyAccessor.asBoolean().get(BmcProperties.READ_AHEAD);
+        this.readAheadSizeInBytes = propertyAccessor.asInteger().get(BmcProperties.READ_AHEAD_BLOCK_SIZE);
+
+        if (this.useInMemoryReadBuffer && this.useReadAhead) {
+            throw new IllegalArgumentException(BmcProperties.IN_MEMORY_READ_BUFFER.getPropertyName() + " and " +
+                    BmcProperties.READ_AHEAD.getPropertyName() + " are mutually exclusive");
+        }
+
+        this.objectMetadataCache = configureHeadObjectCache(propertyAccessor);
+        this.parquetCache = configureParquetCache(propertyAccessor);
+    }
+
+    private LoadingCache<String, HeadPair> configureHeadObjectCache(BmcPropertyAccessor propertyAccessor) {
+        boolean headObjectCachingEnabled = propertyAccessor.asBoolean().get(BmcProperties.OBJECT_METADATA_CACHING_ENABLED);
+        String loadMessage = headObjectCachingEnabled ?
+                "Not in object metadata cache, getting actual metadata for key: '{}'" :
+                "Getting metadata for key: '{}'";
+
+        CacheLoader<String, HeadPair> loader = new CacheLoader<String, HeadPair>() {
+            @Override
+            public HeadPair load(String key) throws Exception {
+                LOG.info(loadMessage, key);
+                return getObjectMetadataUncached(key);
+            }
+        };
+
+        if (!headObjectCachingEnabled) {
+            LOG.info("Object metadata caching disabled");
+            return CacheBuilder.newBuilder()
+                    .maximumSize(0)
+                    .build(loader);
+        }
+
+        String headObjectCachingSpec = propertyAccessor.asString().get(BmcProperties.OBJECT_METADATA_CACHING_SPEC);
+
+        CacheBuilderSpec cacheBuilderSpec = CacheBuilderSpec.parse(headObjectCachingSpec);
+
+        LOG.info("Object metadata caching enabled with cache spec: '{}'", cacheBuilderSpec);
+
+        return CacheBuilder.from(cacheBuilderSpec)
+                           .removalListener(new RemovalListener<String, HeadPair>() {
+                               @Override
+                               public void onRemoval(RemovalNotification<String, HeadPair> removalNotification) {
+                                   LOG.info("Object metadata cache entry '{}' removed (cause '{}', was evicted '{}')",
+                                            removalNotification.getKey(),
+                                            removalNotification.getCause(),
+                                            removalNotification.wasEvicted());
+                               }
+                           })
+                           .build(loader);
+    }
+
+    private Cache<String, BmcReadAheadFSInputStream.ParquetFooterInfo> configureParquetCache(BmcPropertyAccessor propertyAccessor) {
+        // this disables the cache by default
+        String spec = "maximumSize=0";
+        if (propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PARQUET_CACHING_ENABLED)) {
+            spec = propertyAccessor.asString().get(BmcProperties.OBJECT_PARQUET_CACHING_SPEC);
+            LOG.info("{} is enabled, setting parquet cache spec to '{}'",
+                     BmcProperties.OBJECT_PARQUET_CACHING_ENABLED.getPropertyName(), spec);
+        } else {
+            LOG.info("{} is disabled, setting parquet cache spec to '{}', which disables the cache",
+                     BmcProperties.OBJECT_PARQUET_CACHING_ENABLED.getPropertyName(), spec);
+        }
+        return CacheBuilder.from(CacheBuilderSpec.parse(spec))
+                           .removalListener(BmcReadAheadFSInputStream.getParquetCacheRemovalListener())
+                           .build();
     }
 
     private UploadConfigurationBuilder createUploadConfiguration(
@@ -549,6 +629,34 @@ public class BmcDataStore {
      *             if no object (or directory) could be found.
      */
     private HeadPair getObjectMetadata(final String key) throws IOException {
+        try {
+            return objectMetadataCache.getUnchecked(key);
+        } catch(UncheckedExecutionException ee) {
+            if (ee.getCause() instanceof IOException) {
+                throw (IOException) ee.getCause();
+            } else if (ee.getCause() instanceof ObjectMetadataNotFoundException) {
+                return null;
+            } else {
+                throw ee;
+            }
+        }
+    }
+
+    /**
+     * This method attempts to get the metadata for the given object key.
+     * <p>
+     * Note: Since "directories" in Object Store are just objects whose names have a trailing '/', this method will make
+     * two attempts to get the metadata, once for the actual key given, and once for the (key + '/') iff no object for
+     * the given key exists. This is necessary as its not immediately possible to know from the Path instances provided
+     * if they were meant to be a file or a directory.
+     *
+     * @param key
+     *            The object key.
+     * @return The metadata
+     * @throws IOException
+     *             if no object (or directory) could be found.
+     */
+    private HeadPair getObjectMetadataUncached(final String key) throws IOException {
         HeadObjectResponse response = null;
         String keyUsed = key;
         try {
@@ -567,7 +675,7 @@ public class BmcDataStore {
                         throwEx = false;
                     } catch (final BmcException e1) {
                         if (e1.getStatusCode() == 404) {
-                            return null;
+                            throw new ObjectMetadataNotFoundException(key);
                         }
                     } finally {
                         // in either case, it took 2 read operations to figure out this object either did or did not
@@ -576,7 +684,7 @@ public class BmcDataStore {
                     }
                 } else {
                     this.statistics.incrementReadOps(1);
-                    return null;
+                    throw new ObjectMetadataNotFoundException(key);
                 }
             }
 
@@ -587,6 +695,16 @@ public class BmcDataStore {
         }
 
         return new HeadPair(response, keyUsed);
+    }
+
+    private static class ObjectMetadataNotFoundException extends RuntimeException {
+        @Getter
+        private final String key;
+
+        public ObjectMetadataNotFoundException(String key) {
+            super("Object metadata not found for key: " + key);
+            this.key = key;
+        }
     }
 
     /**
@@ -612,11 +730,12 @@ public class BmcDataStore {
                 new GetObjectRequestFunction(path);
 
         if (this.useInMemoryReadBuffer) {
-            return new BmcInMemoryFSInputStream(
-                    this.objectStorage, status, requestBuilder, this.statistics);
+            return new BmcInMemoryFSInputStream(this.objectStorage, status, requestBuilder, this.statistics);
+        } if (this.useReadAhead) {
+            return new BmcReadAheadFSInputStream(this.objectStorage, status, requestBuilder, this.statistics,
+                                                 this.readAheadSizeInBytes, this.parquetCache);
         } else {
-            return new BmcDirectFSInputStream(
-                    this.objectStorage, status, requestBuilder, this.statistics);
+            return new BmcDirectFSInputStream(this.objectStorage, status, requestBuilder, this.statistics);
         }
     }
 

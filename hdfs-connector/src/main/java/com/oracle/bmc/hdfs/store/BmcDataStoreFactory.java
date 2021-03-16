@@ -22,13 +22,7 @@ import com.oracle.bmc.auth.SimpleAuthenticationDetailsProvider;
 import com.oracle.bmc.auth.SimplePrivateKeySupplier;
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.waiter.ResettingExponentialBackoffStrategy;
-import com.oracle.bmc.http.ApacheConfigurator;
-import com.oracle.bmc.http.ApacheConnectionPoolConfig;
-import com.oracle.bmc.http.ApacheConnectionPoolingClientConfigDecorator;
-import com.oracle.bmc.http.ApacheProxyConfig;
-import com.oracle.bmc.http.ApacheProxyConfigDecorator;
-import com.oracle.bmc.http.ClientConfigDecorator;
-import com.oracle.bmc.http.ClientConfigurator;
+import com.oracle.bmc.http.*;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.ObjectStorageClient;
 import com.oracle.bmc.retrier.RetryConfiguration;
@@ -40,6 +34,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem.Statistics;
+import org.glassfish.jersey.logging.LoggingFeature;
 
 /**
  * Factory class to create a {@link BmcDataStore}. This factory allows for the usage of custom classes to
@@ -142,11 +137,25 @@ public class BmcDataStoreFactory {
                 this.createAuthenticator(propertyAccessor);
 
         final String httpProxyUri = propertyAccessor.asString().get(BmcProperties.HTTP_PROXY_URI);
+        ObjectStorageClient.Builder objectStorageBuilder =
+                ObjectStorageClient.builder().configuration(clientConfig);
+
+        if (propertyAccessor.asBoolean().get(BmcProperties.JERSEY_CLIENT_LOGGING_ENABLED)) {
+            objectStorageBuilder.additionalClientConfigurator(
+                    new JerseyLoggingClientConfigurator(
+                            LoggingFeature.Verbosity.valueOf(
+                                    propertyAccessor
+                                            .asString()
+                                            .get(BmcProperties.JERSEY_CLIENT_LOGGING_VERBOSITY)),
+                            propertyAccessor
+                                    .asString()
+                                    .get(BmcProperties.JERSEY_CLIENT_LOGGING_LEVEL)));
+        }
 
         // If a proxy is not defined, use the existing ObjectStorageClient that leverages the DefaultConnectorProvider.
         // Else, build an ObjectStorageClient that leverages the ApacheConnector to configure a proxy.
         return (StringUtils.isBlank(httpProxyUri))
-                ? new ObjectStorageClient(authDetailsProvider, clientConfig)
+                ? objectStorageBuilder.build(authDetailsProvider)
                 : buildClientWithProxy(
                         authDetailsProvider, clientConfig, propertyAccessor, httpProxyUri);
     }
@@ -166,10 +175,25 @@ public class BmcDataStoreFactory {
 
         final ClientConfigurator clientConfigurator =
                 new ApacheConfigurator(clientConfigDecorators);
-        return ObjectStorageClient.builder()
-                .configuration(clientConfig)
-                .clientConfigurator(clientConfigurator)
-                .build(authDetailsProvider);
+
+        ObjectStorageClient.Builder objectStorageBuilder =
+                ObjectStorageClient.builder()
+                        .configuration(clientConfig)
+                        .clientConfigurator(clientConfigurator);
+
+        if (propertyAccessor.asBoolean().get(BmcProperties.JERSEY_CLIENT_LOGGING_ENABLED)) {
+            objectStorageBuilder.additionalClientConfigurator(
+                    new JerseyLoggingClientConfigurator(
+                            LoggingFeature.Verbosity.valueOf(
+                                    propertyAccessor
+                                            .asString()
+                                            .get(BmcProperties.JERSEY_CLIENT_LOGGING_VERBOSITY)),
+                            propertyAccessor
+                                    .asString()
+                                    .get(BmcProperties.JERSEY_CLIENT_LOGGING_LEVEL)));
+        }
+
+        return objectStorageBuilder.build(authDetailsProvider);
     }
 
     // A pool config is required as the default pool config for Hadoop versions > 2.8.x keeps connections alive
