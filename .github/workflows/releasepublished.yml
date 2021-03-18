@@ -56,6 +56,8 @@ jobs:
           if [ "$VERSION" = "latest" ]; then
             echo "Using latest release"
             curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Accept: application/vnd.github.v3.raw' -s https://api.github.com/repos/$repo/releases | tee releases.json
+            echo "After curl, exit code $?"
+            ls -al
             cat releases.json | jq ".[0].assets | map(select(.name|test(\"$file\")))[0].id" | tee asset_id.json
             asset_id=`cat asset_id.json`
             # asset_id=`curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Accept: application/vnd.github.v3.raw' -s https://api.github.com/repos/$repo/releases | jq ".[0].assets | map(select(.name|test(\"$file\")))[0].id"`
