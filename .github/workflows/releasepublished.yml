@@ -42,6 +42,15 @@ jobs:
             export RELEASE=${{github.event.inputs.release}}
           fi
           echo "Release is $RELEASE"
+          pat="^v.*"
+          if [ "$RELEASE" = "latest" ]; then
+            echo "Using latest release"
+          elif [[ $RELEASE =~ $pat ]]; then
+            echo "Specified '$RELEASE' as release"
+          else
+            echo "Unsupported release, should be 'latest' or something like 'v3.3.0.0'; was '$RELEASE'"
+            exit 1
+          fi
           echo "RELEASE=$RELEASE" >> $GITHUB_ENV
       - name: Download the release asset
         env:
