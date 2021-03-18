@@ -55,7 +55,10 @@ jobs:
           export file=${{github.event.inputs.asset_file_name}}
           if [ "$VERSION" = "latest" ]; then
             echo "Using latest release"
-            asset_id=`curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Accept: application/vnd.github.v3.raw' -s https://api.github.com/repos/$repo/releases | jq ".[0].assets | map(select(.name|test(\"$file\")))[0].id"`
+            curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Accept: application/vnd.github.v3.raw' -s https://api.github.com/repos/$repo/releases | tee releases.json
+            cat releases.json | jq ".[0].assets | map(select(.name|test(\"$file\")))[0].id" | tee asset_id.json
+            asset_id=`cat asset_id.json`
+            # asset_id=`curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Accept: application/vnd.github.v3.raw' -s https://api.github.com/repos/$repo/releases | jq ".[0].assets | map(select(.name|test(\"$file\")))[0].id"`
           else
             echo "Using release $RELEASE"
             asset_id=`curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Accept: application/vnd.github.v3.raw' -s https://api.github.com/repos/$repo/releases | jq ". | map(select(.tag_name == \"$RELEASE\"))[0].assets | map(select(.name|test(\"$file\")))[0].id"`
