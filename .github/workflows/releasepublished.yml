@@ -53,7 +53,7 @@ jobs:
         run: |
           export repo=${{github.event.inputs.repo_name}}
           export file=${{github.event.inputs.asset_file_name}}
-          if [ "$VERSION" = "latest" ]; then
+          if [ "$RELEASE" = "latest" ]; then
             echo "Using latest release"
             curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Accept: application/vnd.github.v3.raw' -s https://api.github.com/repos/$repo/releases | tee releases.json
             echo "After curl, exit code $?"
