@@ -51,8 +51,8 @@ jobs:
         env:
           ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
         run: |
-          repo=${{github.event.inputs.repo_name}}
-          file=${{github.event.inputs.asset_file_name}}
+          export repo=${{github.event.inputs.repo_name}}
+          export file=${{github.event.inputs.asset_file_name}}
           if [ "$VERSION" = "latest" ]; then
             echo "Using latest release"
             asset_id=`curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Accept: application/vnd.github.v3.raw' -s https://api.github.com/repos/$repo/releases | jq ".[0].assets | map(select(.name|test(\"$file\")))[0].id"`
