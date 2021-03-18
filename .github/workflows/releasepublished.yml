@@ -12,17 +12,13 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: 'Release version number'
+        description: 'Release version number ("latest" or "v3.3.0.0")'
         required: true
         default: latest
       repo_name:
         description: 'Repository name'
         required: true
         default: oracle/oci-hdfs-connector
-      asset_file_name:
-        description: 'Asset file name (regex)'
-        required: true
-        default: individual-modules.zip
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -52,7 +48,7 @@ jobs:
           ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
         run: |
           export repo=${{github.event.inputs.repo_name}}
-          export file=${{github.event.inputs.asset_file_name}}
+          export file="individual-modules.zip"
           if [ "$RELEASE" = "latest" ]; then
             echo "Using latest release"
             asset_id=`curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Accept: application/vnd.github.v3.raw' -s https://api.github.com/repos/$repo/releases | jq ".[0].assets | map(select(.name|test(\"$file\")))[0].id"`
@@ -67,5 +63,6 @@ jobs:
           ls
           mkdir unpacked
           cd unpacked
-          unzip -q ../${{github.event.inputs.asset_file_name}}
+          export file="individual-modules.zip"
+          unzip -q ../$file
           find .
