@@ -23,6 +23,9 @@ on:
 jobs:
   # This workflow contains a single job called "build"
   build:
+    # TODO: If this runs in an environment, set this value
+    # environment: MC-Action
+
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
@@ -59,6 +62,21 @@ jobs:
           fi
           echo "RELEASE=$RELEASE" >> $GITHUB_ENV
           echo "REPO=$REPO" >> $GITHUB_ENV
+      - name: Configure GPG Key
+        env:
+          MCKEY: ${{ secrets.MCKEY }}
+        run: |
+          set -x
+          mkdir -p ~/.gnupg/
+          chown -R $(whoami) ~/.gnupg/
+          chmod 700 ~/.gnupg
+          gpg --version
+          echo "MCKEY is '$MCKEY'"
+          if [ -z ${MCKEY+x} ]; then echo "MCKEY is unset"; else echo "MCKEY is set to '$MCKEY'"; fi
+          printf "$MCKEY" | base64 --decode > ~/.gnupg/mckey_private.key
+          ls ~/.gnupg
+          gpg --import ~/.gnupg/mckey_private.key
+          gpg --list-keys
       - name: Download the release asset
         env:
           ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
@@ -118,4 +136,10 @@ jobs:
           cd unpacked
           export file="individual-modules.zip"
           unzip -q ../$file
+          find .
+      - name: GPG sign all Maven files
+        run: |
+          set -x
+          cd unpacked/maven
+          find . -type f -not -name \*.asc | xargs -n 1 -I % gpg --output %.asc --detach-sig %
           find .
