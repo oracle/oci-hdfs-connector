@@ -15,15 +15,12 @@ on:
         description: 'Release version number ("latest" or "v3.3.0.0")'
         required: true
         default: latest
-      repo_name:
-        description: 'Repository name (leave blank for this repo)'
-        required: false
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   # This workflow contains a single job called "build"
   build:
-    # TODO: If this runs in an environment, set this value
+    # NOTE: If this runs in an environment, set this value (where "MC-Action" is the environment name)
     # environment: MC-Action
 
     # The type of runner that the job will run on
@@ -53,20 +50,23 @@ jobs:
             echo "Unsupported release, should be 'latest' or something like 'v3.3.0.0'; was '$RELEASE'"
             exit 1
           fi
-          if [ -z "${{github.event.inputs.repo_name}}" ]; then
-            echo "Repo name not set manually, using '${GITHUB_REPOSITORY}'"
-            export REPO=${GITHUB_REPOSITORY}
-          else
-            echo "Repo name specified as '${{github.event.inputs.repo_name}}'"
-            export REPO=${{github.event.inputs.repo_name}}
-          fi
+          echo "Repo name not set manually, using '${GITHUB_REPOSITORY}'"
+          export REPO=${GITHUB_REPOSITORY}
+          export FILE_NAME_PART="individual-modules.zip"
           echo "RELEASE=$RELEASE" >> $GITHUB_ENV
           echo "REPO=$REPO" >> $GITHUB_ENV
-      - name: Configure GPG Key
+          echo "FILE_NAME_PART=$FILE_NAME_PART" >> $GITHUB_ENV
+      - name: Check credentials
+        run: |
+          set -e
+          echo "Checking SonaType SONATYPE_BASIC_AUTH_CREDENTIALS"
+          curl --fail -X GET -H "Content-Type:application/xml" -u "${{ secrets.SONATYPE_BASIC_AUTH_CREDENTIALS }}" https://oss.sonatype.org/service/local/staging/profiles/b39883a429024e > /dev/null
+          echo "Checking GitHub ACCESS_TOKEN"
+          curl -f -H "Authorization: Bearer ${{ secrets.ACCESS_TOKEN }}" -H 'Accept: application/vnd.github.v3.raw' -s https://api.github.com/repos/$REPO > /dev/null
+      - name: Configure GPG key
         env:
           MCKEY: ${{ secrets.MCKEY }}
         run: |
-          set -x
           mkdir -p ~/.gnupg/
           chown -R $(whoami) ~/.gnupg/
           chmod 700 ~/.gnupg
@@ -77,11 +77,14 @@ jobs:
           ls ~/.gnupg
           gpg --import ~/.gnupg/mckey_private.key
           gpg --list-keys
+      - name: Install packages
+        run: |
+          sudo apt-get install -y jq
+        shell: bash
       - name: Download the release asset
         env:
           ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
         run: |
-          export file="individual-modules.zip"
           if [ "$RELEASE" = "latest" ]; then
             echo "Using latest release"
             set +e
@@ -91,15 +94,15 @@ jobs:
               echo "curl returned '$result': Bad access token or repo (was '$REPO')"
               exit $result
             fi
-            asset_id=`cat releases.json | jq ".[0].assets | map(select(.name|test(\"$file\")))[0].id"`
+            asset_id=`cat releases.json | jq ".[0].assets | map(select(.name|test(\"$FILE_NAME_PART\")))[0].id"`
             result="$?"
             if [ "$result" -ne 0 ]; then
-              echo "jq returned '$result': No releases or bad file (was '$file')"
+              echo "jq returned '$result': No releases or bad file (was '$FILE_NAME_PART')"
               cat releases.json
               exit $result
             fi
             if [ "$asset_id" == "null" ]; then
-              echo "jq returned asset id '$asset_id': No releases or bad file (was '$file')"
+              echo "jq returned asset id '$asset_id': No releases or bad file (was '$FILE_NAME_PART')"
               cat releases.json
               exit 1
             fi
@@ -113,33 +116,73 @@ jobs:
               echo "curl returned '$result': Bad access token or repo (was '$REPO')"
               exit $result
             fi
-            asset_id=`cat releases.json | jq ". | map(select(.tag_name == \"$RELEASE\"))[0].assets | map(select(.name|test(\"$file\")))[0].id"`
+            asset_id=`cat releases.json | jq ". | map(select(.tag_name == \"$RELEASE\"))[0].assets | map(select(.name|test(\"$FILE_NAME_PART\")))[0].id"`
             result="$?"
             if [ "$result" -ne 0 ]; then
-              echo "jq returned '$result': Bad release (was '$RELEASE') or bad file (was '$file')"
+              echo "jq returned '$result': Bad release (was '$RELEASE') or bad file (was '$FILE_NAME_PART')"
               cat releases.json
               exit $result
             fi
             if [ "$asset_id" == "null" ]; then
-              echo "jq returned asset id '$asset_id': Bad release (was '$RELEASE') or bad file (was '$file')"
+              echo "jq returned asset id '$asset_id': Bad release (was '$RELEASE') or bad file (was '$FILE_NAME_PART')"
               cat releases.json
               exit 1
             fi
             set -e
           fi
-          echo "Asset id for release $RELEASE file $file is $asset_id"
-          wget -q --header="Authorization: Bearer $ACCESS_TOKEN" --auth-no-challenge --header='Accept:application/octet-stream' https://api.github.com/repos/$REPO/releases/assets/$asset_id -O $file
-      - name: Examine artifact
+          echo "Asset id for release $RELEASE file $FILE_NAME_PART is $asset_id"
+          wget -q --header="Authorization: Bearer $ACCESS_TOKEN" --auth-no-challenge --header='Accept:application/octet-stream' https://api.github.com/repos/$REPO/releases/assets/$asset_id -O asset.zip
+      - name: Examine asset
         run: |
           ls
           mkdir unpacked
           cd unpacked
-          export file="individual-modules.zip"
-          unzip -q ../$file
+          unzip -q ../asset.zip
+          head CHANGELOG.md 
           find .
       - name: GPG sign all Maven files
         run: |
-          set -x
           cd unpacked/maven
           find . -type f -not -name \*.asc | xargs -n 1 -I % gpg --output %.asc --detach-sig %
           find .
+      - name: Checksum all Maven files
+        run: |
+          cd unpacked/maven
+          find . -type f -not -name \*.asc -not -name \*.md5 -not -name \*.sha1 | xargs -n 1 -I % sh -c "md5sum % | cut -d' ' -f1 > %.md5"
+          find . -type f -not -name \*.asc -not -name \*.md5 -not -name \*.sha1 | xargs -n 1 -I % sh -c "sha1sum % | cut -d' ' -f1 > %.sha1"
+          find .
+      - name: Staging artifacts in SonaType
+        run: |
+          # Code mostly by mezzargh
+          set -x
+          set -e
+          WD=`pwd`
+          START_XML=$(cat << EOF
+          <promoteRequest>
+              <data>
+                  <description>Publish ${GITHUB_REPOSITORY} ${RELEASE} Artifacts</description>
+              </data>
+          </promoteRequest>
+          EOF
+          )
+          printf "$START_XML" > start.xml
+          ls -lahn
+          cat start.xml
+          cd unpacked/maven/repository
+          cp $WD/start.xml start.xml
+          cat start.xml
+          curl --fail -v -X POST -d @start.xml -H "Content-Type:application/xml" -u "${{ secrets.SONATYPE_BASIC_AUTH_CREDENTIALS }}" https://oss.sonatype.org/service/local/staging/profiles/b39883a429024e/start -o $WD/finish.xml
+          rm start.xml
+          ls -lahn $WD
+          cat $WD/finish.xml
+          staging_dir=$(echo $(awk -F '[<>]' '/stagedRepositoryId/{print $3}' $WD/finish.xml))
+          echo "Staging dir is '${staging_dir}'"
+          find . -type f | sed -E s'@./@@' | grep -v start.xml > $WD/artifacts.list
+          ls -lahn $WD
+          echo "Uploading $(wc -l $WD/artifacts.list | sed "s/^ *\([0-9]*\) .*$/\1/") artifacts"
+          awk '{printf "%5d\t%s\n", NR, $0}' < $WD/artifacts.list
+          cat $WD/artifacts.list | xargs -n 1 -I {} curl --fail -u "${{ secrets.SONATYPE_BASIC_AUTH_CREDENTIALS }}" --upload-file {} https://oss.sonatype.org/service/local/staging/deployByRepositoryId/${staging_dir}/{}
+          cp $WD/finish.xml finish.xml
+          cat finish.xml
+          curl --fail -X POST -d @finish.xml -H "Content-Type:application/xml" -u "${{ secrets.SONATYPE_BASIC_AUTH_CREDENTIALS }}" -H "Content-Type:application/xml" https://oss.sonatype.org/service/local/staging/profiles/b39883a429024e/finish
+          echo https://oss.sonatype.org/content/repositories/${staging_dir}
