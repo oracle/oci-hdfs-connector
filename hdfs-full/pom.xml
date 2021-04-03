@@ -12,7 +12,7 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.3.0.0</version>
+    <version>3.3.0.3</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -36,13 +36,34 @@
                   <goal>copy-resources</goal>
                 </goals>
                 <configuration>
-                  <outputDirectory>${project.build.directory}/poms</outputDirectory>
+                  <outputDirectory>${project.build.directory}/maven</outputDirectory>
                   <resources>
                     <resource>
                       <directory>..</directory>
                       <includes>
                         <include>**/pom.xml</include>
                       </includes>
+                    </resource>
+                  </resources>
+                </configuration>
+              </execution>
+              <execution>
+                <id>copy-jars-ziponly</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>copy-resources</goal>
+                </goals>
+                <configuration>
+                  <outputDirectory>${project.build.directory}/maven</outputDirectory>
+                  <resources>
+                    <resource>
+                      <directory>..</directory>
+                      <includes>
+                        <include>**/target/*.jar</include>
+                      </includes>
+                      <excludes>
+                        <exclude>**/original-*</exclude>
+                      </excludes>
                     </resource>
                   </resources>
                 </configuration>
@@ -75,36 +96,11 @@
                   <goal>single</goal>
                 </goals>
                 <configuration>
-                  <appendAssemblyId>false</appendAssemblyId>
+                  <appendAssemblyId>true</appendAssemblyId>
                   <descriptors>
                     <descriptor>src/main/assembly/assembly-with-modules.xml</descriptor>
                   </descriptors>
-                  <finalName>${project.artifactId}-${project.version}-individual-modules</finalName>
                   <attach>true</attach>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>build-helper-maven-plugin</artifactId>
-            <version>1.9.1</version>
-            <executions>
-              <execution>
-                <id>attach-artifacts</id>
-                <!-- want this after 'package' but before 'install' -->
-                <phase>pre-integration-test</phase>
-                <goals>
-                  <goal>attach-artifact</goal>
-                </goals>
-                <configuration>
-                  <artifacts>
-                    <artifact>
-                      <file>${project.build.directory}/${project.artifactId}-${project.version}-individual-modules.zip</file>
-                      <type>zip</type>
-                      <classifier>individual-modules</classifier>
-                    </artifact>
-                  </artifacts>
                 </configuration>
               </execution>
             </executions>
@@ -262,7 +258,7 @@
     <dependency>
       <groupId>com.oracle.oci.sdk</groupId>
       <artifactId>oci-hdfs-connector</artifactId>
-      <version>3.3.0.0</version>
+      <version>3.3.0.3</version>
       <!-- We don't want to bundle any hadoop packages -->
       <exclusions>
         <exclusion>

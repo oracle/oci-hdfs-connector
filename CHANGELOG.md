@@ -3,6 +3,9 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.0.3 - 2021-04-02
+- Updated to OCI Java SDK version 1.35.0
+
 ## 3.3.0.0 - 2021-03-16
 ### Added
 - Added metadata caching using the `fs.oci.caching.object.metadata.enabled` and `fs.oci.caching.object.metadata.spec` configuration keys. Note that there is no check for consistency, and if your data in Object Storage changes, the cache may return outdated data. Therefore, it is most appropriate when your data is read-only and does not change. Use caution when applying these settings.
