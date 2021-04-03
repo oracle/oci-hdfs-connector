@@ -9,7 +9,7 @@
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.3 http://maven.apache.org/xsd/assembly-1.1.3.xsd">
   
-  <id>public_zip_with_modules</id>
+  <id>individual-modules</id>
   <includeBaseDirectory>false</includeBaseDirectory>
   <formats>
     <format>zip</format>
@@ -36,22 +36,15 @@
       </includes>
     </fileSet>
     <fileSet>
-      <directory>${project.build.directory}/poms</directory>
-      <outputDirectory>maven/lib</outputDirectory>
+      <directory>${project.build.directory}/maven-repo</directory>
+      <outputDirectory>maven</outputDirectory>
       <includes>
-        <include>**/pom.xml</include>
+        <include>**/*.pom</include>
+        <include>**/*.jar</include>
       </includes>
-    </fileSet>
-    <fileSet>
-      <directory>..</directory>
-      <outputDirectory>maven/lib</outputDirectory>
-      <includes>
-        <include>**/target/*.jar</include>
-      </includes>
+      <!-- Note: eventually, we do want to release this as pom-only, no jars -->
       <excludes>
-        <exclude>bin</exclude>
-        <exclude>bin/**</exclude>
-        <exclude>**/original-*</exclude>
+        <exclude>repository/**/oci-hdfs-full/**/*</exclude>
       </excludes>
     </fileSet>
   </fileSets>
