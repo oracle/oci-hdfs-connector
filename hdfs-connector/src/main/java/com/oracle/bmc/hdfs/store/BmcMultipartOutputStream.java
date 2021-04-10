@@ -25,14 +25,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public class BmcMultipartOutputStream extends BmcOutputStream {
     private final int bufferSizeInBytes;
-    private final int maxInflight;
     private final MultipartUploadRequest request;
     private ByteBufferOutputStream bbos;
     private MultipartObjectAssembler assembler;
     private boolean closed = false;
     private MultipartManifest manifest;
     private ExecutorService executor;
-    private AtomicInteger totalParts;
     private boolean shutdownExecutor;
 
     /**
@@ -142,8 +140,6 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         // delay creation until called in createOutputBufferStream
         this.bufferSizeInBytes = bufferSizeInBytes;
         this.request = request;
-        this.maxInflight = maxInflight;
-        this.totalParts = new AtomicInteger(0);
         this.shutdownExecutor = false;
     }
 
@@ -220,6 +216,9 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         }
     }
 
+    /**
+     * Helper method to build a fixed executor and specify that we need to shut it down
+     */
     private synchronized void initializeExecutorService() {
         if (this.executor == null) {
             this.executor = Executors.newSingleThreadExecutor();

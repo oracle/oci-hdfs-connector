@@ -114,9 +114,9 @@ public class BmcDataStore {
         this.uploadManager = new UploadManager(objectStorage, uploadConfiguration);
         this.requestBuilder = new RequestBuilder(namespace, bucket);
         this.multipartUploadRequestBuilder =
-                MultipartUploadRequest.builder().uploadConfiguration(uploadConfiguration)
-                        .bucketName(bucket).namespaceName(namespace)
-                        .executorService(parallelUploadExecutor).objectStorage(objectStorage);
+                MultipartUploadRequest.builder().setUploadConfiguration(uploadConfiguration)
+                        .setBucketName(bucket).setNamespaceName(namespace)
+                        .setExecutorService(parallelUploadExecutor).setObjectStorage(objectStorage);
         this.blockSizeInBytes = propertyAccessor.asLong().get(BmcProperties.BLOCK_SIZE_IN_MB) * MiB;
         this.useInMemoryReadBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_READ_BUFFER);
