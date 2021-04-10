@@ -205,7 +205,6 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         // this is done by a resource pool (BlockingQueue) of ByteArrayOutputStreams
         byte[] bytesToWrite = this.bbos.toByteArray();
         int writeLength = this.bbos.length();
-        this.totalParts.incrementAndGet();
 
         try (InputStream is = this.internalGetInputStreamFromBufferedStream(bytesToWrite, writeLength)) {
             this.assembler.addPart(is, writeLength, computeMD5(bytesToWrite, writeLength));
