@@ -121,19 +121,6 @@ public enum BmcProperties {
      */
     @Deprecated
     MULTIPART_MIN_PART_SIZE_IN_MB(MULTIPART_MIN_PART_SIZE_IN_MB_KEY, null),
-
-    /**
-     * (boolean, optional) Flag to enable pseudo-streaming to OCI via Multipart Uploads backed by a circular buffer.
-     * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_BUFFER_KEY} for config key name. Default is false.
-     */
-    MULTIPART_IN_MEMORY_WRITE_BUFFER(MULTIPART_IN_MEMORY_WRITE_BUFFER_KEY, false),
-
-    /**
-     * (boolean, optional) Flag to enable pseudo-streaming to OCI via Multipart Uploads backed by a circular buffer.
-     * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT_KEY} for config key name. Default is false.
-     */
-    MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT(MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT_KEY, false);
-    MULTIPART_IN_MEMORY_WRITE_BUFFER(MULTIPART_IN_MEMORY_WRITE_BUFFER_KEY, false);
     /**
      * (int, optional) The part size, in mebibytes that each part should be uploaded as. Note, any value less than or
      * equal to 0 is interpreted as using the default Java SDK value. See
@@ -256,6 +243,18 @@ public enum BmcProperties {
      * the maximum cache size.
      */
     OBJECT_PARQUET_CACHING_SPEC(OBJECT_PARQUET_CACHING_SPEC_KEY, "maximumSize=10240,expireAfterWrite=15m"),
+
+    /**
+     * (boolean, optional) Flag to enable pseudo-streaming to OCI via Multipart Uploads backed by a circular buffer.
+     * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_BUFFER_KEY} for config key name. Default is false.
+     */
+    MULTIPART_IN_MEMORY_WRITE_BUFFER(MULTIPART_IN_MEMORY_WRITE_BUFFER_KEY, false),
+
+    /**
+     * (boolean, optional) Flag to enable pseudo-streaming to OCI via Multipart Uploads backed by a circular buffer.
+     * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT_KEY} for config key name. Default is false.
+     */
+    MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT(MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT_KEY, false)
 
     ;
 

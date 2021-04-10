@@ -778,12 +778,9 @@ public class BmcDataStore {
 
         // takes precedence
         if (this.useMultipartUploadWriteBuffer) {
-            this.multipartUploadRequestBuilder.objectName(this.pathToObject(path));
+            this.multipartUploadRequestBuilder.setObjectName(this.pathToObject(path));
             return new BmcMultipartOutputStream(
-                    this.multipartUploadRequestBuilder.build(),
-                    progress,
-                    bufferSizeInBytes,
-                    this.maxInFlightMultipartWrites);
+                    this.multipartUploadRequestBuilder.build(), bufferSizeInBytes, this.maxInFlightMultipartWrites);
         }
         else if (this.useInMemoryWriteBuffer) {
             return new BmcInMemoryOutputStream(

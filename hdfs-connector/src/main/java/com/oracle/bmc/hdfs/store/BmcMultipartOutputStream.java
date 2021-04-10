@@ -2,24 +2,24 @@ package com.oracle.bmc.hdfs.store;
 
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.oracle.bmc.io.DuplicatableInputStream;
-import com.oracle.bmc.io.internal.WrappedByteArrayInputStream;
 import com.oracle.bmc.objectstorage.responses.CommitMultipartUploadResponse;
 import com.oracle.bmc.objectstorage.transfer.MultipartManifest;
 import com.oracle.bmc.objectstorage.transfer.MultipartObjectAssembler;
 import com.oracle.bmc.objectstorage.transfer.internal.StreamHelper;
-import com.oracle.bmc.util.StreamUtils;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.ArrayUtils;
-import org.apache.hadoop.util.Progressable;
+import org.apache.commons.lang3.ArrayUtils;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.security.DigestOutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
@@ -32,9 +32,8 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
     private boolean closed = false;
     private MultipartManifest manifest;
     private ExecutorService executor;
+    private AtomicInteger totalParts;
     private boolean shutdownExecutor;
-    private volatile AtomicInteger inFlightParts;
-    private BlockingQueue<byte[]> workQueue;
 
     /**
      * Inner class which handles circular buffer writes to OCI via a ByteBuffer.
@@ -136,20 +135,16 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
 
     public BmcMultipartOutputStream(
             final MultipartUploadRequest request,
-            final Progressable progress,
             final int bufferSizeInBytes,
             final int maxInflight) {
-        super(null, progress, null);
+        super(null, null);
 
         // delay creation until called in createOutputBufferStream
         this.bufferSizeInBytes = bufferSizeInBytes;
         this.request = request;
         this.maxInflight = maxInflight;
-        this.inFlightParts = new AtomicInteger(0);
-        this.workQueue = new LinkedBlockingQueue<>(this.maxInflight);
-        for (int i=0; i<this.maxInflight; ++i) {
-            this.workQueue.add(new byte[this.bufferSizeInBytes]);
-        }
+        this.totalParts = new AtomicInteger(0);
+        this.shutdownExecutor = false;
     }
 
     /**
@@ -172,21 +167,27 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
             doUpload();
 
             // commit the multipart to OCI
-            LOG.info("Committing multipart upload id="+manifest.getUploadId());
+            LOG.info("Committing multipart upload id=" + manifest.getUploadId());
+
+            // this will block until all transfers are complete
             CommitMultipartUploadResponse r = this.assembler.commit();
+
             System.out.println("Got etag: " + r.getETag());
         } catch (final Exception e) {
             String errorMsg = String.format("Multipart upload id=%s has failed parts=%d, aborting...",
                     manifest.getUploadId(), manifest.listFailedParts().size());
             LOG.warn(errorMsg);
-            this.assembler.abort();
+            this.assembler.abort(); // this could throw, figure it out
             throw new IOException("Unable to put object via multipart upload", e);
         } finally {
+            this.bbos.close();
             this.bbos = null;
 
-            if (this.shutdownExecutor) {
-                this.executor.shutdownNow();
+            // clean up our own resources
+            if (!this.executor.isShutdown() && this.shutdownExecutor) {
+                this.executor.shutdown();
             }
+            this.executor = null;
         }
     }
 
@@ -203,44 +204,27 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         return md5Base64;
     }
 
-    private synchronized void doUpload() throws IOException, InterruptedException {
+    private synchronized void doUpload() {
         // here we need to back-pressure on if we have too much inflight to avoid copying too many buffers
         // this is done by a resource pool (BlockingQueue) of ByteArrayOutputStreams
-        byte[] bytesToWrite = this.workQueue.take();
-        InputStream is = null;
-        try {
-            if (this.bbos.nonEmpty()) {
-                // copy the bytes to some fixed sized buffer
-                this.bbos.copyToByteArray(bytesToWrite);
-                // we only copy the amount of bytes we need into this buffer
-                is = this.internalGetInputStreamFromBufferedStream(bytesToWrite, this.bbos.length());
-                this.assembler.addPart(is, this.bbos.length(), computeMD5(bytesToWrite, this.bbos.length()));
-            }
-        } catch (final Exception e) {
-            throw new IOException("Unable to put object via multipart upload", e);
+        byte[] bytesToWrite = this.bbos.toByteArray();
+        int writeLength = this.bbos.length();
+        this.totalParts.incrementAndGet();
+
+        try (InputStream is = this.internalGetInputStreamFromBufferedStream(bytesToWrite, writeLength)) {
+            this.assembler.addPart(is, writeLength, computeMD5(bytesToWrite, writeLength));
+        } catch (final IOException ioe) {
+            LOG.error("Failed to create InputStream from byte array.");
         } finally {
-            StreamUtils.closeQuietly(is);
             this.bbos.clear();
         }
     }
 
-    private void initializeExecutorService() {
-        if (this.request.getUploadConfiguration().isAllowParallelUploads()) {
-            if (this.request.getExecutorService() != null) {
-                this.executor = this.request.getExecutorService();
-                this.shutdownExecutor = false;
-            } else {
-                this.executor = buildDefaultParallelExecutor();
-                this.shutdownExecutor = true;
-            }
-        } else {
+    private synchronized void initializeExecutorService() {
+        if (this.executor == null) {
             this.executor = Executors.newSingleThreadExecutor();
             this.shutdownExecutor = true;
         }
-    }
-
-    private static ExecutorService buildDefaultParallelExecutor() {
-        return Executors.newFixedThreadPool(3, (new ThreadFactoryBuilder()).setNameFormat("multipart-upload-" + System.currentTimeMillis() + "-%d").setDaemon(true).build());
     }
 
     /**
@@ -252,12 +236,33 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
     protected OutputStream createOutputBufferStream() {
         // this is delayed creation of our objects based on OCI semantics
         initializeExecutorService();
-        this.assembler = new MultipartObjectAssembler(this.request.getObjectStorage(),
-                this.request.getNamespaceName(),
-                this.request.getBucketName(),
-                this.request.getObjectName(),
-                true,
-                this.executor);
+        /**
+         * ObjectStorage service,
+         * String namespaceName,
+         * String bucketName,
+         * String objectName,
+         * StorageTier storageTier,
+         * boolean allowOverwrite,
+         * ExecutorService executorService,
+         * String opcClientRequestId,
+         * Consumer<Builder> invocationCallback,
+         * RetryConfiguration retryConfiguration,
+         * String cacheControl,
+         * String contentDisposition
+         */
+        this.assembler = MultipartObjectAssembler.builder()
+                .allowOverwrite(this.request.isAllowOverwrite())
+                .bucketName(this.request.getBucketName())
+                .namespaceName(this.request.getNamespaceName())
+                .objectName(this.request.getObjectName())
+                .cacheControl(this.request.getCacheControl())
+                .storageTier(this.request.getStorageTier())
+                .contentDisposition(this.request.getContentDisposition())
+                .executorService(this.executor)
+                .invocationCallback(this.request.getInvocationCallback())
+                .opcClientRequestId(this.request.getOpcClientRequestId())
+                .retryConfiguration(this.request.getRetryConfiguration())
+                .service(this.request.getObjectStorage()).build();
         this.bbos = new ByteBufferOutputStream(this.bufferSizeInBytes);
         // do we need these params?
         this.manifest =
