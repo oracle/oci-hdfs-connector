@@ -18,7 +18,7 @@ import java.util.concurrent.ExecutorService;
 /**
  * Helper class to encapsulate the needed info to do a Multipart Upload OutputStream
  */
-class MultipartUploadRequest {
+public class MultipartUploadRequest {
     private String namespaceName;
     private String bucketName;
     private ObjectStorage objectStorage;

@@ -41,7 +41,6 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
     private class ByteBufferOutputStream extends OutputStream {
         private final ByteBuffer buffer;
         private final int size;
-        private final HashFunction md5Hasher = Hashing.md5();
 
         private ByteBufferOutputStream(int size) {
             this.size = size;
@@ -90,6 +89,7 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
                     buffer.put(b, off, first);
                     doUpload();
                     buffer.clear();
+                    // this handles writing any left over
                     write(b, off + first, len - first);
                 } else {
                     buffer.put(b, off, len);
@@ -133,8 +133,7 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
 
     public BmcMultipartOutputStream(
             final MultipartUploadRequest request,
-            final int bufferSizeInBytes,
-            final int maxInflight) {
+            final int bufferSizeInBytes) {
         super(null, null);
 
         // delay creation until called in createOutputBufferStream
@@ -173,7 +172,7 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
             String errorMsg = String.format("Multipart upload id=%s has failed parts=%d, aborting...",
                     manifest.getUploadId(), manifest.listFailedParts().size());
             LOG.warn(errorMsg);
-            this.assembler.abort(); // this could throw, figure it out
+            this.assembler.abort(); // TODO: this could throw, figure it out
             throw new IOException("Unable to put object via multipart upload", e);
         } finally {
             this.bbos.close();
@@ -204,9 +203,9 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         // here we need to back-pressure on if we have too much inflight to avoid copying too many buffers
         // this is done by a resource pool (BlockingQueue) of ByteArrayOutputStreams
         byte[] bytesToWrite = this.bbos.toByteArray();
-        int writeLength = this.bbos.length();
+        int writeLength = bytesToWrite.length;
 
-        try (InputStream is = this.internalGetInputStreamFromBufferedStream(bytesToWrite, writeLength)) {
+        try (InputStream is = new WrappedFixedLengthByteArrayInputStream(bytesToWrite, 0, writeLength)) {
             this.assembler.addPart(is, writeLength, computeMD5(bytesToWrite, writeLength));
         } catch (final IOException ioe) {
             LOG.error("Failed to create InputStream from byte array.");
@@ -234,20 +233,7 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
     protected OutputStream createOutputBufferStream() {
         // this is delayed creation of our objects based on OCI semantics
         initializeExecutorService();
-        /**
-         * ObjectStorage service,
-         * String namespaceName,
-         * String bucketName,
-         * String objectName,
-         * StorageTier storageTier,
-         * boolean allowOverwrite,
-         * ExecutorService executorService,
-         * String opcClientRequestId,
-         * Consumer<Builder> invocationCallback,
-         * RetryConfiguration retryConfiguration,
-         * String cacheControl,
-         * String contentDisposition
-         */
+        // perhaps enhance this to name certain things with defaults
         this.assembler = MultipartObjectAssembler.builder()
                 .allowOverwrite(this.request.isAllowOverwrite())
                 .bucketName(this.request.getBucketName())
@@ -262,9 +248,9 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
                 .retryConfiguration(this.request.getRetryConfiguration())
                 .service(this.request.getObjectStorage()).build();
         this.bbos = new ByteBufferOutputStream(this.bufferSizeInBytes);
-        // do we need these params?
+        // TODO: do we need these params?
         this.manifest =
-                this.assembler.newRequest(null, null, "UTF8", null);
+                this.assembler.newRequest(null, null, null, null);
         return this.bbos;
     }
 
@@ -309,13 +295,9 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         }
     }
 
-    private InputStream internalGetInputStreamFromBufferedStream(byte[] bytes, int length) {
-        return new WrappedFixedLengthByteArrayInputStream(bytes, 0, length);
-    }
-
     @Override
     protected InputStream getInputStreamFromBufferedStream() {
         byte[] bytes = this.bbos.toByteArray();
-        return internalGetInputStreamFromBufferedStream(bytes, bytes.length);
+        return new WrappedFixedLengthByteArrayInputStream(bytes, 0, bytes.length);
     }
 }
