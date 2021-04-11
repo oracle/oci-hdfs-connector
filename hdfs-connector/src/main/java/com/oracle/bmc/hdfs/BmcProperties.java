@@ -254,7 +254,16 @@ public enum BmcProperties {
      * (boolean, optional) Flag to enable pseudo-streaming to OCI via Multipart Uploads backed by a circular buffer.
      * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT_KEY} for config key name. Default is false.
      */
-    MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT(MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT_KEY, false)
+    MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT(MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT_KEY, 1),
+
+    /**
+     * (int, optional) The number of threads to use for parallel multi-part uploads. Note, any value less than or equal
+     * to 0 is interpreted as using the default Java SDK value. A value of 1 means do not use parallel uploads (you can
+     * still use multi-part if the "allowed" property is true, but each part will be uploaded serially. This will be
+     * one thread per upload). Otherwise, this represents the total number of threads shared amongst all requests (not
+     * per request). See {@link BmcConstants#MULTIPART_NUM_UPLOAD_THREADS_KEY} for config key name.
+     */
+    MULTIPART_IN_MEMORY_NUM_UPLOAD_THREADS(MULTIPART_IN_MEMORY_NUM_UPLOAD_THREADS_KEY, 1)
 
     ;
 

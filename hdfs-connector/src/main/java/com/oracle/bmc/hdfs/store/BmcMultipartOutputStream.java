@@ -1,7 +1,8 @@
 package com.oracle.bmc.hdfs.store;
 
-import com.google.common.hash.HashFunction;
-import com.google.common.hash.Hashing;
+
+import com.oracle.bmc.hdfs.BmcProperties;
+import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
 import com.oracle.bmc.io.DuplicatableInputStream;
 import com.oracle.bmc.objectstorage.responses.CommitMultipartUploadResponse;
 import com.oracle.bmc.objectstorage.transfer.MultipartManifest;
@@ -18,9 +19,7 @@ import java.nio.ByteBuffer;
 import java.security.DigestOutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.*;
 
 @Slf4j
 public class BmcMultipartOutputStream extends BmcOutputStream {
@@ -32,6 +31,7 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
     private MultipartManifest manifest;
     private ExecutorService executor;
     private boolean shutdownExecutor;
+    private final BmcPropertyAccessor propertyAccessor;
 
     /**
      * Inner class which handles circular buffer writes to OCI via a ByteBuffer.
@@ -132,11 +132,13 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
     }
 
     public BmcMultipartOutputStream(
+            final BmcPropertyAccessor propertyAccessor,
             final MultipartUploadRequest request,
             final int bufferSizeInBytes) {
         super(null, null);
 
         // delay creation until called in createOutputBufferStream
+        this.propertyAccessor = propertyAccessor;
         this.bufferSizeInBytes = bufferSizeInBytes;
         this.request = request;
         this.shutdownExecutor = false;
@@ -200,8 +202,6 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
     }
 
     private synchronized void doUpload() {
-        // here we need to back-pressure on if we have too much inflight to avoid copying too many buffers
-        // this is done by a resource pool (BlockingQueue) of ByteArrayOutputStreams
         byte[] bytesToWrite = this.bbos.toByteArray();
         int writeLength = bytesToWrite.length;
 
@@ -219,7 +219,12 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
      */
     private synchronized void initializeExecutorService() {
         if (this.executor == null) {
-            this.executor = Executors.newSingleThreadExecutor();
+            int numThreads = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_NUM_UPLOAD_THREADS);
+            int maxConcurrent = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT);
+            RejectedExecutionHandler rejectedExecutionHandler = new BlockingRejectionHandler();
+            this.executor = new ThreadPoolExecutor(numThreads, numThreads,
+                    0L, TimeUnit.MILLISECONDS,
+                    new LinkedBlockingQueue<Runnable>(maxConcurrent), rejectedExecutionHandler);
             this.shutdownExecutor = true;
         }
     }
