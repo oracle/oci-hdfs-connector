@@ -81,7 +81,7 @@ public class BmcDataStore {
     private final boolean useInMemoryReadBuffer;
     private final boolean useInMemoryWriteBuffer;
     private final boolean useMultipartUploadWriteBuffer;
-    private final MultipartUploadRequest.Builder multipartUploadRequestBuilder;
+    private final CreateMultipartUploadRequest.Builder multipartUploadRequestBuilder;
 
     private final LoadingCache<String, HeadPair> objectMetadataCache;
     private final boolean useReadAhead;
@@ -107,13 +107,9 @@ public class BmcDataStore {
         this.uploadManager = new UploadManager(objectStorage, uploadConfiguration);
         this.requestBuilder = new RequestBuilder(namespace, bucket);
         this.blockSizeInBytes = propertyAccessor.asLong().get(BmcProperties.BLOCK_SIZE_IN_MB) * MiB;
-        final CreateMultipartUploadRequest createMultipartUploadRequest = CreateMultipartUploadRequest.builder()
+        this.multipartUploadRequestBuilder = CreateMultipartUploadRequest.builder()
                 .bucketName(bucket)
-                .namespaceName(namespace).build();
-        this.multipartUploadRequestBuilder = MultipartUploadRequest.builder()
-                .setObjectStorage(objectStorage)
-                .setMultipartUploadRequest(createMultipartUploadRequest)
-                .setExecutorService(parallelUploadExecutor);
+                .namespaceName(namespace);
         this.useInMemoryReadBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_READ_BUFFER);
         this.useInMemoryWriteBuffer =
@@ -795,14 +791,14 @@ public class BmcDataStore {
             final String objectName = this.pathToObject(path);
             final CreateMultipartUploadDetails details = CreateMultipartUploadDetails.builder()
                     .object(objectName).build();
-            final CreateMultipartUploadRequest request =
-                    this.multipartUploadRequestBuilder.getMultipartUploadRequest().toBuilder()
-                            .createMultipartUploadDetails(details).buildWithoutInvocationCallback();
-            this.multipartUploadRequestBuilder
-                    .setMultipartUploadRequest(request)
-                    .setAllowOverwrite(allowOverwrite);
+            this.multipartUploadRequestBuilder.createMultipartUploadDetails(details);
+            final MultipartUploadRequest multipartUploadRequest = MultipartUploadRequest.builder()
+                    .setExecutorService(this.parallelUploadExecutor)
+                    .setObjectStorage(this.objectStorage)
+                    .setMultipartUploadRequest(this.multipartUploadRequestBuilder.buildWithoutInvocationCallback())
+                    .setAllowOverwrite(allowOverwrite).build();
             return new BmcMultipartOutputStream(
-                    this.propertyAccessor, this.multipartUploadRequestBuilder.build(), bufferSizeInBytes);
+                    this.propertyAccessor, multipartUploadRequest, bufferSizeInBytes);
         }
         else if (this.useInMemoryWriteBuffer) {
             return new BmcInMemoryOutputStream(
