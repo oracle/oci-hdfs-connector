@@ -29,7 +29,7 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
     private final MultipartUploadRequest request;
     private ByteBufferOutputStream bbos;
     private MultipartObjectAssembler assembler;
-    private boolean closed = false;
+    private volatile boolean closed = false;
     private MultipartManifest manifest;
     private ExecutorService executor;
     private boolean shutdownExecutor;
