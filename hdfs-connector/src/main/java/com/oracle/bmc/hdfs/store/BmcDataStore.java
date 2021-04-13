@@ -16,6 +16,8 @@ import java.util.Set;
 import java.util.concurrent.*;
 
 import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
+import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
+import com.oracle.bmc.objectstorage.requests.CreateMultipartUploadRequest;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem.Statistics;
@@ -104,11 +106,14 @@ public class BmcDataStore {
         LOG.info("Using upload configuration: {}", uploadConfiguration);
         this.uploadManager = new UploadManager(objectStorage, uploadConfiguration);
         this.requestBuilder = new RequestBuilder(namespace, bucket);
-        this.multipartUploadRequestBuilder =
-                MultipartUploadRequest.builder().setUploadConfiguration(uploadConfiguration)
-                        .setBucketName(bucket).setNamespaceName(namespace).setObjectStorage(objectStorage)
-                        .setExecutorService(parallelUploadExecutor);
         this.blockSizeInBytes = propertyAccessor.asLong().get(BmcProperties.BLOCK_SIZE_IN_MB) * MiB;
+        final CreateMultipartUploadRequest createMultipartUploadRequest = CreateMultipartUploadRequest.builder()
+                .bucketName(bucket)
+                .namespaceName(namespace).build();
+        this.multipartUploadRequestBuilder = MultipartUploadRequest.builder()
+                .setObjectStorage(objectStorage)
+                .setMultipartUploadRequest(createMultipartUploadRequest)
+                .setExecutorService(parallelUploadExecutor);
         this.useInMemoryReadBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_READ_BUFFER);
         this.useInMemoryWriteBuffer =
@@ -780,12 +785,22 @@ public class BmcDataStore {
     public OutputStream openWriteStream(
             final Path path, final int bufferSizeInBytes, final Progressable progress) {
         LOG.debug("Opening write stream to {}", path);
+        final boolean allowOverwrite = this.propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_ALLOW_OVERWRITE);
+        LOG.debug("Allowing overwrites when using Multipart uploads");
         final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn =
-                new UploadDetailsFunction(this.pathToObject(path), progress);
+                new UploadDetailsFunction(this.pathToObject(path), allowOverwrite, progress);
 
         // takes precedence
         if (this.useMultipartUploadWriteBuffer) {
-            this.multipartUploadRequestBuilder.setObjectName(this.pathToObject(path));
+            final String objectName = this.pathToObject(path);
+            final CreateMultipartUploadDetails details = CreateMultipartUploadDetails.builder()
+                    .object(objectName).build();
+            final CreateMultipartUploadRequest request =
+                    this.multipartUploadRequestBuilder.getMultipartUploadRequest().toBuilder()
+                            .createMultipartUploadDetails(details).buildWithoutInvocationCallback();
+            this.multipartUploadRequestBuilder
+                    .setMultipartUploadRequest(request)
+                    .setAllowOverwrite(allowOverwrite);
             return new BmcMultipartOutputStream(
                     this.propertyAccessor, this.multipartUploadRequestBuilder.build(), bufferSizeInBytes);
         }
@@ -873,6 +888,7 @@ public class BmcDataStore {
     private final class UploadDetailsFunction
             implements BiFunction<Long, InputStream, UploadRequest> {
         private final String objectName;
+        private final boolean allowOverwrite;
         private final Progressable progressable;
 
         @Override
@@ -882,6 +898,7 @@ public class BmcDataStore {
                     inputStream,
                     contentLengthInBytes,
                     progressable,
+                    allowOverwrite,
                     BmcDataStore.this.parallelUploadExecutor);
         }
     }

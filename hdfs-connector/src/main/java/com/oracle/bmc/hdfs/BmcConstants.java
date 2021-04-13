@@ -29,8 +29,8 @@ public final class BmcConstants {
     public static final String MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_KEY =
             "fs.oci.io.write.multipart.inmemory.tasktimeout";
 
-    public static final String MULTIPART_IN_MEMORY_NUM_UPLOAD_THREADS_KEY =
-            "fs.oci.io.write.multipart.inmemory.numthreads";
+    public static final String MULTIPART_ALLOW_OVERWRITE_KEY =
+            "fs.oci.io.write.multipart.overwrite";
 
     public static final String READ_AHEAD_KEY = "fs.oci.io.read.ahead";
 

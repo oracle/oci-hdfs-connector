@@ -2,6 +2,7 @@ package com.oracle.bmc.hdfs.store;
 
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.objectstorage.ObjectStorage;
+import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
 import com.oracle.bmc.objectstorage.model.MultipartUpload;
 import com.oracle.bmc.objectstorage.model.StorageTier;
 import com.oracle.bmc.objectstorage.requests.*;
@@ -44,21 +45,25 @@ public class BmcMultipartOutputStreamTest {
         when(mockIntegerAccessor.get(eq(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS))).thenReturn(1);
         when(mockBooleanAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED))).thenReturn(true);
         when(mockIntegerAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT))).thenReturn(900);
+        when(mockBooleanAccessor.get(eq(BmcProperties.MULTIPART_ALLOW_OVERWRITE))).thenReturn(true);
 
         when(mockPropAccessor.asInteger()).thenReturn(mockIntegerAccessor);
         when(mockPropAccessor.asBoolean()).thenReturn(mockBooleanAccessor);
     }
 
     @Test
-    public void normalWrites() throws IOException, InterruptedException {
+    public void normalWrites() throws IOException {
         String bucket = "test-bucket";
         String namespace = "testing";
         String objectName = "test-object.txt";
+        CreateMultipartUploadDetails details = CreateMultipartUploadDetails.builder().object(objectName).build();
+        CreateMultipartUploadRequest multipartUploadRequest = CreateMultipartUploadRequest.builder()
+                .bucketName(bucket)
+                .namespaceName(namespace)
+                .createMultipartUploadDetails(details).build();
         MultipartUploadRequest uploadRequest = MultipartUploadRequest.builder()
                 .setObjectStorage(objectStorage)
-                .setNamespaceName(namespace)
-                .setObjectName(objectName)
-                .setBucketName(bucket)
+                .setMultipartUploadRequest(multipartUploadRequest)
                 .setAllowOverwrite(true).build();
         BmcMultipartOutputStream bmos = new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE);
 
@@ -90,15 +95,18 @@ public class BmcMultipartOutputStreamTest {
     }
 
     @Test
-    public void normalWritesUnevenSplits() throws IOException, InterruptedException {
+    public void normalWritesUnevenSplits() throws IOException {
         String bucket = "test-bucket";
         String namespace = "testing";
         String objectName = "test-object.txt";
+        CreateMultipartUploadDetails details = CreateMultipartUploadDetails.builder().object(objectName).build();
+        CreateMultipartUploadRequest multipartUploadRequest = CreateMultipartUploadRequest.builder()
+                .bucketName(bucket)
+                .namespaceName(namespace)
+                .createMultipartUploadDetails(details).build();
         MultipartUploadRequest uploadRequest = MultipartUploadRequest.builder()
                 .setObjectStorage(objectStorage)
-                .setNamespaceName(namespace)
-                .setObjectName(objectName)
-                .setBucketName(bucket)
+                .setMultipartUploadRequest(multipartUploadRequest)
                 .setAllowOverwrite(true).build();
         BmcMultipartOutputStream bmos = new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE);
 
@@ -131,15 +139,18 @@ public class BmcMultipartOutputStreamTest {
     }
 
     @Test()
-    public void failedPartWrite() throws IOException, InterruptedException {
+    public void failedPartWrite() {
         String bucket = "test-bucket";
         String namespace = "testing";
         String objectName = "test-object.txt";
+        CreateMultipartUploadDetails details = CreateMultipartUploadDetails.builder().object(objectName).build();
+        CreateMultipartUploadRequest multipartUploadRequest = CreateMultipartUploadRequest.builder()
+                .bucketName(bucket)
+                .namespaceName(namespace)
+                .createMultipartUploadDetails(details).build();
         MultipartUploadRequest uploadRequest = MultipartUploadRequest.builder()
                 .setObjectStorage(objectStorage)
-                .setNamespaceName(namespace)
-                .setObjectName(objectName)
-                .setBucketName(bucket)
+                .setMultipartUploadRequest(multipartUploadRequest)
                 .setAllowOverwrite(true).build();
 
         String uploadId = "TestRequest";
@@ -171,6 +182,27 @@ public class BmcMultipartOutputStreamTest {
         Mockito.verify(objectStorage, times(1)).createMultipartUpload(any(CreateMultipartUploadRequest.class));
         Mockito.verify(objectStorage, never()).commitMultipartUpload(any(CommitMultipartUploadRequest.class));
         Mockito.verify(objectStorage, times(1)).abortMultipartUpload(any(AbortMultipartUploadRequest.class));
+    }
+
+    @Test
+    public void failOnNullDetails() {
+        String bucket = "test-bucket";
+        String namespace = "testing";
+        CreateMultipartUploadRequest multipartUploadRequest = CreateMultipartUploadRequest.builder()
+                .bucketName(bucket)
+                .namespaceName(namespace).build();
+        Exception exception = null;
+        try {
+            MultipartUploadRequest.builder()
+                    .setObjectStorage(objectStorage)
+                    .setMultipartUploadRequest(multipartUploadRequest)
+                    .setAllowOverwrite(true).build();
+        } catch (NullPointerException npe) {
+            exception = npe;
+        }
+
+        assert (exception != null);
+        Mockito.verify(objectStorage, never()).createMultipartUpload(any(CreateMultipartUploadRequest.class));
     }
 
     private static byte[] generateRandomBytes(int num) {

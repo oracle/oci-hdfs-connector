@@ -254,7 +254,13 @@ public enum BmcProperties {
      * (int, optional) The amount of time in seconds to block waiting for a slot in the multipart upload executor.
      * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_KEY} for config key name. Default is 900.
      */
-    MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT(MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_KEY, 900)
+    MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT(MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_KEY, 900),
+
+    /**
+     * (boolean, optional) Flag to enable overwrites while using Multipart Uploads.
+     * See {@link BmcConstants#MULTIPART_ALLOW_OVERWRITE_KEY} for config key name. Default is false.
+     */
+    MULTIPART_ALLOW_OVERWRITE(MULTIPART_ALLOW_OVERWRITE_KEY, false)
     ;
 
     @Getter private final String propertyName;

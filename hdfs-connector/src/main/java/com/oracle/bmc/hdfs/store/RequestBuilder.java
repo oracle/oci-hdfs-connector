@@ -134,6 +134,7 @@ class RequestBuilder {
             final InputStream input,
             final long contentLengthInBytes,
             final Progressable progressable,
+            final boolean allowOverwrite,
             ExecutorService parallelUploadExecutor) {
         PutObjectRequest putObjectRequest =
                 PutObjectRequest.builder()
@@ -144,7 +145,7 @@ class RequestBuilder {
                         .build();
         UploadRequest.UploadRequestBuilder uploadRequestBuilder =
                 UploadRequest.builder(input, contentLengthInBytes)
-                        .parallelUploadExecutorService(parallelUploadExecutor);
+                        .parallelUploadExecutorService(parallelUploadExecutor).allowOverwrite(allowOverwrite);
 
         if (progressable != null) {
             uploadRequestBuilder.progressReporter(new HadoopProgressReporter(progressable));

@@ -5,7 +5,9 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
 import com.oracle.bmc.io.DuplicatableInputStream;
+import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
 import com.oracle.bmc.objectstorage.model.StorageTier;
+import com.oracle.bmc.objectstorage.requests.CreateMultipartUploadRequest;
 import com.oracle.bmc.objectstorage.responses.CommitMultipartUploadResponse;
 import com.oracle.bmc.objectstorage.transfer.MultipartManifest;
 import com.oracle.bmc.objectstorage.transfer.MultipartObjectAssembler;
@@ -253,17 +255,18 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         // this is delayed creation of our objects based on OCI semantics
         initializeExecutorService();
         // perhaps enhance this to name certain things with defaults
+        final CreateMultipartUploadDetails details = this.request.getMultipartUploadRequest().getCreateMultipartUploadDetails();
+
         this.assembler = MultipartObjectAssembler.builder()
                 .allowOverwrite(this.request.isAllowOverwrite())
-                .bucketName(this.request.getBucketName())
-                .namespaceName(this.request.getNamespaceName())
-                .objectName(this.request.getObjectName())
-                .cacheControl(this.request.getCacheControl())
-                .storageTier((this.request.getStorageTier() == null) ? StorageTier.Standard : this.request.getStorageTier())
-                .contentDisposition(this.request.getContentDisposition())
+                .bucketName(this.request.getMultipartUploadRequest().getBucketName())
+                .namespaceName(this.request.getMultipartUploadRequest().getNamespaceName())
+                .objectName(details.getObject())
+                .cacheControl(details.getCacheControl())
+                .storageTier(details.getStorageTier() == null ? StorageTier.Standard : details.getStorageTier())
+                .contentDisposition(details.getContentDisposition())
                 .executorService(this.executor)
-                .invocationCallback(this.request.getInvocationCallback())
-                .opcClientRequestId(this.request.getOpcClientRequestId())
+                .opcClientRequestId(this.request.getMultipartUploadRequest().getOpcClientRequestId())
                 .retryConfiguration(this.request.getRetryConfiguration())
                 .service(this.request.getObjectStorage()).build();
         this.bbos = new ByteBufferOutputStream(this.bufferSizeInBytes);
