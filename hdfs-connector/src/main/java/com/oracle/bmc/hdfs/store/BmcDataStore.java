@@ -13,12 +13,9 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 
-import com.oracle.bmc.objectstorage.model.MultipartUpload;
-import com.oracle.bmc.objectstorage.model.RenameObjectDetails;
-import com.oracle.bmc.objectstorage.transfer.MultipartObjectAssembler;
+import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem.Statistics;
@@ -55,11 +52,6 @@ import com.oracle.bmc.objectstorage.transfer.UploadManager.UploadRequest;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.hadoop.fs.FSInputStream;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem.Statistics;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.util.Progressable;
 
 /**
  * BmcDataStore is a facade to Object Store that provides CRUD operations for objects by {@link Path} references.
@@ -115,14 +107,15 @@ public class BmcDataStore {
         this.requestBuilder = new RequestBuilder(namespace, bucket);
         this.multipartUploadRequestBuilder =
                 MultipartUploadRequest.builder().setUploadConfiguration(uploadConfiguration)
-                        .setBucketName(bucket).setNamespaceName(namespace).setObjectStorage(objectStorage);
+                        .setBucketName(bucket).setNamespaceName(namespace).setObjectStorage(objectStorage)
+                        .setExecutorService(parallelUploadExecutor);
         this.blockSizeInBytes = propertyAccessor.asLong().get(BmcProperties.BLOCK_SIZE_IN_MB) * MiB;
         this.useInMemoryReadBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_READ_BUFFER);
         this.useInMemoryWriteBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_WRITE_BUFFER);
         this.useMultipartUploadWriteBuffer =
-                propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER);
+                propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
         this.maxInFlightMultipartWrites =
                 propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT);
 
@@ -231,6 +224,22 @@ public class BmcDataStore {
             final UploadConfigurationBuilder uploadConfigurationBuilder) {
         final Integer numThreadsForParallelUpload =
                 propertyAccessor.asInteger().get(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS);
+
+        final boolean streamMultipartEnabled = propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
+
+        // we need to handle this case differently, since if we didn't create an Executor that blocks on max work items
+        // we would hold the entire stream in memory, defeating chunking.
+        if (streamMultipartEnabled) {
+            final int maxConcurrent = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT);
+            final RejectedExecutionHandler rejectedExecutionHandler = new BlockingRejectionHandler();
+
+            return new ThreadPoolExecutor(numThreadsForParallelUpload, numThreadsForParallelUpload,
+                    0L, TimeUnit.MILLISECONDS,
+                    new LinkedBlockingQueue<Runnable>(maxConcurrent),new ThreadFactoryBuilder()
+                    .setDaemon(true)
+                    .setNameFormat("bmcs-hdfs-multipart-upload-%d")
+                    .build(), rejectedExecutionHandler);
+        }
         if (numThreadsForParallelUpload == null || numThreadsForParallelUpload <= 0) {
             return null;
         }

@@ -1,6 +1,5 @@
 package com.oracle.bmc.hdfs.store;
 
-import com.google.common.base.Supplier;
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.model.MultipartUpload;
@@ -8,10 +7,7 @@ import com.oracle.bmc.objectstorage.model.StorageTier;
 import com.oracle.bmc.objectstorage.requests.*;
 import com.oracle.bmc.objectstorage.responses.CommitMultipartUploadResponse;
 import com.oracle.bmc.objectstorage.responses.CreateMultipartUploadResponse;
-import com.oracle.bmc.objectstorage.responses.GetObjectResponse;
 import com.oracle.bmc.objectstorage.responses.UploadPartResponse;
-import com.sun.org.apache.xpath.internal.operations.Bool;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.junit.Before;
 import org.junit.Test;
@@ -21,12 +17,10 @@ import org.mockito.Mockito;
 import org.mockito.runners.MockitoJUnitRunner;
 
 import java.io.IOException;
-import java.io.OutputStream;
 import java.util.Random;
 
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.*;
-import static org.powermock.api.mockito.PowerMockito.spy;
 import static org.powermock.api.mockito.PowerMockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
@@ -50,8 +44,8 @@ public class BmcMultipartOutputStreamTest {
     public void setUp() {
         // Setup mockIntegerAccessor
         when(mockIntegerAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT))).thenReturn(1);
-        when(mockIntegerAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_NUM_UPLOAD_THREADS))).thenReturn(1);
-        when(mockBooleanAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER))).thenReturn(true);
+        when(mockIntegerAccessor.get(eq(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS))).thenReturn(1);
+        when(mockBooleanAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED))).thenReturn(true);
 
         when(mockPropAccessor.asString()).thenReturn(mockStringAccessor);
         when(mockPropAccessor.asInteger()).thenReturn(mockIntegerAccessor);

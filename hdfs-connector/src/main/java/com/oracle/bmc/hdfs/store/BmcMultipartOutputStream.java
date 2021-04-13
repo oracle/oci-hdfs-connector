@@ -1,6 +1,7 @@
 package com.oracle.bmc.hdfs.store;
 
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
 import com.oracle.bmc.io.DuplicatableInputStream;
@@ -229,12 +230,15 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
      */
     private synchronized void initializeExecutorService() {
         if (this.executor == null) {
-            int numThreads = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_NUM_UPLOAD_THREADS);
+            int numThreadsForParallelUpload = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS);
             int maxConcurrent = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT);
             RejectedExecutionHandler rejectedExecutionHandler = new BlockingRejectionHandler();
-            this.executor = new ThreadPoolExecutor(numThreads, numThreads,
+            this.executor = new ThreadPoolExecutor(numThreadsForParallelUpload, numThreadsForParallelUpload,
                     0L, TimeUnit.MILLISECONDS,
-                    new LinkedBlockingQueue<Runnable>(maxConcurrent), rejectedExecutionHandler);
+                    new LinkedBlockingQueue<Runnable>(maxConcurrent),new ThreadFactoryBuilder()
+                    .setDaemon(true)
+                    .setNameFormat("bmcs-hdfs-multipart-upload-%d")
+                    .build(), rejectedExecutionHandler);
             this.shutdownExecutor = true;
         }
     }
