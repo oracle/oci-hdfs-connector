@@ -171,12 +171,12 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
             doUpload();
 
             // commit the multipart to OCI
-            LOG.info("Committing multipart upload id=" + manifest.getUploadId());
+            LOG.info(String.format("Committing multipart upload id=%s, this awaits all transfers.", manifest.getUploadId()));
 
             // this will block until all transfers are complete
             CommitMultipartUploadResponse r = this.assembler.commit();
 
-            System.out.println("Got etag: " + r.getETag());
+            LOG.info(String.format("Committed all parts for uploadId=%s, etag: %s", manifest.getUploadId(), r.getETag()));
         } catch (final Exception e) {
             String errorMsg = String.format("Multipart upload id=%s has failed parts=%d, aborting...",
                     manifest.getUploadId(), manifest.listFailedParts().size());

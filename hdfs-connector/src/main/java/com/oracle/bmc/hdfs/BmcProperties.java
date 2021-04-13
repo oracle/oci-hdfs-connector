@@ -246,9 +246,9 @@ public enum BmcProperties {
 
     /**
      * (boolean, optional) Flag to enable pseudo-streaming to OCI via Multipart Uploads backed by a circular buffer.
-     * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_BUFFER_KEY} for config key name. Default is false.
+     * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED_KEY} for config key name. Default is false.
      */
-    MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED(MULTIPART_IN_MEMORY_WRITE_BUFFER_KEY, false),
+    MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED(MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED_KEY, false),
 
     /**
      * (boolean, optional) Flag to enable pseudo-streaming to OCI via Multipart Uploads backed by a circular buffer.
