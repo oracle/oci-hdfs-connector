@@ -244,6 +244,23 @@ public enum BmcProperties {
      */
     OBJECT_PARQUET_CACHING_SPEC(OBJECT_PARQUET_CACHING_SPEC_KEY, "maximumSize=10240,expireAfterWrite=15m"),
 
+    /**
+     * (boolean, optional) Flag to enable pseudo-streaming to OCI via Multipart Uploads backed by a circular buffer.
+     * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED_KEY} for config key name. Default is false.
+     */
+    MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED(MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED_KEY, false),
+
+    /**
+     * (int, optional) The amount of time in seconds to block waiting for a slot in the multipart upload executor.
+     * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_KEY} for config key name. Default is 900.
+     */
+    MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT(MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_KEY, 900),
+
+    /**
+     * (boolean, optional) Flag to enable overwrites while using Multipart Uploads.
+     * See {@link BmcConstants#MULTIPART_ALLOW_OVERWRITE_KEY} for config key name. Default is false.
+     */
+    MULTIPART_ALLOW_OVERWRITE(MULTIPART_ALLOW_OVERWRITE_KEY, false)
     ;
 
     @Getter private final String propertyName;

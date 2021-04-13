@@ -13,8 +13,16 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
+
+import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
+import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
+import com.oracle.bmc.objectstorage.requests.CreateMultipartUploadRequest;
+import org.apache.hadoop.fs.FSInputStream;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem.Statistics;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.util.Progressable;
 
 import com.google.common.base.Function;
 import com.google.common.base.Supplier;
@@ -46,11 +54,6 @@ import com.oracle.bmc.objectstorage.transfer.UploadManager.UploadRequest;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.hadoop.fs.FSInputStream;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem.Statistics;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.util.Progressable;
 
 /**
  * BmcDataStore is a facade to Object Store that provides CRUD operations for objects by {@link Path} references.
@@ -77,6 +80,8 @@ public class BmcDataStore {
     private final long blockSizeInBytes;
     private final boolean useInMemoryReadBuffer;
     private final boolean useInMemoryWriteBuffer;
+    private final boolean useMultipartUploadWriteBuffer;
+    private final CreateMultipartUploadRequest.Builder multipartUploadRequestBuilder;
 
     private final LoadingCache<String, HeadPair> objectMetadataCache;
     private final boolean useReadAhead;
@@ -102,11 +107,15 @@ public class BmcDataStore {
         this.uploadManager = new UploadManager(objectStorage, uploadConfiguration);
         this.requestBuilder = new RequestBuilder(namespace, bucket);
         this.blockSizeInBytes = propertyAccessor.asLong().get(BmcProperties.BLOCK_SIZE_IN_MB) * MiB;
+        this.multipartUploadRequestBuilder = CreateMultipartUploadRequest.builder()
+                .bucketName(bucket)
+                .namespaceName(namespace);
         this.useInMemoryReadBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_READ_BUFFER);
         this.useInMemoryWriteBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_WRITE_BUFFER);
-
+        this.useMultipartUploadWriteBuffer =
+                propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
         this.useReadAhead =
                 propertyAccessor.asBoolean().get(BmcProperties.READ_AHEAD);
         this.readAheadSizeInBytes = propertyAccessor.asInteger().get(BmcProperties.READ_AHEAD_BLOCK_SIZE);
@@ -212,6 +221,25 @@ public class BmcDataStore {
             final UploadConfigurationBuilder uploadConfigurationBuilder) {
         final Integer numThreadsForParallelUpload =
                 propertyAccessor.asInteger().get(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS);
+
+        final boolean streamMultipartEnabled = propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
+        /*
+            This case is handled differently. When streaming, if we didn't fix the amount of work that the threads can
+            handle at one time, we would read all of the stream into memory while writing was in progress. This defeats
+            the purpose having stream <-> stream uploads without holding the entire stream in memory. This executor
+            will reject work after the queue becomes full and it will wait until a slot opens to re-enqueue that work.
+         */
+        if (streamMultipartEnabled) {
+            final int taskTimeout = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT);
+            final BlockingRejectionHandler rejectedExecutionHandler = new BlockingRejectionHandler(taskTimeout);
+
+            return new ThreadPoolExecutor(numThreadsForParallelUpload, numThreadsForParallelUpload,
+                    0L, TimeUnit.MILLISECONDS,
+                    new LinkedBlockingQueue<Runnable>(numThreadsForParallelUpload),new ThreadFactoryBuilder()
+                    .setDaemon(true)
+                    .setNameFormat("bmcs-hdfs-blocking-upload-%d")
+                    .build(), rejectedExecutionHandler);
+        }
         if (numThreadsForParallelUpload == null || numThreadsForParallelUpload <= 0) {
             return null;
         }
@@ -753,10 +781,26 @@ public class BmcDataStore {
     public OutputStream openWriteStream(
             final Path path, final int bufferSizeInBytes, final Progressable progress) {
         LOG.debug("Opening write stream to {}", path);
+        final boolean allowOverwrite = this.propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_ALLOW_OVERWRITE);
+        LOG.debug("Allowing overwrites when using Multipart uploads");
         final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn =
-                new UploadDetailsFunction(this.pathToObject(path), progress);
+                new UploadDetailsFunction(this.pathToObject(path), allowOverwrite, progress);
 
-        if (this.useInMemoryWriteBuffer) {
+        // takes precedence
+        if (this.useMultipartUploadWriteBuffer) {
+            final String objectName = this.pathToObject(path);
+            final CreateMultipartUploadDetails details = CreateMultipartUploadDetails.builder()
+                    .object(objectName).build();
+            this.multipartUploadRequestBuilder.createMultipartUploadDetails(details);
+            final MultipartUploadRequest multipartUploadRequest = MultipartUploadRequest.builder()
+                    .setExecutorService(this.parallelUploadExecutor)
+                    .setObjectStorage(this.objectStorage)
+                    .setMultipartUploadRequest(this.multipartUploadRequestBuilder.buildWithoutInvocationCallback())
+                    .setAllowOverwrite(allowOverwrite).build();
+            return new BmcMultipartOutputStream(
+                    this.propertyAccessor, multipartUploadRequest, bufferSizeInBytes);
+        }
+        else if (this.useInMemoryWriteBuffer) {
             return new BmcInMemoryOutputStream(
                     this.uploadManager, bufferSizeInBytes, requestBuilderFn);
         } else {
@@ -840,6 +884,7 @@ public class BmcDataStore {
     private final class UploadDetailsFunction
             implements BiFunction<Long, InputStream, UploadRequest> {
         private final String objectName;
+        private final boolean allowOverwrite;
         private final Progressable progressable;
 
         @Override
@@ -849,6 +894,7 @@ public class BmcDataStore {
                     inputStream,
                     contentLengthInBytes,
                     progressable,
+                    allowOverwrite,
                     BmcDataStore.this.parallelUploadExecutor);
         }
     }

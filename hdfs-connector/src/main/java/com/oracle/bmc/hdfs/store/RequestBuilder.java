@@ -12,8 +12,11 @@ import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
 
+import com.oracle.bmc.objectstorage.ObjectStorage;
+import com.oracle.bmc.objectstorage.model.MultipartUpload;
 import com.oracle.bmc.objectstorage.model.RenameObjectDetails;
 import com.oracle.bmc.objectstorage.requests.*;
+import com.oracle.bmc.objectstorage.transfer.MultipartObjectAssembler;
 import com.oracle.bmc.objectstorage.transfer.ProgressReporter;
 import com.oracle.bmc.objectstorage.transfer.UploadManager.UploadRequest;
 
@@ -131,6 +134,7 @@ class RequestBuilder {
             final InputStream input,
             final long contentLengthInBytes,
             final Progressable progressable,
+            final boolean allowOverwrite,
             ExecutorService parallelUploadExecutor) {
         PutObjectRequest putObjectRequest =
                 PutObjectRequest.builder()
@@ -141,7 +145,7 @@ class RequestBuilder {
                         .build();
         UploadRequest.UploadRequestBuilder uploadRequestBuilder =
                 UploadRequest.builder(input, contentLengthInBytes)
-                        .parallelUploadExecutorService(parallelUploadExecutor);
+                        .parallelUploadExecutorService(parallelUploadExecutor).allowOverwrite(allowOverwrite);
 
         if (progressable != null) {
             uploadRequestBuilder.progressReporter(new HadoopProgressReporter(progressable));
