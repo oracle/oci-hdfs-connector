@@ -28,9 +28,7 @@ public class BmcMultipartOutputStreamTest {
     @Mock
     private ObjectStorage objectStorage;
 
-    @Mock private Configuration mockConfiguration;
     @Mock private BmcPropertyAccessor mockPropAccessor;
-    @Mock private BmcPropertyAccessor.Accessor<String> mockStringAccessor;
     @Mock private BmcPropertyAccessor.Accessor<Integer> mockIntegerAccessor;
     @Mock private BmcPropertyAccessor.Accessor<Boolean> mockBooleanAccessor;
 
@@ -43,11 +41,10 @@ public class BmcMultipartOutputStreamTest {
     @Before
     public void setUp() {
         // Setup mockIntegerAccessor
-        when(mockIntegerAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT))).thenReturn(1);
         when(mockIntegerAccessor.get(eq(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS))).thenReturn(1);
         when(mockBooleanAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED))).thenReturn(true);
+        when(mockIntegerAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT))).thenReturn(900);
 
-        when(mockPropAccessor.asString()).thenReturn(mockStringAccessor);
         when(mockPropAccessor.asInteger()).thenReturn(mockIntegerAccessor);
         when(mockPropAccessor.asBoolean()).thenReturn(mockBooleanAccessor);
     }

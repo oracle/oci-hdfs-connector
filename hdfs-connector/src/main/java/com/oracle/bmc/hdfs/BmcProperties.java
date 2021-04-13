@@ -251,10 +251,10 @@ public enum BmcProperties {
     MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED(MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED_KEY, false),
 
     /**
-     * (boolean, optional) Flag to enable pseudo-streaming to OCI via Multipart Uploads backed by a circular buffer.
-     * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT_KEY} for config key name. Default is false.
+     * (int, optional) The amount of time in seconds to block waiting for a slot in the multipart upload executor.
+     * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_KEY} for config key name. Default is 900.
      */
-    MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT(MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT_KEY, 1)
+    MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT(MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_KEY, 900)
     ;
 
     @Getter private final String propertyName;

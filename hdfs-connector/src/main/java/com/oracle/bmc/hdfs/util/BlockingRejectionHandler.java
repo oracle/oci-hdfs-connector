@@ -8,14 +8,6 @@ import java.util.concurrent.*;
 public class BlockingRejectionHandler implements RejectedExecutionHandler {
     private final long timeout; // DEFAULT TO ONE HOUR
 
-    public BlockingRejectionHandler() {
-        // default is one hour
-        this.timeout = 3600;
-        if (LOG.isDebugEnabled()) {
-            LOG.debug(String.format("Initializing %s with default timeout: %d (sec)", this.getClass().getSimpleName(), this.timeout));
-        }
-    }
-
     public BlockingRejectionHandler(long timeout) {
         if (timeout <= 0) {
             throw new IllegalArgumentException("Timeout must be positive and greater then zero");

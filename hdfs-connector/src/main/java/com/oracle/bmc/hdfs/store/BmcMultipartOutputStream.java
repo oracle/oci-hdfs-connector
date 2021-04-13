@@ -230,12 +230,12 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
      */
     private synchronized void initializeExecutorService() {
         if (this.executor == null) {
-            int numThreadsForParallelUpload = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS);
-            int maxConcurrent = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT);
-            RejectedExecutionHandler rejectedExecutionHandler = new BlockingRejectionHandler();
+            final int taskTimeout = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT);
+            final int numThreadsForParallelUpload = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS);
+            final BlockingRejectionHandler rejectedExecutionHandler = new BlockingRejectionHandler(taskTimeout);
             this.executor = new ThreadPoolExecutor(numThreadsForParallelUpload, numThreadsForParallelUpload,
                     0L, TimeUnit.MILLISECONDS,
-                    new LinkedBlockingQueue<Runnable>(maxConcurrent),new ThreadFactoryBuilder()
+                    new LinkedBlockingQueue<Runnable>(numThreadsForParallelUpload),new ThreadFactoryBuilder()
                     .setDaemon(true)
                     .setNameFormat("bmcs-hdfs-multipart-upload-%d")
                     .build(), rejectedExecutionHandler);

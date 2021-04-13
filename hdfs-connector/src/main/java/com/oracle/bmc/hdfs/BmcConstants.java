@@ -26,8 +26,8 @@ public final class BmcConstants {
 
     public static final String MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED_KEY = "fs.oci.io.write.multipart.inmemory";
 
-    public static final String MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT_KEY =
-            "fs.oci.io.write.multipart.inmemory.maxinflight";
+    public static final String MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_KEY =
+            "fs.oci.io.write.multipart.inmemory.tasktimeout";
 
     public static final String MULTIPART_IN_MEMORY_NUM_UPLOAD_THREADS_KEY =
             "fs.oci.io.write.multipart.inmemory.numthreads";

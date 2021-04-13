@@ -79,7 +79,6 @@ public class BmcDataStore {
     private final boolean useInMemoryReadBuffer;
     private final boolean useInMemoryWriteBuffer;
     private final boolean useMultipartUploadWriteBuffer;
-    private final int maxInFlightMultipartWrites;
     private final MultipartUploadRequest.Builder multipartUploadRequestBuilder;
 
     private final LoadingCache<String, HeadPair> objectMetadataCache;
@@ -116,9 +115,6 @@ public class BmcDataStore {
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_WRITE_BUFFER);
         this.useMultipartUploadWriteBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
-        this.maxInFlightMultipartWrites =
-                propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT);
-
         this.useReadAhead =
                 propertyAccessor.asBoolean().get(BmcProperties.READ_AHEAD);
         this.readAheadSizeInBytes = propertyAccessor.asInteger().get(BmcProperties.READ_AHEAD_BLOCK_SIZE);
@@ -226,18 +222,21 @@ public class BmcDataStore {
                 propertyAccessor.asInteger().get(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS);
 
         final boolean streamMultipartEnabled = propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
-
-        // we need to handle this case differently, since if we didn't create an Executor that blocks on max work items
-        // we would hold the entire stream in memory, defeating chunking.
+        /*
+            This case is handled differently. When streaming, if we didn't fix the amount of work that the threads can
+            handle at one time, we would read all of the stream into memory while writing was in progress. This defeats
+            the purpose having stream <-> stream uploads without holding the entire stream in memory. This executor
+            will reject work after the queue becomes full and it will wait until a slot opens to re-enqueue that work.
+         */
         if (streamMultipartEnabled) {
-            final int maxConcurrent = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_MAX_INFLIGHT);
-            final RejectedExecutionHandler rejectedExecutionHandler = new BlockingRejectionHandler();
+            final int taskTimeout = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT);
+            final BlockingRejectionHandler rejectedExecutionHandler = new BlockingRejectionHandler(taskTimeout);
 
             return new ThreadPoolExecutor(numThreadsForParallelUpload, numThreadsForParallelUpload,
                     0L, TimeUnit.MILLISECONDS,
-                    new LinkedBlockingQueue<Runnable>(maxConcurrent),new ThreadFactoryBuilder()
+                    new LinkedBlockingQueue<Runnable>(numThreadsForParallelUpload),new ThreadFactoryBuilder()
                     .setDaemon(true)
-                    .setNameFormat("bmcs-hdfs-multipart-upload-%d")
+                    .setNameFormat("bmcs-hdfs-blocking-upload-%d")
                     .build(), rejectedExecutionHandler);
         }
         if (numThreadsForParallelUpload == null || numThreadsForParallelUpload <= 0) {
