@@ -4,6 +4,7 @@ package com.oracle.bmc.hdfs.store;
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
 import com.oracle.bmc.io.DuplicatableInputStream;
+import com.oracle.bmc.objectstorage.model.StorageTier;
 import com.oracle.bmc.objectstorage.responses.CommitMultipartUploadResponse;
 import com.oracle.bmc.objectstorage.transfer.MultipartManifest;
 import com.oracle.bmc.objectstorage.transfer.MultipartObjectAssembler;
@@ -129,6 +130,11 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         private byte[] toByteArray() {
             return ArrayUtils.subarray(this.buffer.array(), 0, this.length());
         }
+
+        @Override
+        public void close() throws IOException {
+            BmcMultipartOutputStream.this.close();
+        }
     }
 
     public BmcMultipartOutputStream(
@@ -202,6 +208,10 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
     }
 
     private synchronized void doUpload() {
+        if (this.bbos.isEmpty()) {
+            return;
+        }
+
         byte[] bytesToWrite = this.bbos.toByteArray();
         int writeLength = bytesToWrite.length;
 
@@ -245,7 +255,7 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
                 .namespaceName(this.request.getNamespaceName())
                 .objectName(this.request.getObjectName())
                 .cacheControl(this.request.getCacheControl())
-                .storageTier(this.request.getStorageTier())
+                .storageTier((this.request.getStorageTier() == null) ? StorageTier.Standard : this.request.getStorageTier())
                 .contentDisposition(this.request.getContentDisposition())
                 .executorService(this.executor)
                 .invocationCallback(this.request.getInvocationCallback())
