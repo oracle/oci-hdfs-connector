@@ -5,10 +5,7 @@ import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.model.MultipartUpload;
 import com.oracle.bmc.objectstorage.model.StorageTier;
-import com.oracle.bmc.objectstorage.requests.CommitMultipartUploadRequest;
-import com.oracle.bmc.objectstorage.requests.CreateMultipartUploadRequest;
-import com.oracle.bmc.objectstorage.requests.GetObjectRequest;
-import com.oracle.bmc.objectstorage.requests.UploadPartRequest;
+import com.oracle.bmc.objectstorage.requests.*;
 import com.oracle.bmc.objectstorage.responses.CommitMultipartUploadResponse;
 import com.oracle.bmc.objectstorage.responses.CreateMultipartUploadResponse;
 import com.oracle.bmc.objectstorage.responses.GetObjectResponse;
@@ -62,7 +59,7 @@ public class BmcMultipartOutputStreamTest {
     }
 
     @Test
-    public void normalReads() throws IOException, InterruptedException {
+    public void normalWrites() throws IOException, InterruptedException {
         String bucket = "test-bucket";
         String namespace = "testing";
         String objectName = "test-object.txt";
@@ -90,16 +87,99 @@ public class BmcMultipartOutputStreamTest {
                 .thenReturn(CommitMultipartUploadResponse.builder().eTag("testingEtag").build());
 
         for (int parts = 0; parts < 2; ++parts) {
-            bmos.write(generateRandomBytes(WRITE_COUNT));
+            // even splits
+            bmos.write(generateRandomBytes(1024));
         }
 
         bmos.close();
 
-        Thread.sleep(5000);
-
         Mockito.verify(objectStorage, times(2)).uploadPart(any(UploadPartRequest.class));
         Mockito.verify(objectStorage, times(1)).createMultipartUpload(any(CreateMultipartUploadRequest.class));
         Mockito.verify(objectStorage, times(1)).commitMultipartUpload(any(CommitMultipartUploadRequest.class));
+    }
+
+    @Test
+    public void normalWritesUnevenSplits() throws IOException, InterruptedException {
+        String bucket = "test-bucket";
+        String namespace = "testing";
+        String objectName = "test-object.txt";
+        MultipartUploadRequest uploadRequest = MultipartUploadRequest.builder()
+                .setObjectStorage(objectStorage)
+                .setNamespaceName(namespace)
+                .setObjectName(objectName)
+                .setBucketName(bucket)
+                .setAllowOverwrite(true).build();
+        BmcMultipartOutputStream bmos = new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE);
+
+        String uploadId = "TestRequest";
+        MultipartUpload upload = MultipartUpload.builder()
+                .uploadId(uploadId)
+                .bucket(bucket)
+                .namespace(namespace)
+                .object(objectName)
+                .storageTier(StorageTier.Standard).build();
+        Mockito.when(objectStorage.createMultipartUpload(any(CreateMultipartUploadRequest.class)))
+                .thenReturn(CreateMultipartUploadResponse.builder().multipartUpload(upload).build());
+
+        Mockito.when(objectStorage.uploadPart(any(UploadPartRequest.class))).thenReturn(UploadPartResponse.builder().eTag("etag").build());
+
+        Mockito.when(objectStorage.commitMultipartUpload(any(CommitMultipartUploadRequest.class)))
+                .thenReturn(CommitMultipartUploadResponse.builder().eTag("testingEtag").build());
+
+        // 3 parts * 1296 = 3888 / 1024 (max buffer) ~ 4 uploads
+        for (int parts = 0; parts < 3; ++parts) {
+            bmos.write(generateRandomBytes(1296));
+        }
+
+        bmos.close();
+
+        // 3 parts * 1296 = 3888 / 1024 (max buffer) ~ 4 uploads
+        Mockito.verify(objectStorage, times(4)).uploadPart(any(UploadPartRequest.class));
+        Mockito.verify(objectStorage, times(1)).createMultipartUpload(any(CreateMultipartUploadRequest.class));
+        Mockito.verify(objectStorage, times(1)).commitMultipartUpload(any(CommitMultipartUploadRequest.class));
+    }
+
+    @Test()
+    public void failedPartWrite() throws IOException, InterruptedException {
+        String bucket = "test-bucket";
+        String namespace = "testing";
+        String objectName = "test-object.txt";
+        MultipartUploadRequest uploadRequest = MultipartUploadRequest.builder()
+                .setObjectStorage(objectStorage)
+                .setNamespaceName(namespace)
+                .setObjectName(objectName)
+                .setBucketName(bucket)
+                .setAllowOverwrite(true).build();
+
+        String uploadId = "TestRequest";
+        MultipartUpload upload = MultipartUpload.builder()
+                .uploadId(uploadId)
+                .bucket(bucket)
+                .namespace(namespace)
+                .object(objectName)
+                .storageTier(StorageTier.Standard).build();
+        Mockito.when(objectStorage.createMultipartUpload(any(CreateMultipartUploadRequest.class)))
+                .thenReturn(CreateMultipartUploadResponse.builder().multipartUpload(upload).build());
+
+        Mockito.when(objectStorage.uploadPart(any(UploadPartRequest.class))).thenThrow(Exception.class);
+
+        Mockito.when(objectStorage.commitMultipartUpload(any(CommitMultipartUploadRequest.class)))
+                .thenReturn(CommitMultipartUploadResponse.builder().eTag("testingEtag").build());
+
+        Exception exception = null;
+        try (BmcMultipartOutputStream bmos = new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE)) {
+            for (int parts = 0; parts < 1; ++parts) {
+                bmos.write(generateRandomBytes(1024));
+            }
+        } catch (IOException ioe) {
+            exception = ioe;
+        }
+
+        assert(exception != null);
+        Mockito.verify(objectStorage, times(1)).uploadPart(any(UploadPartRequest.class));
+        Mockito.verify(objectStorage, times(1)).createMultipartUpload(any(CreateMultipartUploadRequest.class));
+        Mockito.verify(objectStorage, never()).commitMultipartUpload(any(CommitMultipartUploadRequest.class));
+        Mockito.verify(objectStorage, times(1)).abortMultipartUpload(any(AbortMultipartUploadRequest.class));
     }
 
     private static byte[] generateRandomBytes(int num) {
