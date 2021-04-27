@@ -12,7 +12,7 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.3.0.3</version>
+    <version>3.3.0.4</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -240,11 +240,6 @@
             </additionalDependency>
             <additionalDependency>
               <groupId>org.apache.hadoop</groupId>
-              <artifactId>hadoop-common</artifactId>
-              <version>${hadoop.version}</version>
-            </additionalDependency>
-            <additionalDependency>
-              <groupId>org.apache.hadoop</groupId>
               <artifactId>hadoop-annotations</artifactId>
               <version>${hadoop.version}</version>
             </additionalDependency>
@@ -258,7 +253,7 @@
     <dependency>
       <groupId>com.oracle.oci.sdk</groupId>
       <artifactId>oci-hdfs-connector</artifactId>
-      <version>3.3.0.3</version>
+      <version>3.3.0.4</version>
       <!-- We don't want to bundle any hadoop packages -->
       <exclusions>
         <exclusion>
