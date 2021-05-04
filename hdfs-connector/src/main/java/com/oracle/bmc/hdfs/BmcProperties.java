@@ -6,6 +6,7 @@
 package com.oracle.bmc.hdfs;
 
 import com.oracle.bmc.auth.BasicAuthenticationDetailsProvider;
+import com.oracle.bmc.hdfs.caching.StrongConsistencyPolicy;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 
 import com.oracle.bmc.ClientConfiguration;
@@ -14,9 +15,10 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.lang.Deprecated;
+import java.nio.file.Files;
+import java.util.concurrent.TimeUnit;
 
 import static com.oracle.bmc.hdfs.BmcConstants.*;
-import static com.oracle.bmc.hdfs.BmcConstants.JERSEY_CLIENT_LOGGING_VERBOSITY_KEY;
 
 /**
  * Enum to encapsulate all of the configuration options available to users.
@@ -243,6 +245,69 @@ public enum BmcProperties {
      * the maximum cache size.
      */
     OBJECT_PARQUET_CACHING_SPEC(OBJECT_PARQUET_CACHING_SPEC_KEY, "maximumSize=10240,expireAfterWrite=15m"),
+
+    /**
+     * (boolean, optional) Whether payload caching on disk is enabled. Default is false.
+     */
+    OBJECT_PAYLOAD_CACHING_ENABLED(OBJECT_PAYLOAD_CACHING_ENABLED_KEY, false),
+
+    /**
+     * (long, optional) Maximum weight of the cache in bytes. The default size is 4 GiB.
+     *
+     * Cannot be combined with OBJECT_PAYLOAD_CACHING_MAXIMUM_SIZE.
+     */
+    OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES(OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES_KEY, 4L * 1024 * 1024 * 1024),
+
+    /**
+     * (int, optional) Maximum number of cached items. The default is unset.
+     *
+     * Cannot be combined with OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES.
+     */
+    OBJECT_PAYLOAD_CACHING_MAXIMUM_SIZE(OBJECT_PAYLOAD_CACHING_MAXIMUM_SIZE_KEY, null),
+
+    /**
+     * (int, optional) Initial capacity of cached items. The default is 1024.
+     */
+    OBJECT_PAYLOAD_CACHING_INITIAL_CAPACITY(OBJECT_PAYLOAD_CACHING_INITIAL_CAPACITY_KEY, 1024),
+
+    /**
+     * (boolean, optional) Whether to record cache statistics. The default is false.
+     */
+    OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED(OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED_KEY, false),
+
+    /**
+     * (int, optional) Whether cached items should be expired if a certain number of seconds has passed since the
+     * last access, regardless of whether it was a read or a write. The default is unset, which means this expiration
+     * strategy is not used.
+     *
+     * Cannot be combined with OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS.
+     */
+    OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS(OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS_KEY, null),
+
+
+    /**
+     * (int, optional) Whether cached items should be expired if a certain number of seconds has passed since the
+     * last write access. The default is 600 (10 minutes).
+     *
+     * Cannot be combined with OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS.
+     */
+    OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS(OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS_KEY,
+                                                      TimeUnit.MINUTES.toSeconds(10)),
+
+    /**
+     * (string, optional) The consistency policy to use for the object payload cache. The default is
+     * "com.oracle.bmc.hdfs.caching.StrongConsistencyPolicy", which checks if the object was updated on the server.
+     * If you know your data does not change, you can set it to "com.oracle.bmc.hdfs.caching.NoOpConsistencyPolicy".
+     */
+    OBJECT_PAYLOAD_CACHING_CONSISTENCY_POLICY_CLASS(OBJECT_PAYLOAD_CACHING_CONSISTENCY_POLICY_CLASS_KEY,
+                                                    StrongConsistencyPolicy.class.getName()),
+
+
+    /**
+     * (string, optional) The directory for the object payload cache. The default is the value of the "java.io.tmpdir"
+     * property.
+     */
+    OBJECT_PAYLOAD_CACHING_DIRECTORY(OBJECT_PAYLOAD_CACHING_DIRECTORY_KEY, null)
 
     ;
 

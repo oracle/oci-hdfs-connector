@@ -3,6 +3,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.0.5 - 2021-05-04
+- Added payload caching using the `fs.oci.caching.object.payload.enabled` key.
+  - This is an on-disk cache that stores payloads in the directory indicated by`fs.oci.caching.object.payload.directory`.
+  - The cache size can be configured using `fs.oci.caching.object.payload.maxweight.bytes` or `fs.oci.caching.object.payload.maxsize.count` (mutually exclusive).
+  - The property `fs.oci.caching.object.payload.initialcapacity.count` controls the initial cache size.
+  - The cache's eviction policy is controlled using `fs.oci.caching.object.payload.expireafteraccess.seconds` or `fs.oci.caching.object.payload.expireafterwrite.seconds` (mutually exclusive).
+  - A consistency policy can be set using `fs.oci.caching.object.payload.consistencypolicy.class`. The default is `com.oracle.bmc.hdfs.caching.StrongConsistencyPolicy`, which ensures that the cache is consistent with objects in Object Storage (if an object is changed in Object Storage after it was cached, the cached item will be evicted, and the object will be loaded from Object Storage). If you know your data is immutable, you can set this property to `com.oracle.bmc.hdfs.caching.NoOpConsistencyPolicy`, which does not check for consistency, therefore reducing the number of requests by a factor of two.
+  - It is important to (a) close streams read from HDFS, (b) read the streams to their end, or (c) allow those streams to be garbage-collected by the Java runtime. Otherwise, cached items may remain on disk even after they have been evicted.
+
 ## 3.3.0.4 - 2021-04-27
 - Updated transitive Jetty dependencies to 9.4.40.v20210413 to address CVE-2021-28165.
 

@@ -32,10 +32,18 @@ public class BmcContract extends AbstractBondedFSContract {
     }
 
     public static class ReadAhead extends BmcContract {
-        public static final String CONTRACT_READ_AHEAD_XML = "contract/oxi-readahead.xml";
+        public static final String CONTRACT_READ_AHEAD_XML = "contract/oci-readahead.xml";
         public ReadAhead(Configuration conf) {
             super(conf);
             this.addConfResource(CONTRACT_READ_AHEAD_XML);
+        }
+    }
+
+    public static class PayloadCaching extends BmcContract {
+        public static final String CONTRACT_PAYLOAD_CACHING_XML = "contract/oci-payloadcaching.xml";
+        public PayloadCaching(Configuration conf) {
+            super(conf);
+            this.addConfResource(CONTRACT_PAYLOAD_CACHING_XML);
         }
     }
 }
