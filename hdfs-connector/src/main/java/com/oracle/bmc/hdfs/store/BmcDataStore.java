@@ -9,6 +9,8 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -28,6 +30,8 @@ import com.google.common.cache.RemovalNotification;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.oracle.bmc.hdfs.BmcProperties;
+import com.oracle.bmc.hdfs.caching.CachingObjectStorage;
+import com.oracle.bmc.hdfs.caching.ConsistencyPolicy;
 import com.oracle.bmc.hdfs.util.BiFunction;
 import com.oracle.bmc.model.BmcException;
 import com.oracle.bmc.objectstorage.ObjectStorage;
@@ -90,7 +94,7 @@ public class BmcDataStore {
             final String bucket,
             final Statistics statistics) {
         this.propertyAccessor = propertyAccessor;
-        this.objectStorage = objectStorage;
+        this.objectStorage = configureObjectStorage(objectStorage, propertyAccessor);
         this.statistics = statistics;
 
         final UploadConfigurationBuilder uploadConfigurationBuilder =
@@ -99,7 +103,7 @@ public class BmcDataStore {
                 this.createExecutor(propertyAccessor, uploadConfigurationBuilder);
         final UploadConfiguration uploadConfiguration = uploadConfigurationBuilder.build();
         LOG.info("Using upload configuration: {}", uploadConfiguration);
-        this.uploadManager = new UploadManager(objectStorage, uploadConfiguration);
+        this.uploadManager = new UploadManager(configureObjectStorage(objectStorage, propertyAccessor), uploadConfiguration);
         this.requestBuilder = new RequestBuilder(namespace, bucket);
         this.blockSizeInBytes = propertyAccessor.asLong().get(BmcProperties.BLOCK_SIZE_IN_MB) * MiB;
         this.useInMemoryReadBuffer =
@@ -120,19 +124,76 @@ public class BmcDataStore {
         this.parquetCache = configureParquetCache(propertyAccessor);
     }
 
-    private LoadingCache<String, HeadPair> configureHeadObjectCache(BmcPropertyAccessor propertyAccessor) {
-        boolean headObjectCachingEnabled = propertyAccessor.asBoolean().get(BmcProperties.OBJECT_METADATA_CACHING_ENABLED);
-        String loadMessage = headObjectCachingEnabled ?
-                "Not in object metadata cache, getting actual metadata for key: '{}'" :
-                "Getting metadata for key: '{}'";
+    private ObjectStorage configureObjectStorage(
+            ObjectStorage originalObjectStorage, BmcPropertyAccessor propertyAccessor) {
+        ObjectStorage objectStorage = originalObjectStorage;
 
-        CacheLoader<String, HeadPair> loader = new CacheLoader<String, HeadPair>() {
-            @Override
-            public HeadPair load(String key) throws Exception {
-                LOG.info(loadMessage, key);
-                return getObjectMetadataUncached(key);
+        boolean usePayloadCaching = propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PAYLOAD_CACHING_ENABLED);
+
+        if (usePayloadCaching) {
+            try {
+                String cachingDirectoryProperty = propertyAccessor.asString().get(BmcProperties.OBJECT_PAYLOAD_CACHING_DIRECTORY);
+                java.nio.file.Path directory =
+                        (cachingDirectoryProperty != null) ? Paths.get(cachingDirectoryProperty) : Paths
+                                .get(System.getProperty("java.io.tmpdir"))
+                                .resolve("oci-hdfs-payload-cache");
+                LOG.debug("Payload caching directory is '{}'", directory);
+
+                Class<ConsistencyPolicy> consistencyPolicyClass = (Class<ConsistencyPolicy>)
+                        Class.forName(propertyAccessor.asString().get(BmcProperties.OBJECT_PAYLOAD_CACHING_CONSISTENCY_POLICY_CLASS));
+                ConsistencyPolicy consistencyPolicy = consistencyPolicyClass.newInstance();
+                LOG.debug("Consistency policy is '{}'", consistencyPolicy.getClass().getName());
+
+                CachingObjectStorage.Configuration.ConfigurationBuilder configurationBuilder = CachingObjectStorage
+                        .newConfiguration()
+                        .client(objectStorage)
+                        .cacheDirectory(directory)
+                        .recordStats(propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED))
+                        .initialCapacity(propertyAccessor.asInteger().get(BmcProperties.OBJECT_PAYLOAD_CACHING_INITIAL_CAPACITY))
+                        .consistencyPolicy(consistencyPolicy);
+
+                Integer maxSize = propertyAccessor.asInteger().get(BmcProperties.OBJECT_PAYLOAD_CACHING_MAXIMUM_SIZE);
+                if (maxSize != null) {
+                    configurationBuilder = configurationBuilder.maximumSize(maxSize);
+                }
+                Long maxWeight = propertyAccessor.asLong().get(BmcProperties.OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES);
+                if (maxWeight != null) {
+                    configurationBuilder = configurationBuilder.maximumWeight(maxWeight);
+                }
+                Integer expireAfterAccess = propertyAccessor.asInteger().get(BmcProperties.OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS);
+                if (expireAfterAccess != null) {
+                    configurationBuilder = configurationBuilder.expireAfterAccess(Duration.ofSeconds(expireAfterAccess));
+                }
+                Integer expireAfterWrite = propertyAccessor.asInteger().get(BmcProperties.OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS);
+                if (expireAfterWrite != null) {
+                    configurationBuilder = configurationBuilder.expireAfterWrite(Duration.ofSeconds(expireAfterWrite));
+                }
+
+                objectStorage = CachingObjectStorage.build(configurationBuilder.build());
+            } catch(Exception e) {
+                LOG.error("Failed to configure Object Storage payload caching; payload caching disabled", e);
             }
-        };
+        }
+        return objectStorage;
+    }
+
+    private LoadingCache<String, HeadPair> configureHeadObjectCache(
+            BmcPropertyAccessor propertyAccessor) {
+        boolean headObjectCachingEnabled =
+                propertyAccessor.asBoolean().get(BmcProperties.OBJECT_METADATA_CACHING_ENABLED);
+        String loadMessage =
+                headObjectCachingEnabled
+                        ? "Not in object metadata cache, getting actual metadata for key: '{}'"
+                        : "Getting metadata for key: '{}'";
+
+        CacheLoader<String, HeadPair> loader =
+                new CacheLoader<String, HeadPair>() {
+                    @Override
+                    public HeadPair load(String key) throws Exception {
+                        LOG.info(loadMessage, key);
+                        return getObjectMetadataUncached(key);
+                    }
+                };
 
         if (!headObjectCachingEnabled) {
             LOG.info("Object metadata caching disabled");

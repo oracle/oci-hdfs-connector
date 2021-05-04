@@ -12,7 +12,7 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.3.0.4</version>
+    <version>3.3.0.5</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -36,12 +36,13 @@
                   <goal>copy-resources</goal>
                 </goals>
                 <configuration>
-                  <outputDirectory>${project.build.directory}/maven</outputDirectory>
+                  <outputDirectory>${project.build.directory}/poms_all</outputDirectory>
                   <resources>
                     <resource>
                       <directory>..</directory>
                       <includes>
                         <include>**/pom.xml</include>
+                        <include>github.whitelist</include>
                       </includes>
                     </resource>
                   </resources>
@@ -54,14 +55,17 @@
                   <goal>copy-resources</goal>
                 </goals>
                 <configuration>
-                  <outputDirectory>${project.build.directory}/maven</outputDirectory>
+                  <outputDirectory>${project.build.directory}/jars_all</outputDirectory>
                   <resources>
                     <resource>
                       <directory>..</directory>
                       <includes>
                         <include>**/target/*.jar</include>
+                        <include>github.whitelist</include>
                       </includes>
                       <excludes>
+                        <exclude>bin</exclude>
+                        <exclude>bin/**</exclude>
                         <exclude>**/original-*</exclude>
                       </excludes>
                     </resource>
@@ -253,7 +257,7 @@
     <dependency>
       <groupId>com.oracle.oci.sdk</groupId>
       <artifactId>oci-hdfs-connector</artifactId>
-      <version>3.3.0.4</version>
+      <version>3.3.0.5</version>
       <!-- We don't want to bundle any hadoop packages -->
       <exclusions>
         <exclusion>

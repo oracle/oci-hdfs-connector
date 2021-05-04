@@ -11,7 +11,7 @@
 
   <groupId>com.oracle.oci.sdk</groupId>
   <artifactId>oci-hdfs</artifactId>
-  <version>3.3.0.4</version>
+  <version>3.3.0.5</version>
   <packaging>pom</packaging>
 
   <name>Oracle Cloud Infrastructure HDFS Connector for Storage Service</name>
@@ -53,6 +53,7 @@
   </distributionManagement>
 
   <properties>
+    <oci.java.sdk.version>1.36.1</oci.java.sdk.version>
     <hadoop.version>3.3.0</hadoop.version>
     <!--
       Deal with CVE-2021-28165:
@@ -203,7 +204,7 @@
         <plugin>
           <groupId>org.projectlombok</groupId>
           <artifactId>lombok-maven-plugin</artifactId>
-          <version>1.18.12.0</version>
+          <version>1.18.18.0</version>
           <executions>
             <execution>
               <id>delombok</id>
@@ -317,7 +318,7 @@
     <dependency>
       <groupId>org.projectlombok</groupId>
       <artifactId>lombok</artifactId>
-      <version>1.18.12</version>
+      <version>1.18.18</version>
       <scope>provided</scope>
     </dependency>
   </dependencies>
