@@ -9,7 +9,6 @@ import com.oracle.bmc.objectstorage.requests.*;
 import com.oracle.bmc.objectstorage.responses.CommitMultipartUploadResponse;
 import com.oracle.bmc.objectstorage.responses.CreateMultipartUploadResponse;
 import com.oracle.bmc.objectstorage.responses.UploadPartResponse;
-import org.apache.hadoop.conf.Configuration;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -44,7 +43,7 @@ public class BmcMultipartOutputStreamTest {
         // Setup mockIntegerAccessor
         when(mockIntegerAccessor.get(eq(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS))).thenReturn(1);
         when(mockBooleanAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED))).thenReturn(true);
-        when(mockIntegerAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT))).thenReturn(900);
+        when(mockIntegerAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS))).thenReturn(900);
         when(mockBooleanAccessor.get(eq(BmcProperties.MULTIPART_ALLOW_OVERWRITE))).thenReturn(true);
 
         when(mockPropAccessor.asInteger()).thenReturn(mockIntegerAccessor);
@@ -62,9 +61,9 @@ public class BmcMultipartOutputStreamTest {
                 .namespaceName(namespace)
                 .createMultipartUploadDetails(details).build();
         MultipartUploadRequest uploadRequest = MultipartUploadRequest.builder()
-                .setObjectStorage(objectStorage)
-                .setMultipartUploadRequest(multipartUploadRequest)
-                .setAllowOverwrite(true).build();
+                                                                     .objectStorage(objectStorage)
+                                                                     .multipartUploadRequest(multipartUploadRequest)
+                                                                     .allowOverwrite(true).build();
         BmcMultipartOutputStream bmos = new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE);
 
         String uploadId = "TestRequest";
@@ -105,9 +104,9 @@ public class BmcMultipartOutputStreamTest {
                 .namespaceName(namespace)
                 .createMultipartUploadDetails(details).build();
         MultipartUploadRequest uploadRequest = MultipartUploadRequest.builder()
-                .setObjectStorage(objectStorage)
-                .setMultipartUploadRequest(multipartUploadRequest)
-                .setAllowOverwrite(true).build();
+                                                                     .objectStorage(objectStorage)
+                                                                     .multipartUploadRequest(multipartUploadRequest)
+                                                                     .allowOverwrite(true).build();
         BmcMultipartOutputStream bmos = new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE);
 
         String uploadId = "TestRequest";
@@ -149,9 +148,9 @@ public class BmcMultipartOutputStreamTest {
                 .namespaceName(namespace)
                 .createMultipartUploadDetails(details).build();
         MultipartUploadRequest uploadRequest = MultipartUploadRequest.builder()
-                .setObjectStorage(objectStorage)
-                .setMultipartUploadRequest(multipartUploadRequest)
-                .setAllowOverwrite(true).build();
+                                                                     .objectStorage(objectStorage)
+                                                                     .multipartUploadRequest(multipartUploadRequest)
+                                                                     .allowOverwrite(true).build();
 
         String uploadId = "TestRequest";
         MultipartUpload upload = MultipartUpload.builder()
@@ -194,9 +193,9 @@ public class BmcMultipartOutputStreamTest {
         Exception exception = null;
         try {
             MultipartUploadRequest.builder()
-                    .setObjectStorage(objectStorage)
-                    .setMultipartUploadRequest(multipartUploadRequest)
-                    .setAllowOverwrite(true).build();
+                                  .objectStorage(objectStorage)
+                                  .multipartUploadRequest(multipartUploadRequest)
+                                  .allowOverwrite(true).build();
         } catch (NullPointerException npe) {
             exception = npe;
         }

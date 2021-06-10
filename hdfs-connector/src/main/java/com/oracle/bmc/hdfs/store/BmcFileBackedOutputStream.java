@@ -52,7 +52,7 @@ public class BmcFileBackedOutputStream extends BmcOutputStream {
     }
 
     @Override
-    protected long getInputStreamLengthInBytes() throws IOException {
+    protected long getInputStreamLengthInBytes() {
         return this.bufferFile.length();
     }
 

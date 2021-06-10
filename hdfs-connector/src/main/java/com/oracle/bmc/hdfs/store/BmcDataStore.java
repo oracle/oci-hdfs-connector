@@ -9,11 +9,18 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
 import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
@@ -36,10 +43,15 @@ import com.google.common.cache.RemovalNotification;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.oracle.bmc.hdfs.BmcProperties;
+import com.oracle.bmc.hdfs.caching.CachingObjectStorage;
+import com.oracle.bmc.hdfs.caching.ConsistencyPolicy;
 import com.oracle.bmc.hdfs.util.BiFunction;
+import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
 import com.oracle.bmc.model.BmcException;
 import com.oracle.bmc.objectstorage.ObjectStorage;
+import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
 import com.oracle.bmc.objectstorage.model.ObjectSummary;
+import com.oracle.bmc.objectstorage.requests.CreateMultipartUploadRequest;
 import com.oracle.bmc.objectstorage.requests.GetObjectRequest;
 import com.oracle.bmc.objectstorage.requests.ListObjectsRequest;
 import com.oracle.bmc.objectstorage.requests.PutObjectRequest;
@@ -54,6 +66,11 @@ import com.oracle.bmc.objectstorage.transfer.UploadManager.UploadRequest;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.hadoop.fs.FSInputStream;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem.Statistics;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.util.Progressable;
 
 /**
  * BmcDataStore is a facade to Object Store that provides CRUD operations for objects by {@link Path} references.
@@ -95,7 +112,7 @@ public class BmcDataStore {
             final String bucket,
             final Statistics statistics) {
         this.propertyAccessor = propertyAccessor;
-        this.objectStorage = objectStorage;
+        this.objectStorage = configureObjectStorage(objectStorage, propertyAccessor);
         this.statistics = statistics;
 
         final UploadConfigurationBuilder uploadConfigurationBuilder =
@@ -104,7 +121,7 @@ public class BmcDataStore {
                 this.createExecutor(propertyAccessor, uploadConfigurationBuilder);
         final UploadConfiguration uploadConfiguration = uploadConfigurationBuilder.build();
         LOG.info("Using upload configuration: {}", uploadConfiguration);
-        this.uploadManager = new UploadManager(objectStorage, uploadConfiguration);
+        this.uploadManager = new UploadManager(configureObjectStorage(objectStorage, propertyAccessor), uploadConfiguration);
         this.requestBuilder = new RequestBuilder(namespace, bucket);
         this.blockSizeInBytes = propertyAccessor.asLong().get(BmcProperties.BLOCK_SIZE_IN_MB) * MiB;
         this.multipartUploadRequestBuilder = CreateMultipartUploadRequest.builder()
@@ -120,6 +137,13 @@ public class BmcDataStore {
                 propertyAccessor.asBoolean().get(BmcProperties.READ_AHEAD);
         this.readAheadSizeInBytes = propertyAccessor.asInteger().get(BmcProperties.READ_AHEAD_BLOCK_SIZE);
 
+        if (this.useInMemoryWriteBuffer && this.useMultipartUploadWriteBuffer) {
+            throw new IllegalArgumentException(
+                    BmcProperties.IN_MEMORY_WRITE_BUFFER.getPropertyName() + " and " +
+                            BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED.getPropertyName() +
+                            " are mutually exclusive");
+        }
+
         if (this.useInMemoryReadBuffer && this.useReadAhead) {
             throw new IllegalArgumentException(BmcProperties.IN_MEMORY_READ_BUFFER.getPropertyName() + " and " +
                     BmcProperties.READ_AHEAD.getPropertyName() + " are mutually exclusive");
@@ -129,19 +153,76 @@ public class BmcDataStore {
         this.parquetCache = configureParquetCache(propertyAccessor);
     }
 
-    private LoadingCache<String, HeadPair> configureHeadObjectCache(BmcPropertyAccessor propertyAccessor) {
-        boolean headObjectCachingEnabled = propertyAccessor.asBoolean().get(BmcProperties.OBJECT_METADATA_CACHING_ENABLED);
-        String loadMessage = headObjectCachingEnabled ?
-                "Not in object metadata cache, getting actual metadata for key: '{}'" :
-                "Getting metadata for key: '{}'";
+    private ObjectStorage configureObjectStorage(
+            ObjectStorage originalObjectStorage, BmcPropertyAccessor propertyAccessor) {
+        ObjectStorage objectStorage = originalObjectStorage;
 
-        CacheLoader<String, HeadPair> loader = new CacheLoader<String, HeadPair>() {
-            @Override
-            public HeadPair load(String key) throws Exception {
-                LOG.info(loadMessage, key);
-                return getObjectMetadataUncached(key);
+        boolean usePayloadCaching = propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PAYLOAD_CACHING_ENABLED);
+
+        if (usePayloadCaching) {
+            try {
+                String cachingDirectoryProperty = propertyAccessor.asString().get(BmcProperties.OBJECT_PAYLOAD_CACHING_DIRECTORY);
+                java.nio.file.Path directory =
+                        (cachingDirectoryProperty != null) ? Paths.get(cachingDirectoryProperty) : Paths
+                                .get(System.getProperty("java.io.tmpdir"))
+                                .resolve("oci-hdfs-payload-cache");
+                LOG.debug("Payload caching directory is '{}'", directory);
+
+                Class<ConsistencyPolicy> consistencyPolicyClass = (Class<ConsistencyPolicy>)
+                        Class.forName(propertyAccessor.asString().get(BmcProperties.OBJECT_PAYLOAD_CACHING_CONSISTENCY_POLICY_CLASS));
+                ConsistencyPolicy consistencyPolicy = consistencyPolicyClass.newInstance();
+                LOG.debug("Consistency policy is '{}'", consistencyPolicy.getClass().getName());
+
+                CachingObjectStorage.Configuration.ConfigurationBuilder configurationBuilder = CachingObjectStorage
+                        .newConfiguration()
+                        .client(objectStorage)
+                        .cacheDirectory(directory)
+                        .recordStats(propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED))
+                        .initialCapacity(propertyAccessor.asInteger().get(BmcProperties.OBJECT_PAYLOAD_CACHING_INITIAL_CAPACITY))
+                        .consistencyPolicy(consistencyPolicy);
+
+                Integer maxSize = propertyAccessor.asInteger().get(BmcProperties.OBJECT_PAYLOAD_CACHING_MAXIMUM_SIZE);
+                if (maxSize != null) {
+                    configurationBuilder = configurationBuilder.maximumSize(maxSize);
+                }
+                Long maxWeight = propertyAccessor.asLong().get(BmcProperties.OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES);
+                if (maxWeight != null) {
+                    configurationBuilder = configurationBuilder.maximumWeight(maxWeight);
+                }
+                Integer expireAfterAccess = propertyAccessor.asInteger().get(BmcProperties.OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS);
+                if (expireAfterAccess != null) {
+                    configurationBuilder = configurationBuilder.expireAfterAccess(Duration.ofSeconds(expireAfterAccess));
+                }
+                Integer expireAfterWrite = propertyAccessor.asInteger().get(BmcProperties.OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS);
+                if (expireAfterWrite != null) {
+                    configurationBuilder = configurationBuilder.expireAfterWrite(Duration.ofSeconds(expireAfterWrite));
+                }
+
+                objectStorage = CachingObjectStorage.build(configurationBuilder.build());
+            } catch(Exception e) {
+                LOG.error("Failed to configure Object Storage payload caching; payload caching disabled", e);
             }
-        };
+        }
+        return objectStorage;
+    }
+
+    private LoadingCache<String, HeadPair> configureHeadObjectCache(
+            BmcPropertyAccessor propertyAccessor) {
+        boolean headObjectCachingEnabled =
+                propertyAccessor.asBoolean().get(BmcProperties.OBJECT_METADATA_CACHING_ENABLED);
+        String loadMessage =
+                headObjectCachingEnabled
+                        ? "Not in object metadata cache, getting actual metadata for key: '{}'"
+                        : "Getting metadata for key: '{}'";
+
+        CacheLoader<String, HeadPair> loader =
+                new CacheLoader<String, HeadPair>() {
+                    @Override
+                    public HeadPair load(String key) throws Exception {
+                        LOG.info(loadMessage, key);
+                        return getObjectMetadataUncached(key);
+                    }
+                };
 
         if (!headObjectCachingEnabled) {
             LOG.info("Object metadata caching disabled");
@@ -223,6 +304,24 @@ public class BmcDataStore {
                 propertyAccessor.asInteger().get(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS);
 
         final boolean streamMultipartEnabled = propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
+
+        if (!streamMultipartEnabled && (numThreadsForParallelUpload == null || numThreadsForParallelUpload <= 0)) {
+            return null;
+        }
+        if (!streamMultipartEnabled && numThreadsForParallelUpload == 1) {
+            uploadConfigurationBuilder.allowParallelUploads(false);
+            return null;
+        }
+
+        if (numThreadsForParallelUpload == null) {
+            // if !streamMultipartEnabled, then this would have returned null above, so the only case this can happoen
+            // is if streamMultipartEnabled and numThreadsForParallelUpload == null
+            throw new IllegalArgumentException(
+                    BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED.getPropertyName() + " requires " +
+                            BmcProperties.MULTIPART_NUM_UPLOAD_THREADS.getPropertyName() +
+                            " to be set");
+        }
+
         /*
             This case is handled differently. When streaming, if we didn't fix the amount of work that the threads can
             handle at one time, we would read all of the stream into memory while writing was in progress. This defeats
@@ -230,22 +329,15 @@ public class BmcDataStore {
             will reject work after the queue becomes full and it will wait until a slot opens to re-enqueue that work.
          */
         if (streamMultipartEnabled) {
-            final int taskTimeout = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT);
+            final int taskTimeout = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS);
             final BlockingRejectionHandler rejectedExecutionHandler = new BlockingRejectionHandler(taskTimeout);
 
             return new ThreadPoolExecutor(numThreadsForParallelUpload, numThreadsForParallelUpload,
                     0L, TimeUnit.MILLISECONDS,
-                    new LinkedBlockingQueue<Runnable>(numThreadsForParallelUpload),new ThreadFactoryBuilder()
+                    new LinkedBlockingQueue<Runnable>(numThreadsForParallelUpload), new ThreadFactoryBuilder()
                     .setDaemon(true)
                     .setNameFormat("bmcs-hdfs-blocking-upload-%d")
                     .build(), rejectedExecutionHandler);
-        }
-        if (numThreadsForParallelUpload == null || numThreadsForParallelUpload <= 0) {
-            return null;
-        }
-        if (numThreadsForParallelUpload == 1) {
-            uploadConfigurationBuilder.allowParallelUploads(false);
-            return null;
         }
         return Executors.newFixedThreadPool(
                 numThreadsForParallelUpload,
@@ -332,7 +424,7 @@ public class BmcDataStore {
 
         for (final String objectToRename : objectsToRename) {
             final String newObjectName =
-                    objectToRename.replaceFirst(sourceDirectory, destinationDirectory);
+                    objectToRename.replaceFirst(Pattern.quote(sourceDirectory), destinationDirectory);
             this.rename(objectToRename, newObjectName);
         }
     }
@@ -793,10 +885,9 @@ public class BmcDataStore {
                     .object(objectName).build();
             this.multipartUploadRequestBuilder.createMultipartUploadDetails(details);
             final MultipartUploadRequest multipartUploadRequest = MultipartUploadRequest.builder()
-                    .setExecutorService(this.parallelUploadExecutor)
-                    .setObjectStorage(this.objectStorage)
-                    .setMultipartUploadRequest(this.multipartUploadRequestBuilder.buildWithoutInvocationCallback())
-                    .setAllowOverwrite(allowOverwrite).build();
+                    .objectStorage(this.objectStorage)
+                    .multipartUploadRequest(this.multipartUploadRequestBuilder.buildWithoutInvocationCallback())
+                    .allowOverwrite(allowOverwrite).build();
             return new BmcMultipartOutputStream(
                     this.propertyAccessor, multipartUploadRequest, bufferSizeInBytes);
         }

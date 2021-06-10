@@ -7,7 +7,7 @@ import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
 import com.oracle.bmc.io.DuplicatableInputStream;
 import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
 import com.oracle.bmc.objectstorage.model.StorageTier;
-import com.oracle.bmc.objectstorage.requests.CreateMultipartUploadRequest;
+import com.oracle.bmc.objectstorage.requests.PutObjectRequest;
 import com.oracle.bmc.objectstorage.responses.CommitMultipartUploadResponse;
 import com.oracle.bmc.objectstorage.transfer.MultipartManifest;
 import com.oracle.bmc.objectstorage.transfer.MultipartObjectAssembler;
@@ -41,6 +41,8 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
      * Inner class which handles circular buffer writes to OCI via a ByteBuffer.
      * Once the buffer is filled it is spilled to OCI using the Multipart Upload API.
      * Once this OutputStream is closed, the Multipart upload is completed or aborted.
+     *
+     * Not thread-safe. But only one instance per {@link BmcMultipartOutputStream} is ever created.
      */
     private class ByteBufferOutputStream extends OutputStream {
         private final ByteBuffer buffer;
@@ -117,19 +119,6 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
             return buffer.remaining() == this.size;
         }
 
-        private boolean nonEmpty() {
-            return !isEmpty();
-        }
-
-        private void copyToByteArray(byte[] dst) {
-            if (dst == null) {
-                throw new NullPointerException("Destination cannot be null");
-            } else if (dst.length < this.length()) {
-                throw new IndexOutOfBoundsException("Destination length is too small");
-            }
-            System.arraycopy(this.buffer.array(), 0, dst, 0, this.length());
-        }
-
         private byte[] toByteArray() {
             return ArrayUtils.subarray(this.buffer.array(), 0, this.length());
         }
@@ -161,8 +150,20 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
      */
     @Override
     public void close() throws IOException {
-        if (this.closed || this.manifest == null) {
+        if (this.closed) {
             LOG.debug("Output stream already closed");
+            return;
+        }
+        else if (this.manifest == null) {
+            LOG.debug("Nothing written to stream, creating empty object");
+            PutObjectRequest putEmptyFileRequest = PutObjectRequest
+                    .builder()
+                    .putObjectBody(new ByteArrayInputStream(new byte[0]))
+                    .namespaceName(request.getMultipartUploadRequest().getNamespaceName())
+                    .bucketName(request.getMultipartUploadRequest().getBucketName())
+                    .objectName(request.getMultipartUploadRequest().getCreateMultipartUploadDetails().getObject())
+                    .buildWithoutInvocationCallback();
+            request.getObjectStorage().putObject(putEmptyFileRequest);
             return;
         }
         // only attempting once
@@ -197,7 +198,7 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         }
     }
 
-    private String computeMD5(byte[] bytes, int length) {
+    private String computeMd5(byte[] bytes, int length) {
         OutputStream os = new StreamHelper.NullOutputStream();
         String md5Base64 = null;
         try (DigestOutputStream dos = new DigestOutputStream(os, MessageDigest.getInstance("MD5"))) {
@@ -219,7 +220,7 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         int writeLength = bytesToWrite.length;
 
         try (InputStream is = new WrappedFixedLengthByteArrayInputStream(bytesToWrite, 0, writeLength)) {
-            this.assembler.addPart(is, writeLength, computeMD5(bytesToWrite, writeLength));
+            this.assembler.addPart(is, writeLength, computeMd5(bytesToWrite, writeLength));
         } catch (final IOException ioe) {
             LOG.error("Failed to create InputStream from byte array.");
         } finally {
@@ -232,7 +233,7 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
      */
     private synchronized void initializeExecutorService() {
         if (this.executor == null) {
-            final int taskTimeout = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT);
+            final int taskTimeout = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS);
             final int numThreadsForParallelUpload = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS);
             final BlockingRejectionHandler rejectedExecutionHandler = new BlockingRejectionHandler(taskTimeout);
             this.executor = new ThreadPoolExecutor(numThreadsForParallelUpload, numThreadsForParallelUpload,

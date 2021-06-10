@@ -6,15 +6,15 @@ import java.util.concurrent.*;
 
 @Slf4j
 public class BlockingRejectionHandler implements RejectedExecutionHandler {
-    private final long timeout; // DEFAULT TO ONE HOUR
+    private final long timeout;
 
     public BlockingRejectionHandler(long timeout) {
         if (timeout <= 0) {
-            throw new IllegalArgumentException("Timeout must be positive and greater then zero");
+            throw new IllegalArgumentException("Timeout must be positive");
         } else {
             this.timeout = timeout;
             if (LOG.isDebugEnabled()) {
-                LOG.debug(String.format("Initializing %s with timeout: %d (sec)", this.getClass().getSimpleName(), this.timeout));
+                LOG.debug(String.format("Initializing %s with timeout: %d seconds", this.getClass().getSimpleName(), this.timeout));
             }
         }
     }
@@ -27,12 +27,12 @@ public class BlockingRejectionHandler implements RejectedExecutionHandler {
             BlockingQueue<Runnable> executorQueue = executor.getQueue();
             try {
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug(String.format("Attempting to block and queue task, timeout: %d (sec)", this.timeout));
+                    LOG.debug(String.format("Attempting to block and queue task, timeout: %d seconds", this.timeout));
                 }
 
                 if (!executorQueue.offer(r, this.timeout, TimeUnit.SECONDS)) {
                     throw new RejectedExecutionException(
-                            String.format("Timed-out enqueue of blocking queue, duration %d (sec)", this.timeout));
+                            String.format("Timed-out enqueue of blocking queue, duration %d seconds", this.timeout));
                 }
 
                 LOG.debug("BlockingHandler successfully queued task");

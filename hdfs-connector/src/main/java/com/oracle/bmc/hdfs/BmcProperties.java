@@ -6,6 +6,7 @@
 package com.oracle.bmc.hdfs;
 
 import com.oracle.bmc.auth.BasicAuthenticationDetailsProvider;
+import com.oracle.bmc.hdfs.caching.StrongConsistencyPolicy;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 
 import com.oracle.bmc.ClientConfiguration;
@@ -14,9 +15,9 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.lang.Deprecated;
+import java.util.concurrent.TimeUnit;
 
 import static com.oracle.bmc.hdfs.BmcConstants.*;
-import static com.oracle.bmc.hdfs.BmcConstants.JERSEY_CLIENT_LOGGING_VERBOSITY_KEY;
 
 /**
  * Enum to encapsulate all of the configuration options available to users.
@@ -33,6 +34,8 @@ public enum BmcProperties {
     /**
      * (boolean, optional) Flag to enable writing all files to memory (instead of a temp file) before uploading to
      * Object Store. See {@link BmcConstants#IN_MEMORY_WRITE_BUFFER_KEY} for config key name. Default is false.
+     *
+     * Cannot be enabled at the same time as {@link BmcProperties#MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED}.
      */
     IN_MEMORY_WRITE_BUFFER(IN_MEMORY_WRITE_BUFFER_KEY, false),
     /**
@@ -206,7 +209,7 @@ public enum BmcProperties {
      */
     JERSEY_CLIENT_LOGGING_VERBOSITY(JERSEY_CLIENT_LOGGING_VERBOSITY_KEY, "PAYLOAD_ANY"),
 
-    /*
+    /**
      * (boolean, optional) Flag to enable read ahead. This reads bigger blocks from Object Storage, resulting in
      * fewer requests. See {@link BmcConstants#READ_AHEAD_KEY} for config key name. Default is false.
      * Incompatible with IN_MEMORY_READ_.
@@ -245,16 +248,83 @@ public enum BmcProperties {
     OBJECT_PARQUET_CACHING_SPEC(OBJECT_PARQUET_CACHING_SPEC_KEY, "maximumSize=10240,expireAfterWrite=15m"),
 
     /**
+     * (boolean, optional) Whether payload caching on disk is enabled. Default is false.
+     */
+    OBJECT_PAYLOAD_CACHING_ENABLED(OBJECT_PAYLOAD_CACHING_ENABLED_KEY, false),
+
+    /**
+     * (long, optional) Maximum weight of the cache in bytes. The default size is 4 GiB.
+     *
+     * Cannot be combined with OBJECT_PAYLOAD_CACHING_MAXIMUM_SIZE.
+     */
+    OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES(OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES_KEY, 4L * 1024 * 1024 * 1024),
+
+    /**
+     * (int, optional) Maximum number of cached items. The default is unset.
+     *
+     * Cannot be combined with OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES.
+     */
+    OBJECT_PAYLOAD_CACHING_MAXIMUM_SIZE(OBJECT_PAYLOAD_CACHING_MAXIMUM_SIZE_KEY, null),
+
+    /**
+     * (int, optional) Initial capacity of cached items. The default is 1024.
+     */
+    OBJECT_PAYLOAD_CACHING_INITIAL_CAPACITY(OBJECT_PAYLOAD_CACHING_INITIAL_CAPACITY_KEY, 1024),
+
+    /**
+     * (boolean, optional) Whether to record cache statistics. The default is false.
+     */
+    OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED(OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED_KEY, false),
+
+    /**
+     * (int, optional) Whether cached items should be expired if a certain number of seconds has passed since the
+     * last access, regardless of whether it was a read or a write. The default is unset, which means this expiration
+     * strategy is not used.
+     *
+     * Cannot be combined with OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS.
+     */
+    OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS(OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS_KEY, null),
+
+
+    /**
+     * (int, optional) Whether cached items should be expired if a certain number of seconds has passed since the
+     * last write access. The default is 600 (10 minutes).
+     *
+     * Cannot be combined with OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS.
+     */
+    OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS(OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS_KEY,
+                                                      TimeUnit.MINUTES.toSeconds(10)),
+
+    /**
+     * (string, optional) The consistency policy to use for the object payload cache. The default is
+     * "com.oracle.bmc.hdfs.caching.StrongConsistencyPolicy", which checks if the object was updated on the server.
+     * If you know your data does not change, you can set it to "com.oracle.bmc.hdfs.caching.NoOpConsistencyPolicy".
+     */
+    OBJECT_PAYLOAD_CACHING_CONSISTENCY_POLICY_CLASS(OBJECT_PAYLOAD_CACHING_CONSISTENCY_POLICY_CLASS_KEY,
+                                                    StrongConsistencyPolicy.class.getName()),
+
+
+    /**
+     * (string, optional) The directory for the object payload cache. The default is the value of the "java.io.tmpdir"
+     * property.
+     */
+    OBJECT_PAYLOAD_CACHING_DIRECTORY(OBJECT_PAYLOAD_CACHING_DIRECTORY_KEY, null),
+
+    /**
      * (boolean, optional) Flag to enable pseudo-streaming to OCI via Multipart Uploads backed by a circular buffer.
      * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED_KEY} for config key name. Default is false.
+     *
+     * Cannot be enabled at the same time as {@link BmcProperties#IN_MEMORY_WRITE_BUFFER}.
+     *
+     * If enabled, requires {@link BmcProperties#MULTIPART_NUM_UPLOAD_THREADS} to be set.
      */
     MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED(MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED_KEY, false),
 
     /**
      * (int, optional) The amount of time in seconds to block waiting for a slot in the multipart upload executor.
-     * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_KEY} for config key name. Default is 900.
+     * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS_KEY} for config key name. Default is 900.
      */
-    MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT(MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_KEY, 900),
+    MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS(MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS_KEY, 900),
 
     /**
      * (boolean, optional) Flag to enable overwrites while using Multipart Uploads.

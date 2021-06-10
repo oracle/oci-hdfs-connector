@@ -26,8 +26,8 @@ public final class BmcConstants {
 
     public static final String MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED_KEY = "fs.oci.io.write.multipart.inmemory";
 
-    public static final String MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_KEY =
-            "fs.oci.io.write.multipart.inmemory.tasktimeout";
+    public static final String MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS_KEY =
+            "fs.oci.io.write.multipart.inmemory.tasktimeout.seconds";
 
     public static final String MULTIPART_ALLOW_OVERWRITE_KEY =
             "fs.oci.io.write.multipart.overwrite";
@@ -105,6 +105,33 @@ public final class BmcConstants {
 
     public static final String OBJECT_PARQUET_CACHING_SPEC_KEY =
             "fs.oci.caching.object.parquet.spec";
+
+    public static final String OBJECT_PAYLOAD_CACHING_ENABLED_KEY =
+            "fs.oci.caching.object.payload.enabled";
+
+    public static final String OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES_KEY =
+            "fs.oci.caching.object.payload.maxweight.bytes";
+
+    public static final String OBJECT_PAYLOAD_CACHING_MAXIMUM_SIZE_KEY =
+            "fs.oci.caching.object.payload.maxsize.count";
+
+    public static final String OBJECT_PAYLOAD_CACHING_INITIAL_CAPACITY_KEY =
+            "fs.oci.caching.object.payload.initialcapacity.count";
+
+    public static final String OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED_KEY =
+            "fs.oci.caching.object.payload.recordstats.enabled";
+
+    public static final String OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS_KEY =
+            "fs.oci.caching.object.payload.expireafteraccess.seconds";
+
+    public static final String OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS_KEY =
+            "fs.oci.caching.object.payload.expireafterwrite.seconds";
+
+    public static final String OBJECT_PAYLOAD_CACHING_CONSISTENCY_POLICY_CLASS_KEY =
+            "fs.oci.caching.object.payload.consistencypolicy.class";
+
+    public static final String OBJECT_PAYLOAD_CACHING_DIRECTORY_KEY =
+            "fs.oci.caching.object.payload.directory";
 
     /**
      * This class contains constants with deprecated values. The HDFS connector will first try the current values
