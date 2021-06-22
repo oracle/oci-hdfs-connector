@@ -3,6 +3,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.0.7.0.0 - 2021-06-22
+### Added
+- Added support for changing to Jersey default `HttpUrlConnectorProvider` for sending HTTP requests using the `fs.oci.client.jersey.default.connector.enabled` configuration key
+- Added support for changing the maximum number of connections in the connection pool when using the Apache Connector for sending HTTP requests using the `fs.oci.client.apache.max.connection.pool.size` configuration key
+- Added support for changing the connection closing strategy when using the Apache Connector for sending HTTP requests using the `fs.oci.client.apache.connection.closing.strategy` configuration key
+- Added support for parallel `renameDirectory` operation and support for changing the number of threads when performing the `renameDirectory` operation using the `fs.oci.rename.operation.numthreads` configuration key
+- Added support for Resource Principals Authentication
+- Added support for more ways to build object storage endpoint by using the `fs.oci.client.regionCodeOrId` configuration key and by using instance metadata
+
+### Changed
+- Updated to OCI Java SDK version 2.0.0
+- Usage of Jersey's `ApacheConnectorProvider` by default for sending HTTP requests
+- Performance issues due to upgrade to Jersey's `ApacheConnectorProvider` by default. For changing back to Jersey default `HttpUrlConnectorProvider` and other performance enhancements, look into `BmcProperties`
+
+### Fixed
+- `com.oracle.bmc.hdfs.store.BmcReadAheadFSInputStream read()` now correctly identifies EOF
+
 ## 3.3.0.5 - 2021-05-04
 - Added payload caching using the `fs.oci.caching.object.payload.enabled` key.
   - This is an on-disk cache that stores payloads in the directory indicated by`fs.oci.caching.object.payload.directory`.

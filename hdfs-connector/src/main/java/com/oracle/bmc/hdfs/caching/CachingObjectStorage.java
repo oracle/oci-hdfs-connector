@@ -1066,8 +1066,7 @@ public interface CachingObjectStorage extends ObjectStorage {
     class DefaultUncacheablePredicate implements UncacheablePredicate {
         @Override
         public boolean test(GetObjectRequest getObjectRequest) {
-            return getObjectRequest.getIfNoneMatch() != null ||
-                    getObjectRequest.getRange() != null;
+            return getObjectRequest.getIfNoneMatch() != null;
         }
     }
 

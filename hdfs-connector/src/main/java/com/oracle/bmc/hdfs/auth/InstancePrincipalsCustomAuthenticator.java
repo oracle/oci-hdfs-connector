@@ -17,8 +17,10 @@ import com.oracle.bmc.auth.RegionProvider;
 import org.apache.hadoop.conf.Configuration;
 
 /**
- * A custom authenticator which uses instance principals authentication to communicate with
- * Object Storage
+ * A custom authenticator which uses instance principals authentication to communicate with Object Storage
+ *
+ * To use this authenticator,
+ * set {@code fs.oci.client.custom.authenticator} to {@code com.oracle.bmc.hdfs.auth.InstancePrincipalsCustomAuthenticator}.
  */
 @AuthCachingPolicy(cacheKeyId = false, cachePrivateKey = false)
 public class InstancePrincipalsCustomAuthenticator
