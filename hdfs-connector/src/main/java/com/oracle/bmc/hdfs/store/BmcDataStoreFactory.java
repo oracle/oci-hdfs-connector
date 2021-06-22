@@ -17,9 +17,11 @@ import com.google.common.base.Supplier;
 import com.google.common.collect.Lists;
 import com.oracle.bmc.ClientConfiguration;
 import com.oracle.bmc.ClientRuntime;
+import com.oracle.bmc.Region;
 import com.oracle.bmc.auth.BasicAuthenticationDetailsProvider;
 import com.oracle.bmc.auth.SimpleAuthenticationDetailsProvider;
 import com.oracle.bmc.auth.SimplePrivateKeySupplier;
+import com.oracle.bmc.hdfs.BmcConstants;
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.waiter.ResettingExponentialBackoffStrategy;
 import com.oracle.bmc.http.*;
@@ -34,7 +36,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem.Statistics;
+import org.glassfish.jersey.apache.connector.ApacheConnectionClosingStrategy;
 import org.glassfish.jersey.logging.LoggingFeature;
+
+import javax.ws.rs.core.MediaType;
+
+import static com.oracle.bmc.Region.enableInstanceMetadataService;
+import static com.oracle.bmc.auth.AbstractFederationClientAuthenticationDetailsProviderBuilder.AUTHORIZATION_HEADER_VALUE;
+import static com.oracle.bmc.auth.AbstractFederationClientAuthenticationDetailsProviderBuilder.METADATA_SERVICE_BASE_URL;
+import static com.oracle.bmc.auth.AbstractFederationClientAuthenticationDetailsProviderBuilder.simpleRetry;
+import static javax.ws.rs.core.HttpHeaders.AUTHORIZATION;
 
 /**
  * Factory class to create a {@link BmcDataStore}. This factory allows for the usage of custom classes to
@@ -45,6 +56,13 @@ import org.glassfish.jersey.logging.LoggingFeature;
 public class BmcDataStoreFactory {
     private static final String OCI_PROPERTIES_FILE_NAME = "oci.properties";
     private final Configuration configuration;
+
+    public static final com.oracle.bmc.Service SERVICE =
+            com.oracle.bmc.Services.serviceBuilder()
+                    .serviceName("OBJECTSTORAGE")
+                    .serviceEndpointPrefix("objectstorage")
+                    .serviceEndpointTemplate("https://objectstorage.{region}.{secondLevelDomain}")
+                    .build();
 
     /**
      * Creates a new {@link BmcDataStore} for the given namespace and bucket.
@@ -61,7 +79,7 @@ public class BmcDataStoreFactory {
             final String namespace, final String bucket, final Statistics statistics) {
         this.setConnectorVersion();
         // override matches the same order as the filesystem name, ie, "oci://bucket@namespace"
-        // so overriding property foobar is done by specifing foobar.bucket.namespace
+        // so overriding property foobar is done by specifying foobar.bucket.namespace
         final String propertyOverrideSuffix = "." + bucket + "." + namespace;
         final BmcPropertyAccessor propertyAccessor =
                 new BmcPropertyAccessor(this.configuration, propertyOverrideSuffix);
@@ -82,11 +100,49 @@ public class BmcDataStoreFactory {
                         ? (ObjectStorage) this.createClass(customObjectStoreClient)
                         : buildClient(propertyAccessor);
 
-        final String endpoint = propertyAccessor.asString().get(BmcProperties.HOST_NAME);
+        final String endpoint = getEndpoint(propertyAccessor.asString());
         LOG.info("Using endpoint {}", endpoint);
         objectStorage.setEndpoint(endpoint);
 
         return objectStorage;
+    }
+
+    private String getEndpoint(final BmcPropertyAccessor.Accessor<String> propertyAccessor) {
+        if (propertyAccessor.get(BmcProperties.HOST_NAME) != null) {
+            LOG.info("Getting endpoint using {}", BmcConstants.HOST_NAME_KEY);
+            return propertyAccessor.get(BmcProperties.HOST_NAME);
+        }
+
+        if (propertyAccessor.get(BmcProperties.REGION_CODE_OR_ID) != null) {
+            LOG.info("Getting endpoint using {}", BmcConstants.REGION_CODE_OR_ID_KEY);
+            Region region = Region.fromRegionCodeOrId(propertyAccessor.get(BmcProperties.REGION_CODE_OR_ID));
+            com.google.common.base.Optional<String> endpoint = region.getEndpoint(SERVICE);
+            if (endpoint.isPresent()) {
+                return endpoint.get();
+            } else {
+                throw new IllegalArgumentException(
+                        "Endpoint for " + SERVICE + " is not known in region " + region);
+            }
+        }
+
+        enableInstanceMetadataService();
+        LOG.info("Requesting region code from IMDS at {}",
+                METADATA_SERVICE_BASE_URL + "instance/region");
+        String regionCode =
+                simpleRetry(
+                        base -> {
+                            String regionCodeUsingImds =
+                                    base.path("region")
+                                            .request(MediaType.APPLICATION_JSON)
+                                            .header(AUTHORIZATION, AUTHORIZATION_HEADER_VALUE)
+                                            .get(String.class);
+                            return regionCodeUsingImds;
+                        },
+                        METADATA_SERVICE_BASE_URL,
+                        "region");
+        String endpoint = Region.formatDefaultRegionEndpoint(SERVICE, regionCode);
+        LOG.info("Endpoint using Instance Metadata Service is {}", endpoint);
+        return endpoint;
     }
 
     private ObjectStorage buildClient(final BmcPropertyAccessor propertyAccessor) {
@@ -152,6 +208,31 @@ public class BmcDataStoreFactory {
                                     .get(BmcProperties.JERSEY_CLIENT_LOGGING_LEVEL)));
         }
 
+        final Integer apacheMaxConnectionPoolSize = propertyAccessor.asInteger().get(BmcProperties.APACHE_MAX_CONNECTION_POOL_SIZE);
+        // If the Jersery client default connector property is enabled, change the clientConfigurator to
+        // JerseyDefaultClientConfigurator. This is to support the jersey default HttpUrlConnector
+        if (propertyAccessor.asBoolean().get(BmcProperties.JERSEY_CLIENT_DEFAULT_CONNECTOR_ENABLED)) {
+            objectStorageBuilder.clientConfigurator(new JerseyDefaultConnectorConfigurator.NonBuffering());
+        }
+        // Note : Connection pooling is only supported for Apache Clients (hence, this is in else if)
+        // If Jersey default connector is enabled, disregard this property
+        else if (apacheMaxConnectionPoolSize != null && apacheMaxConnectionPoolSize > 0) {
+            final String apacheConnectionClosingStrategyString = propertyAccessor.asString().get(BmcProperties.APACHE_CONNECTION_CLOSING_STRATEGY);
+            ApacheConnectionClosingStrategy apacheConnectionClosingStrategy = null;
+            if (apacheConnectionClosingStrategyString.equalsIgnoreCase("GRACEFUL")) {
+                apacheConnectionClosingStrategy = new ApacheConnectionClosingStrategy.GracefulClosingStrategy();
+            } else {
+                apacheConnectionClosingStrategy = new ApacheConnectionClosingStrategy.ImmediateClosingStrategy();
+            }
+            ApacheConnectionPoolConfig apacheConnectionPoolConfig = ApacheConnectionPoolConfig.newDefault().builder()
+                    .totalOpenConnections(apacheMaxConnectionPoolSize)
+                    .defaultMaxConnectionsPerRoute(apacheMaxConnectionPoolSize).build();
+            objectStorageBuilder.clientConfigurator(new ApacheConfigurator.NonBuffering(
+                    ApacheConnectorProperties.builder()
+                            .connectionClosingStrategy(apacheConnectionClosingStrategy)
+                            .connectionPoolConfig(apacheConnectionPoolConfig).build()));
+        }
+
         // If a proxy is not defined, use the existing ObjectStorageClient that leverages the DefaultConnectorProvider.
         // Else, build an ObjectStorageClient that leverages the ApacheConnector to configure a proxy.
         return (StringUtils.isBlank(httpProxyUri))
@@ -160,7 +241,8 @@ public class BmcDataStoreFactory {
                         authDetailsProvider, clientConfig, propertyAccessor, httpProxyUri);
     }
 
-    private ObjectStorage buildClientWithProxy(
+    private ObjectStorage buildClientWithProxy
+            (
             final BasicAuthenticationDetailsProvider authDetailsProvider,
             final ClientConfiguration clientConfig,
             final BmcPropertyAccessor propertyAccessor,

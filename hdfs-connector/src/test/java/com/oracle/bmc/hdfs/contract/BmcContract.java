@@ -46,4 +46,12 @@ public class BmcContract extends AbstractBondedFSContract {
             this.addConfResource(CONTRACT_PAYLOAD_CACHING_XML);
         }
     }
+
+    public static class ApacheClosingStrategy extends BmcContract {
+        public static final String CONTRACT_APACHE_CLOSING_STRATEGY_XML = "contract/oci-apacheclosingstrategy.xml";
+        public ApacheClosingStrategy(Configuration conf) {
+            super(conf);
+            this.addConfResource(CONTRACT_APACHE_CLOSING_STRATEGY_XML);
+        }
+    }
 }

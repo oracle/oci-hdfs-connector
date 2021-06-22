@@ -86,6 +86,12 @@ public enum BmcProperties {
      */
     PASS_PHRASE(PASS_PHRASE_KEY, null),
     /**
+     * (string, optional) The region code or region identifier used to establish Object Storage endpoint name.
+     * Note, if "fs.oci.client.hostname property" is set, then this field is not required.
+     * See {@link BmcConstants#REGION_CODE_OR_ID_KEY} for config key name.
+     */
+    REGION_CODE_OR_ID(REGION_CODE_OR_ID_KEY, null),
+    /**
      * (int, optional) The max time to wait for a connection, in millis. See
      * {@link BmcConstants#CONNECTION_TIMEOUT_MILLIS_KEY} for config key name. Defaults to Java SDK timeout, see
      * {@link ClientConfiguration}.
@@ -247,6 +253,24 @@ public enum BmcProperties {
     OBJECT_PARQUET_CACHING_SPEC(OBJECT_PARQUET_CACHING_SPEC_KEY, "maximumSize=10240,expireAfterWrite=15m"),
 
     /**
+     * (string, optional) Connection Closing Strategy for the Apache Connection. Values supported : IMMEDIATE - for
+     * ApacheConnectionClosingStrategy.ImmediateClosingStrategy and
+     * GRACEFUL - for ApacheConnectionClosingStrategy.GracefulClosingStrategy
+     *
+     * If the property is absent then default value of IMMEDIATE will be used.
+     *
+     * Note: When using ApacheConnectionClosingStrategy.GracefulClosingStrategy, streams returned from response are read
+     * till the end of the stream when closing the stream. This can introduce additional time when closing the stream
+     * with partial read, depending on how large the remaining stream is. Use
+     * ApacheConnectionClosingStrategy.ImmediateClosingStrategy for large files with partial reads instead for faster
+     * close.
+     * ApacheConnectionClosingStrategy.ImmediateClosingStrategy on the other hand takes longer when using partial
+     * read for smaller stream size (less than 1MB). Please consider your use-case and change accordingly.
+     * This property is only applicable when using the Apache Connector for sending requests to the service.
+     */
+    APACHE_CONNECTION_CLOSING_STRATEGY(APACHE_CONNECTION_CLOSING_STRATEGY_KEY, "IMMEDIATE"),
+
+    /**
      * (boolean, optional) Whether payload caching on disk is enabled. Default is false.
      */
     OBJECT_PAYLOAD_CACHING_ENABLED(OBJECT_PAYLOAD_CACHING_ENABLED_KEY, false),
@@ -307,9 +331,29 @@ public enum BmcProperties {
      * (string, optional) The directory for the object payload cache. The default is the value of the "java.io.tmpdir"
      * property.
      */
-    OBJECT_PAYLOAD_CACHING_DIRECTORY(OBJECT_PAYLOAD_CACHING_DIRECTORY_KEY, null)
+    OBJECT_PAYLOAD_CACHING_DIRECTORY(OBJECT_PAYLOAD_CACHING_DIRECTORY_KEY, null),
 
-    ;
+    /**
+     * (boolean, optional) Flag to enable Jersey default HttpUrlConnector for sending requests using jersey client. See
+     * {@link BmcConstants#JERSEY_CLIENT_DEFAULT_CONNECTOR_ENABLED_KEY} for config key name. Default is false.
+     *
+     * Note: If the SDK default ApacheConnector is to be utilised for sending requests, please don't change this value
+     */
+    JERSEY_CLIENT_DEFAULT_CONNECTOR_ENABLED(JERSEY_CLIENT_DEFAULT_CONNECTOR_ENABLED_KEY, false),
+
+    /**
+     * (int, optional) The maximum number of connections that will be pooled in the connection pool used by the Apache
+     * Client to create connections with the service. Note, any value smaller than 0 is interpreted as using the default Java SDK value.
+     * See {@link com.oracle.bmc.http.ApacheConnectorProperties}.
+     */
+    APACHE_MAX_CONNECTION_POOL_SIZE(APACHE_MAX_CONNECTION_POOL_SIZE_KEY, 50),
+
+    /**
+     * (int, optional) The number of threads to use for parallel rename operations when renaming the directory.
+     * Note, any value smaller than 0 is interpreted as using the default value. Default is 1.
+     * See {@link com.oracle.bmc.http.ApacheConnectorProperties}.
+     */
+    RENAME_DIRECTORY_NUM_THREADS(RENAME_DIRECTORY_NUM_THREADS_KEY, 1);
 
     @Getter private final String propertyName;
     @Getter private final Object defaultValue;

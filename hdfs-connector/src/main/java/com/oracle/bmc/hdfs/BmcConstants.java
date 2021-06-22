@@ -45,6 +45,8 @@ public final class BmcConstants {
 
     public static final String PASS_PHRASE_KEY = "fs.oci.client.auth.passphrase";
 
+    public static final String REGION_CODE_OR_ID_KEY = "fs.oci.client.regionCodeOrId";
+
     public static final String CONNECTION_TIMEOUT_MILLIS_KEY =
             "fs.oci.client.http.connectiontimeout";
 
@@ -97,6 +99,12 @@ public final class BmcConstants {
 
     public static final String OBJECT_PARQUET_CACHING_SPEC_KEY =
             "fs.oci.caching.object.parquet.spec";
+            
+    public static final String RENAME_DIRECTORY_NUM_THREADS_KEY =
+            "fs.oci.rename.operation.numthreads";
+            
+    public static final String APACHE_CONNECTION_CLOSING_STRATEGY_KEY =
+            "fs.oci.client.apache.connection.closing.strategy";
 
     public static final String OBJECT_PAYLOAD_CACHING_ENABLED_KEY =
             "fs.oci.caching.object.payload.enabled";
@@ -124,6 +132,12 @@ public final class BmcConstants {
 
     public static final String OBJECT_PAYLOAD_CACHING_DIRECTORY_KEY =
             "fs.oci.caching.object.payload.directory";
+            
+    public static final String JERSEY_CLIENT_DEFAULT_CONNECTOR_ENABLED_KEY =
+            "fs.oci.client.jersey.default.connector.enabled";
+
+    public static final String APACHE_MAX_CONNECTION_POOL_SIZE_KEY =
+            "fs.oci.client.apache.max.connection.pool.size";
 
     /**
      * This class contains constants with deprecated values. The HDFS connector will first try the current values
@@ -150,6 +164,7 @@ public final class BmcConstants {
                         .put(FINGERPRINT_KEY, "fs.oraclebmc.client.auth.fingerprint")
                         .put(PEM_FILE_PATH_KEY, "fs.oraclebmc.client.auth.pemfilepath")
                         .put(PASS_PHRASE_KEY, "fs.oraclebmc.client.auth.passphrase")
+                        .put(REGION_CODE_OR_ID_KEY, "fs.oraclebmc.client.regionCodeOrId")
                         .put(
                                 CONNECTION_TIMEOUT_MILLIS_KEY,
                                 "fs.oraclebmc.client.http.connectiontimeout")
@@ -187,6 +202,14 @@ public final class BmcConstants {
                                 "fs.oraclebmc.client.jersey.logging.level")
                         .put(JERSEY_CLIENT_LOGGING_VERBOSITY_KEY,
                                 "fs.oraclebmc.client.jersey.logging.verbosity")
+                        .put(JERSEY_CLIENT_DEFAULT_CONNECTOR_ENABLED_KEY,
+                                "fs.oraclebmc.client.jersey.default.connector.enabled")
+                        .put(APACHE_MAX_CONNECTION_POOL_SIZE_KEY,
+                                "fs.oraclebmc.client.apache.max.connection.pool.size")
+                        .put(RENAME_DIRECTORY_NUM_THREADS_KEY,
+                                "fs.oraclebmc.rename.operation.numthreads")
+                        .put(APACHE_CONNECTION_CLOSING_STRATEGY_KEY,
+                                "fs.oraclebmc.client.apache.connection.closing.strategy")
                         .build();
 
         private static final String FS_OCI_PREFIX = "fs.oci.";

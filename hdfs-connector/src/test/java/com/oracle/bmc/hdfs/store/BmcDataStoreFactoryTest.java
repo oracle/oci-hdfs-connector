@@ -6,6 +6,8 @@
 package com.oracle.bmc.hdfs.store;
 
 import com.oracle.bmc.ClientConfiguration;
+import com.oracle.bmc.Region;
+import com.oracle.bmc.auth.AbstractFederationClientAuthenticationDetailsProviderBuilder;
 import com.oracle.bmc.auth.AuthenticationDetailsProvider;
 import com.oracle.bmc.auth.BasicAuthenticationDetailsProvider;
 import com.oracle.bmc.hdfs.BmcProperties;
@@ -18,6 +20,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.BDDMockito;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
@@ -27,6 +30,7 @@ import org.powermock.modules.junit4.PowerMockRunner;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Mockito.verify;
@@ -40,8 +44,8 @@ import static org.powermock.api.mockito.PowerMockito.when;
 import static org.powermock.api.mockito.PowerMockito.whenNew;
 
 @RunWith(PowerMockRunner.class)
-@PowerMockIgnore("jdk.internal.reflect.*")
-@PrepareForTest({BmcDataStoreFactory.class, ObjectStorageClient.class})
+@PowerMockIgnore({"jdk.internal.reflect.*", "javax.management.*"})
+@PrepareForTest({BmcDataStoreFactory.class, ObjectStorageClient.class, Region.class, AbstractFederationClientAuthenticationDetailsProviderBuilder.class})
 public class BmcDataStoreFactoryTest {
 
     @Mock private Configuration mockConfiguration;
@@ -58,11 +62,15 @@ public class BmcDataStoreFactoryTest {
     public void setUp() {
         // Setup mockStringAccessor
         when(mockStringAccessor.get(eq(BmcProperties.OBJECT_STORE_CLIENT_CLASS))).thenReturn(null);
+        when(mockBooleanAccessor.get(eq(BmcProperties.JERSEY_CLIENT_DEFAULT_CONNECTOR_ENABLED)))
+                .thenReturn(false);
+
         when(mockStringAccessor.get(eq(BmcProperties.HOST_NAME))).thenReturn("some_hostname");
 
         // Setup mockIntegerAccessor
         when(mockIntegerAccessor.get(eq(BmcProperties.CONNECTION_TIMEOUT_MILLIS))).thenReturn(null);
         when(mockIntegerAccessor.get(eq(BmcProperties.READ_TIMEOUT_MILLIS))).thenReturn(null);
+        when(mockIntegerAccessor.get(eq(BmcProperties.APACHE_MAX_CONNECTION_POOL_SIZE))).thenReturn(null);
 
         // Setup mockLongAccessor
         when(mockLongAccessor.get(eq(BmcProperties.RETRY_TIMEOUT_IN_SECONDS))).thenReturn(30L);
@@ -80,6 +88,9 @@ public class BmcDataStoreFactoryTest {
         when(mockPropAccessor.asInteger()).thenReturn(mockIntegerAccessor);
         when(mockPropAccessor.asLong()).thenReturn(mockLongAccessor);
 
+        when(mockBooleanAccessor.get(eq(BmcProperties.APACHE_MAX_CONNECTION_POOL_SIZE)))
+                .thenReturn(null);
+        
         // Allow stubbing of other methods inside the factory
         factoryUnderTest = spy(new BmcDataStoreFactory(mockConfiguration));
     }
@@ -124,6 +135,54 @@ public class BmcDataStoreFactoryTest {
                 "ClientConfigurator should be of type ApacheConfigurator",
                 actualClientConfigurator instanceof ApacheConfigurator);
         verify(mockObjectStorageClientBuilder).build(isA(BasicAuthenticationDetailsProvider.class));
+    }
+
+    @Test
+    public void createClient_withRegionIdAndNoHostname_shouldUseObjectStorageClientConstructor()
+            throws Exception {
+        when(mockStringAccessor.get(eq(BmcProperties.HOST_NAME))).thenReturn(null);
+        when(mockStringAccessor.get(eq(BmcProperties.REGION_CODE_OR_ID))).thenReturn("us-phoenix-1");
+        setUpStubForCreateAuthenticator();
+        setUpObjectStorageClientBuilder();
+        whenNew(ObjectStorageClient.class).withAnyArguments().thenReturn(mockObjectStorageClient);
+
+        final ObjectStorage client = factoryUnderTest.createClient(mockPropAccessor);
+
+        assertEquals("ObjectStorage should be equal", mockObjectStorageClient, client);
+        verifyNew(ObjectStorageClient.class);
+    }
+
+    @Test
+    public void createClient_withRegionCodeAndNoHostname_shouldUseObjectStorageClientConstructor()
+            throws Exception {
+        when(mockStringAccessor.get(eq(BmcProperties.HOST_NAME))).thenReturn(null);
+        when(mockStringAccessor.get(eq(BmcProperties.REGION_CODE_OR_ID))).thenReturn("phx");
+        setUpStubForCreateAuthenticator();
+        setUpObjectStorageClientBuilder();
+        whenNew(ObjectStorageClient.class).withAnyArguments().thenReturn(mockObjectStorageClient);
+
+        final ObjectStorage client = factoryUnderTest.createClient(mockPropAccessor);
+
+        assertEquals("ObjectStorage should be equal", mockObjectStorageClient, client);
+        verifyNew(ObjectStorageClient.class);
+    }
+
+    @Test
+    public void createClient_withImds_shouldUseObjectStorageClientConstructor()
+            throws Exception {
+        when(mockStringAccessor.get(eq(BmcProperties.HOST_NAME))).thenReturn(null);
+        setUpStubForCreateAuthenticator();
+        setUpObjectStorageClientBuilder();
+        whenNew(ObjectStorageClient.class).withAnyArguments().thenReturn(mockObjectStorageClient);
+        mockStatic(AbstractFederationClientAuthenticationDetailsProviderBuilder.class);
+        BDDMockito.given(AbstractFederationClientAuthenticationDetailsProviderBuilder.simpleRetry(any(), anyString(), anyString())).willReturn("phx");
+        mockStatic(Region.class);
+        BDDMockito.given(Region.formatDefaultRegionEndpoint(any(), anyString())).willReturn("some_endpoint");
+
+        final ObjectStorage client = factoryUnderTest.createClient(mockPropAccessor);
+
+        assertEquals("ObjectStorage should be equal", mockObjectStorageClient, client);
+        verifyNew(ObjectStorageClient.class);
     }
 
     private void setUpStubForCreateAuthenticator() {
