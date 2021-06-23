@@ -16,6 +16,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystemContractBaseTest;
 import org.apache.hadoop.fs.Path;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
@@ -31,7 +32,14 @@ public class TestDeprecatedBmcFileSystemContract extends FileSystemContractBaseT
 
     @BeforeClass
     public static void setUpStatic() throws Exception {
-        final Configuration configuration = new Configuration();
+        final Configuration configuration =
+                new Configuration() {
+                    @Override
+                    public synchronized void reloadConfiguration() {
+                        super.reloadConfiguration();
+                        DeprecatedBmcContract.convertToDeprecatedConfiguration(this);
+                    }
+                };
         final DeprecatedBmcContract contract = new DeprecatedBmcContract(configuration);
         contract.init();
         INITIAL_WORKING_DIRECTORY = contract.getTestFileSystem().getWorkingDirectory();

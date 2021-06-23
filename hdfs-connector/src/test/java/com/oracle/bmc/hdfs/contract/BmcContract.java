@@ -31,6 +31,14 @@ public class BmcContract extends AbstractBondedFSContract {
         }
     }
 
+    public static class MultipartInMemoryWrite extends BmcContract {
+        public static final String CONTRACT_MULTIPART_IN_MEMORY_WRITE_XML = "contract/oci-multipartinmemorywrite.xml";
+        public MultipartInMemoryWrite(Configuration conf) {
+            super(conf);
+            this.addConfResource(CONTRACT_MULTIPART_IN_MEMORY_WRITE_XML);
+        }
+    }
+
     public static class ReadAhead extends BmcContract {
         public static final String CONTRACT_READ_AHEAD_XML = "contract/oci-readahead.xml";
         public ReadAhead(Configuration conf) {

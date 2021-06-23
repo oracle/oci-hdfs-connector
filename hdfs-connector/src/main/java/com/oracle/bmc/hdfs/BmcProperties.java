@@ -15,7 +15,6 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.lang.Deprecated;
-import java.nio.file.Files;
 import java.util.concurrent.TimeUnit;
 
 import static com.oracle.bmc.hdfs.BmcConstants.*;
@@ -35,6 +34,8 @@ public enum BmcProperties {
     /**
      * (boolean, optional) Flag to enable writing all files to memory (instead of a temp file) before uploading to
      * Object Store. See {@link BmcConstants#IN_MEMORY_WRITE_BUFFER_KEY} for config key name. Default is false.
+     *
+     * Cannot be enabled at the same time as {@link BmcProperties#MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED}.
      */
     IN_MEMORY_WRITE_BUFFER(IN_MEMORY_WRITE_BUFFER_KEY, false),
     /**
@@ -214,7 +215,7 @@ public enum BmcProperties {
      */
     JERSEY_CLIENT_LOGGING_VERBOSITY(JERSEY_CLIENT_LOGGING_VERBOSITY_KEY, "PAYLOAD_ANY"),
 
-    /*
+    /**
      * (boolean, optional) Flag to enable read ahead. This reads bigger blocks from Object Storage, resulting in
      * fewer requests. See {@link BmcConstants#READ_AHEAD_KEY} for config key name. Default is false.
      * Incompatible with IN_MEMORY_READ_.
@@ -353,7 +354,30 @@ public enum BmcProperties {
      * Note, any value smaller than 0 is interpreted as using the default value. Default is 1.
      * See {@link com.oracle.bmc.http.ApacheConnectorProperties}.
      */
-    RENAME_DIRECTORY_NUM_THREADS(RENAME_DIRECTORY_NUM_THREADS_KEY, 1);
+    RENAME_DIRECTORY_NUM_THREADS(RENAME_DIRECTORY_NUM_THREADS_KEY, 1),
+
+    /**
+     * (boolean, optional) Flag to enable pseudo-streaming to OCI via Multipart Uploads backed by a circular buffer.
+     * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED_KEY} for config key name. Default is false.
+     *
+     * Cannot be enabled at the same time as {@link BmcProperties#IN_MEMORY_WRITE_BUFFER}.
+     *
+     * If enabled, requires {@link BmcProperties#MULTIPART_NUM_UPLOAD_THREADS} to be set.
+     */
+    MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED(MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED_KEY, false),
+
+    /**
+     * (int, optional) The amount of time in seconds to block waiting for a slot in the multipart upload executor.
+     * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS_KEY} for config key name. Default is 900.
+     */
+    MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS(MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS_KEY, 900),
+
+    /**
+     * (boolean, optional) Flag to enable overwrites while using Multipart Uploads.
+     * See {@link BmcConstants#MULTIPART_ALLOW_OVERWRITE_KEY} for config key name. Default is false.
+     */
+    MULTIPART_ALLOW_OVERWRITE(MULTIPART_ALLOW_OVERWRITE_KEY, false)
+    ;
 
     @Getter private final String propertyName;
     @Getter private final Object defaultValue;
