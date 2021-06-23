@@ -156,24 +156,6 @@ public final class BmcConstants {
     public static final String OBJECT_PAYLOAD_CACHING_MAXIMUM_SIZE_KEY =
             "fs.oci.caching.object.payload.maxsize.count";
 
-    public static final String OBJECT_PAYLOAD_CACHING_INITIAL_CAPACITY_KEY =
-            "fs.oci.caching.object.payload.initialcapacity.count";
-
-    public static final String OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED_KEY =
-            "fs.oci.caching.object.payload.recordstats.enabled";
-
-    public static final String OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS_KEY =
-            "fs.oci.caching.object.payload.expireafteraccess.seconds";
-
-    public static final String OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS_KEY =
-            "fs.oci.caching.object.payload.expireafterwrite.seconds";
-
-    public static final String OBJECT_PAYLOAD_CACHING_CONSISTENCY_POLICY_CLASS_KEY =
-            "fs.oci.caching.object.payload.consistencypolicy.class";
-
-    public static final String OBJECT_PAYLOAD_CACHING_DIRECTORY_KEY =
-            "fs.oci.caching.object.payload.directory";
-
     /**
      * This class contains constants with deprecated values. The HDFS connector will first try the current values
      * in {@link com.oracle.bmc.hdfs.BmcConstants}.
