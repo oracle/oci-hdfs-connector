@@ -15,11 +15,13 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Future;
 import java.util.regex.Pattern;
 
 import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
@@ -93,6 +95,7 @@ public class BmcDataStore {
     private final BmcPropertyAccessor propertyAccessor;
     private final UploadManager uploadManager;
     private final ExecutorService parallelUploadExecutor;
+    private final ExecutorService parallelRenameExecutor;
     private final RequestBuilder requestBuilder;
     private final long blockSizeInBytes;
     private final boolean useInMemoryReadBuffer;
@@ -151,6 +154,24 @@ public class BmcDataStore {
 
         this.objectMetadataCache = configureHeadObjectCache(propertyAccessor);
         this.parquetCache = configureParquetCache(propertyAccessor);
+        this.parallelRenameExecutor = this.createParallelRenameExecutor(propertyAccessor);
+    }
+
+    private ExecutorService createParallelRenameExecutor(BmcPropertyAccessor propertyAccessor) {
+        final Integer numThreadsForRenameDirectoryOperation =
+                propertyAccessor.asInteger().get(BmcProperties.RENAME_DIRECTORY_NUM_THREADS);
+        final ExecutorService executorService;
+        if (numThreadsForRenameDirectoryOperation == null || numThreadsForRenameDirectoryOperation <= 1) {
+            executorService = Executors.newSingleThreadExecutor();
+        }
+        else {
+            executorService = Executors.newFixedThreadPool(numThreadsForRenameDirectoryOperation,
+                    new ThreadFactoryBuilder()
+                        .setDaemon(true)
+                        .setNameFormat("bmcs-hdfs-rename-%d")
+                        .build());
+        }
+        return executorService;
     }
 
     private ObjectStorage configureObjectStorage(
@@ -422,10 +443,48 @@ public class BmcDataStore {
             throw new IOException("Failed to rename directory", e);
         }
 
+        renameOperationsUsingExecutor(objectsToRename, sourceDirectory, destinationDirectory);
+    }
+
+    private void renameOperationsUsingExecutor(final ArrayList<String> objectsToRename, final String sourceDirectory, final String destinationDirectory) throws IOException {
+        List<RenameResponse> renameResponses = new ArrayList<>();
         for (final String objectToRename : objectsToRename) {
             final String newObjectName =
                     objectToRename.replaceFirst(Pattern.quote(sourceDirectory), destinationDirectory);
-            this.rename(objectToRename, newObjectName);
+            Future<String> futureResponse = this.parallelRenameExecutor.submit(new RenameOperation(
+                    this.objectStorage, this.requestBuilder.renameObject(objectToRename, newObjectName)
+            ));
+            renameResponses.add(new RenameResponse(objectToRename, newObjectName, futureResponse));
+        }
+        awaitRenameOperationTermination(renameResponses);
+    }
+
+    @RequiredArgsConstructor
+    private static class RenameResponse {
+        @Getter private final String oldName;
+        @Getter private final String newName;
+        @Getter private final Future<String> renameOperationFuture;
+    }
+
+    private void awaitRenameOperationTermination(List<RenameResponse> renameResponses) throws IOException {
+        LOG.debug("Attempting to rename objects in parallel");
+        for (RenameResponse renameResponse : renameResponses) {
+            try {
+                LOG.debug("Attempting to rename {} to {}", renameResponse.getOldName(), renameResponse.getNewName());
+                Future<String> renameFuture = renameResponse.getRenameOperationFuture();
+                String newEntityTag = renameFuture.get();
+                this.statistics.incrementWriteOps(1); // 1 put
+                LOG.debug("{} renamed to {}", renameResponse.getOldName(), renameResponse.getNewName());
+                LOG.debug("{} has eTag {}", renameResponse.getNewName(), newEntityTag);
+            } catch (InterruptedException e) {
+                LOG.debug("Thread interrupted while waiting for rename completion", e);
+                Thread.currentThread().interrupt();
+            } catch (ExecutionException e) {
+                LOG.debug("Execution exception while waiting for rename completion", e);
+            } catch (Exception e) {
+                LOG.debug("Failed to rename {} to {}", renameResponse.getOldName(), renameResponse.getNewName(), e);
+                throw new IOException("Unable to perform rename", e);
+            }
         }
     }
 

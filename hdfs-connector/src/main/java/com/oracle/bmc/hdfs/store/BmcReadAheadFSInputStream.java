@@ -82,7 +82,7 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
             fillBuffer();
         }
         if (dataPos == -1) {
-            return 0;  // EOF
+            return -1;  // EOF
         }
         int n = Math.min(length, dataMax - dataCurOffset);
         System.arraycopy(data, dataCurOffset, buffer, offset, n);

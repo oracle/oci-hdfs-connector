@@ -11,7 +11,7 @@
 
   <groupId>com.oracle.oci.sdk</groupId>
   <artifactId>oci-hdfs</artifactId>
-  <version>3.3.0.7-SNAPSHOT</version>
+  <version>3.3.0.7.0.1-SNAPSHOT</version>
   <packaging>pom</packaging>
 
   <name>Oracle Cloud Infrastructure HDFS Connector for Storage Service</name>
@@ -53,7 +53,7 @@
   </distributionManagement>
 
   <properties>
-    <oci.java.sdk.version>1.36.6-SNAPSHOT</oci.java.sdk.version>
+    <oci.java.sdk.version>2.0.0</oci.java.sdk.version>
     <hadoop.version>3.3.0</hadoop.version>
     <!--
       Deal with CVE-2021-28165:
