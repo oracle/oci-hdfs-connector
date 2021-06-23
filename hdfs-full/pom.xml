@@ -257,7 +257,7 @@
     <dependency>
       <groupId>com.oracle.oci.sdk</groupId>
       <artifactId>oci-hdfs-connector</artifactId>
-      <version>3.3.0.7.1.0-SNAPSHOT</version>
+      <version>3.3.0.7.0.1-SNAPSHOT</version>
       <!-- We don't want to bundle any hadoop packages -->
       <exclusions>
         <exclusion>
