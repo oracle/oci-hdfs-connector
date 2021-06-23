@@ -147,15 +147,6 @@ public final class BmcConstants {
     public static final String APACHE_MAX_CONNECTION_POOL_SIZE_KEY =
             "fs.oci.client.apache.max.connection.pool.size";
 
-    public static final String OBJECT_PAYLOAD_CACHING_ENABLED_KEY =
-            "fs.oci.caching.object.payload.enabled";
-
-    public static final String OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES_KEY =
-            "fs.oci.caching.object.payload.maxweight.bytes";
-
-    public static final String OBJECT_PAYLOAD_CACHING_MAXIMUM_SIZE_KEY =
-            "fs.oci.caching.object.payload.maxsize.count";
-
     /**
      * This class contains constants with deprecated values. The HDFS connector will first try the current values
      * in {@link com.oracle.bmc.hdfs.BmcConstants}.
