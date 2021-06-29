@@ -1802,7 +1802,7 @@ public class CachingObjectStorageTest {
     //
 
     @Test
-    public void testPhantomReferences() {
+    public void testPhantomReferences() throws Exception {
         ReferenceQueue<CachingObjectStorage.PathHolder> referenceQueue = new ReferenceQueue<>();
         List<CachingObjectStorage.PathPhantomReference> references = new ArrayList<>();
         List<CachingObjectStorage.PathHolder> pathObjects = new ArrayList<>();
@@ -1826,6 +1826,8 @@ public class CachingObjectStorageTest {
         }
 
         pathObjects = null;
+        System.gc();
+        Thread.sleep(5000);
         System.gc();
 
         for (int i = 0; i < 10; ++i) {

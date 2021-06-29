@@ -19,19 +19,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.Future;
 import java.util.regex.Pattern;
-
-import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
-import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
-import com.oracle.bmc.objectstorage.requests.CreateMultipartUploadRequest;
-import org.apache.hadoop.fs.FSInputStream;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem.Statistics;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.util.Progressable;
 
 import com.google.common.base.Function;
 import com.google.common.base.Supplier;
