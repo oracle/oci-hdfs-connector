@@ -12,7 +12,7 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.3.0.7.0.1</version>
+    <version>3.3.1.0.0.0</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -82,7 +82,7 @@
     <dependency>
         <groupId>com.oracle.oci.sdk</groupId>
         <artifactId>oci-hdfs-connector</artifactId>
-        <version>3.3.0.7.0.1</version>
+        <version>3.3.1.0.0.0</version>
     </dependency>
     <!-- For setting up an HTTP proxy -->
     <dependency>
@@ -127,7 +127,7 @@
         </exclusion>
         <!--
           Deal with CVE-2021-28165:
-          Exclude Jetty (9.4.20.v20190813) from Hadoop 3.3.0 and include a fixed version 9.4.39 (or higher) directly.
+          Exclude Jetty (9.4.20.v20190813) from Hadoop 3.3.1 and include a fixed version 9.4.43.v20210629 (or higher) directly.
         -->
         <exclusion>
           <groupId>org.eclipse.jetty</groupId>
@@ -183,7 +183,7 @@
     </dependency>
     <!--
       Deal with CVE-2021-28165:
-      Specifically add Jetty 9.4.39 (or higher) back, since version 9.4.20.v20190813 was removed from Hadoop 3.3.0.
+      Specifically add Jetty 9.4.43.v20210629 (or higher) back, since version 9.4.20.v20190813 was removed from Hadoop 3.3.1.
     -->
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
@@ -228,12 +228,12 @@
     <dependency>
       <groupId>org.eclipse.jetty.websocket</groupId>
       <artifactId>websocket-client</artifactId>
-      <version>${jetty.version}</version>
+      <version>${jetty.websocket.version}</version>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty.websocket</groupId>
       <artifactId>websocket-api</artifactId>
-      <version>${jetty.version}</version>
+      <version>${jetty.websocket.version}</version>
     </dependency>
     <!-- End: Deal with CVE-2021-28165 -->
   </dependencies>

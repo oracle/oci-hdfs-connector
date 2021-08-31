@@ -46,6 +46,10 @@ public class BmcPropertyAccessorTest {
         this.configuration.setLong(
                 BmcProperties.BLOCK_SIZE_IN_MB.getPropertyName() + PROPERTY_OVERRIDE_SUFFIX, 100L);
         assertThat(propertyAccessor.asLong().get(BmcProperties.BLOCK_SIZE_IN_MB), is(100L));
+        assertThat(propertyAccessor.asLong().get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS), is(60L));
+        this.configuration.setLong(
+                BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS.getPropertyName() + PROPERTY_OVERRIDE_SUFFIX, 180L);
+        assertThat(propertyAccessor.asLong().get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS), is(180L));
     }
 
     @Test
@@ -70,6 +74,11 @@ public class BmcPropertyAccessorTest {
                 false);
         assertThat(
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_READ_BUFFER), is(false));
+        assertThat(propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED), is(false));
+        this.configuration.setBoolean(
+                BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED.getPropertyName() + PROPERTY_OVERRIDE_SUFFIX,
+                true);
+        assertThat(propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED), is(true));
     }
 
     @Test

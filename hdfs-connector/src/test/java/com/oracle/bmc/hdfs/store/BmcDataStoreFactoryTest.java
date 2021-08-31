@@ -90,6 +90,8 @@ public class BmcDataStoreFactoryTest {
 
         when(mockBooleanAccessor.get(eq(BmcProperties.APACHE_MAX_CONNECTION_POOL_SIZE)))
                 .thenReturn(null);
+        when(mockBooleanAccessor.get(eq(BmcProperties.OBJECT_AUTO_CLOSE_INPUT_STREAM)))
+                .thenReturn(true);
         
         // Allow stubbing of other methods inside the factory
         factoryUnderTest = spy(new BmcDataStoreFactory(mockConfiguration));

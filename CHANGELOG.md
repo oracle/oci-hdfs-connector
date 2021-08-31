@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.1.0.0.0 - 2021-08-31
+### Added
+- Added support for disabling auto-close of object streams that are obtained through `getObject` operation. This can be disabled by setting `fs.oci.object.autoclose.inputstream` to `false`. If disabled, the streams obtained through `getObject` that are completely read will not be closed automatically. If not specified, this option will be enabled by default.
+
+### Changed
+- Updated to Hadoop version 3.3.1
+
 ## 3.3.0.7.0.1 - 2021-06-29
 ### Added
 - Added support for multi-part upload streaming using a finite-sized in-memory buffer. This mode can be enabled by setting `fs.oci.io.write.multipart.inmemory` to `true`. If enabled, `fs.oci.client.multipart.numthreads` should be set to the number of parallel threads (greater than 1). `fs.oci.io.write.multipart.inmemory` cannot be enabled at the same time as `fs.oci.io.write.inmemory`. `fs.oci.io.write.multipart.overwrite` controls whether objects are allowed to be overwritten (default is `false`). `fs.oci.io.write.multipart.inmemory.tasktimeout.seconds` sets the number of seconds before giving up for upload tasks that cannot start because the maximum number of parallel threads has been reached (default is `900`, meaning 15 minutes).

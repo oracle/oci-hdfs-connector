@@ -12,7 +12,7 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.3.0.7.0.1</version>
+    <version>3.3.1.0.0.0</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -270,7 +270,7 @@
         </exclusion>
         <!--
           Deal with CVE-2021-28165:
-          Exclude Jetty (9.4.20.v20190813) from Hadoop 3.3.0 and include a fixed version 9.4.39 (or higher) directly.
+          Exclude Jetty (9.4.20.v20190813) from Hadoop 3.3.1 and include a fixed version 9.4.43.v20210629 (or higher) directly.
         -->
         <exclusion>
           <groupId>org.eclipse.jetty</groupId>
@@ -285,6 +285,15 @@
           <artifactId>jetty-util-ajax</artifactId>
         </exclusion>
         <!-- End: Deal with CVE-2021-28165 -->
+        <!--
+          Deal with CVE-2021-31684 and CVE-2021-27568:
+          Exclude net.minidev:json-smart (2.3) from Hadoop 3.3.1 and include a fixed version 2.4.7 (or higher) directly.
+        -->
+        <exclusion>
+          <groupId>net.minidev</groupId>
+          <artifactId>json-smart</artifactId>
+        </exclusion>
+        <!-- End Deal with CVE-2021-31684 and CVE-2021-27568 -->
       </exclusions>
     </dependency>
 
@@ -449,6 +458,15 @@
           <artifactId>jetty-util-ajax</artifactId>
         </exclusion>
         <!-- End: Deal with CVE-2021-28165 -->
+        <!--
+          Deal with CVE-2021-31684 and CVE-2021-27568:
+          Exclude net.minidev:json-smart (2.3) from Hadoop 3.3.0 and include a fixed version 2.4.7 (or higher) directly.
+        -->
+        <exclusion>
+          <groupId>net.minidev</groupId>
+          <artifactId>json-smart</artifactId>
+        </exclusion>
+        <!-- End Deal with CVE-2021-31684 and CVE-2021-27568 -->
       </exclusions>
     </dependency>
     <dependency>
@@ -474,12 +492,12 @@
     <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-all</artifactId>
-      <version>4.1.59.Final</version>
+      <version>4.1.66.Final</version>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-codec-http</artifactId>
-      <version>4.1.59.Final</version>
+      <version>4.1.65.Final</version>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
@@ -512,6 +530,16 @@
       <version>${jetty.version}</version>
     </dependency>
     <!-- End: Deal with CVE-2021-28165 -->
+    <!--
+      Deal with CVE-2021-31684 and CVE-2021-27568:
+      Exclude net.minidev:json-smart (2.3) from Hadoop 3.3.0 and include a fixed version 2.4.7 (or higher) directly.
+    -->
+    <dependency>
+      <groupId>net.minidev</groupId>
+      <artifactId>json-smart</artifactId>
+      <version>2.4.7</version>
+    </dependency>
+    <!-- End Deal with CVE-2021-31684 and CVE-2021-27568 -->
   </dependencies>
 
 </project>

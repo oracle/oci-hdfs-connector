@@ -302,6 +302,11 @@ public enum BmcProperties {
     OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED(OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED_KEY, false),
 
     /**
+     * (long, optional) The time interval (in seconds) between successive logging of cache statistics. The default is 60 seconds.
+     */
+    OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS(OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS_KEY, 60L),
+
+    /**
      * (int, optional) Whether cached items should be expired if a certain number of seconds has passed since the
      * last access, regardless of whether it was a read or a write. The default is unset, which means this expiration
      * strategy is not used.
@@ -310,7 +315,6 @@ public enum BmcProperties {
      */
     OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS(OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS_KEY, null),
 
-
     /**
      * (int, optional) Whether cached items should be expired if a certain number of seconds has passed since the
      * last write access. The default is 600 (10 minutes).
@@ -318,7 +322,7 @@ public enum BmcProperties {
      * Cannot be combined with OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS.
      */
     OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS(OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS_KEY,
-                                                      TimeUnit.MINUTES.toSeconds(10)),
+                                                      (int) TimeUnit.MINUTES.toSeconds(10)),
 
     /**
      * (string, optional) The consistency policy to use for the object payload cache. The default is
@@ -327,7 +331,6 @@ public enum BmcProperties {
      */
     OBJECT_PAYLOAD_CACHING_CONSISTENCY_POLICY_CLASS(OBJECT_PAYLOAD_CACHING_CONSISTENCY_POLICY_CLASS_KEY,
                                                     StrongConsistencyPolicy.class.getName()),
-
 
     /**
      * (string, optional) The directory for the object payload cache. The default is the value of the "java.io.tmpdir"
@@ -377,7 +380,12 @@ public enum BmcProperties {
      * (boolean, optional) Flag to enable overwrites while using Multipart Uploads.
      * See {@link BmcConstants#MULTIPART_ALLOW_OVERWRITE_KEY} for config key name. Default is false.
      */
-    MULTIPART_ALLOW_OVERWRITE(MULTIPART_ALLOW_OVERWRITE_KEY, false)
+    MULTIPART_ALLOW_OVERWRITE(MULTIPART_ALLOW_OVERWRITE_KEY, false),
+
+    /**
+     * (boolean, optional) Flag to enable/disable auto-close of object streams on full read. The default is true.
+     */
+    OBJECT_AUTO_CLOSE_INPUT_STREAM(OBJECT_AUTO_CLOSE_INPUT_STREAM_KEY, true)
     ;
 
     @Getter private final String propertyName;

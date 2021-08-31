@@ -25,6 +25,7 @@ import com.oracle.bmc.hdfs.BmcConstants;
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.waiter.ResettingExponentialBackoffStrategy;
 import com.oracle.bmc.http.*;
+import com.oracle.bmc.http.internal.ResponseHelper;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.ObjectStorageClient;
 import com.oracle.bmc.retrier.RetryConfiguration;
@@ -233,6 +234,9 @@ public class BmcDataStoreFactory {
                             .connectionPoolConfig(apacheConnectionPoolConfig).build()));
         }
 
+        if (!propertyAccessor.asBoolean().get(BmcProperties.OBJECT_AUTO_CLOSE_INPUT_STREAM)) {
+            ResponseHelper.shouldAutoCloseResponseInputStream(false);
+        }
         // If a proxy is not defined, use the existing ObjectStorageClient that leverages the DefaultConnectorProvider.
         // Else, build an ObjectStorageClient that leverages the ApacheConnector to configure a proxy.
         return (StringUtils.isBlank(httpProxyUri))
