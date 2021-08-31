@@ -20,6 +20,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -35,6 +37,7 @@ import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.common.util.concurrent.UncheckedExecutionException;
+import com.oracle.bmc.hdfs.BmcConstants;
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.caching.CachingObjectStorage;
 import com.oracle.bmc.hdfs.caching.ConsistencyPolicy;
@@ -185,11 +188,12 @@ public class BmcDataStore {
                 ConsistencyPolicy consistencyPolicy = consistencyPolicyClass.newInstance();
                 LOG.debug("Consistency policy is '{}'", consistencyPolicy.getClass().getName());
 
+                boolean recordStatistics = propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED);
                 CachingObjectStorage.Configuration.ConfigurationBuilder configurationBuilder = CachingObjectStorage
                         .newConfiguration()
                         .client(objectStorage)
                         .cacheDirectory(directory)
-                        .recordStats(propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED))
+                        .recordStats(recordStatistics)
                         .initialCapacity(propertyAccessor.asInteger().get(BmcProperties.OBJECT_PAYLOAD_CACHING_INITIAL_CAPACITY))
                         .consistencyPolicy(consistencyPolicy);
 
@@ -210,12 +214,43 @@ public class BmcDataStore {
                     configurationBuilder = configurationBuilder.expireAfterWrite(Duration.ofSeconds(expireAfterWrite));
                 }
 
-                objectStorage = CachingObjectStorage.build(configurationBuilder.build());
+                CachingObjectStorage cachingObjectStorage = CachingObjectStorage.build(configurationBuilder.build());
+                objectStorage = cachingObjectStorage;
+                long period = propertyAccessor.asLong().get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS);
+                if(recordStatistics) {
+                    logCacheStatistics(period,cachingObjectStorage);
+                }
             } catch(Exception e) {
                 LOG.error("Failed to configure Object Storage payload caching; payload caching disabled", e);
             }
         }
         return objectStorage;
+    }
+
+    /**
+     * Logs the statistics for the getObject cache.
+     * ScheduledExecutorService is set to log the statistics every minute (by default) with the initial delay of 30 seconds.
+     * The interval can be changed by setting {@link BmcConstants#OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS_KEY} config key
+     * @param cachingObjectStorage
+     */
+    private void logCacheStatistics(long period, CachingObjectStorage cachingObjectStorage) {
+        final ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor(
+                new ThreadFactory() {
+                    public Thread newThread(Runnable r) {
+                        Thread t = Executors.defaultThreadFactory().newThread(r);
+                        t.setDaemon(true);
+                        return t;
+                    }
+                });
+        try {
+            executorService.scheduleAtFixedRate(
+                    () -> LOG.info("Cache statistics: {}", cachingObjectStorage.getCacheStatistics()),
+                    30,
+                    period,
+                    TimeUnit.SECONDS);
+        } finally {
+            executorService.shutdown();
+        }
     }
 
     private LoadingCache<String, HeadPair> configureHeadObjectCache(
@@ -409,7 +444,7 @@ public class BmcDataStore {
                 sourceDirectory,
                 destinationDirectory);
 
-        // find all objects to rename first to prevent any modifcation of the result set while iterating over it
+        // find all objects to rename first to prevent any modification of the result set while iterating over it
         final ArrayList<String> objectsToRename = new ArrayList<>();
         try {
             ListObjectsRequest request;
