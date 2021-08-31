@@ -129,6 +129,9 @@ public final class BmcConstants {
     public static final String OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED_KEY =
             "fs.oci.caching.object.payload.recordstats.enabled";
 
+    public static final String OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS_KEY =
+            "fs.oci.caching.object.payload.recordstats.timeinterval.seconds";
+
     public static final String OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS_KEY =
             "fs.oci.caching.object.payload.expireafteraccess.seconds";
 
@@ -146,6 +149,9 @@ public final class BmcConstants {
 
     public static final String APACHE_MAX_CONNECTION_POOL_SIZE_KEY =
             "fs.oci.client.apache.max.connection.pool.size";
+
+    public static final String OBJECT_AUTO_CLOSE_INPUT_STREAM_KEY =
+            "fs.oci.object.autoclose.inputstream";
 
     /**
      * This class contains constants with deprecated values. The HDFS connector will first try the current values
@@ -218,6 +224,8 @@ public final class BmcConstants {
                                 "fs.oraclebmc.rename.operation.numthreads")
                         .put(APACHE_CONNECTION_CLOSING_STRATEGY_KEY,
                                 "fs.oraclebmc.client.apache.connection.closing.strategy")
+                        .put(OBJECT_AUTO_CLOSE_INPUT_STREAM_KEY,
+                                "fs.oraclebmc.object.autoclose.inputstream")
                         .build();
 
         private static final String FS_OCI_PREFIX = "fs.oci.";

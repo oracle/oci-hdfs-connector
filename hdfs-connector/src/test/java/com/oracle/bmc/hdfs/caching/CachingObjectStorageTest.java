@@ -8,7 +8,6 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.StringWriter;
 import java.lang.ref.PhantomReference;
@@ -1784,7 +1783,7 @@ public class CachingObjectStorageTest {
         }
 
         // two requests, since failures aren't cached
-        verify(mockClient, times(2 * (maxRetries + 1))).getObject(any());
+        verify(mockClient, times(2)).getObject(any());
         verify(mockClient, times(2)).headObject(any());
         verifyNoMoreInteractions(mockClient);
 
@@ -1858,5 +1857,53 @@ public class CachingObjectStorageTest {
                 assertTrue(((CachingObjectStorage.PathPhantomReference) reference).isCleared());
             }
         }
+    }
+
+    @Test
+    public void testPrepopulateCache() throws Exception {
+        Path directory = Files.createTempDirectory(this.getClass().getSimpleName());
+        directory.toFile().deleteOnExit();
+
+        long maximumWeight = CONTENT.length();
+        int expireAfterWriteSeconds = getExpireAfterWriteSeconds();
+
+        CachingObjectStorage cachingObjectStorageClient =
+                CachingObjectStorage.build(CachingObjectStorage.newConfiguration()
+                        .client(mockClient)
+                        .cacheDirectory(directory)
+                        .consistencyPolicy(new NoOpConsistencyPolicy())
+                        .maximumWeight(maximumWeight)
+                        .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
+                        .build());
+
+        GetObjectResponse response =
+                GetObjectResponse.builder()
+                        .contentLength(Long.valueOf(CONTENT.length()))
+                        .inputStream(new ByteArrayInputStream(CONTENT.getBytes()))
+                        .eTag("etag")
+                        .__httpStatusCode__(200)
+                        .build();
+
+        GetObjectRequest request =
+                GetObjectRequest.builder()
+                        .namespaceName("namespace")
+                        .bucketName("bucket")
+                        .objectName("object")
+                        .build();
+
+        // Prepopulate the cache.
+        cachingObjectStorageClient.prepopulateCache(request, response);
+
+        // Retrieve the response from the cache to validate its content.
+        GetObjectResponse cacheResponse = cachingObjectStorageClient.getObject(request);
+
+        StringWriter sw = new StringWriter();
+        IOUtils.copy(new InputStreamReader(cacheResponse.getInputStream()), sw);
+
+        assertEquals(CONTENT, sw.toString());
+        assertEquals(response.getContentLength(), cacheResponse.getContentLength());
+        assertEquals(response.getETag(), cacheResponse.getETag());
+        assertEquals(response.get__httpStatusCode__(), cacheResponse.get__httpStatusCode__());
+
     }
 }

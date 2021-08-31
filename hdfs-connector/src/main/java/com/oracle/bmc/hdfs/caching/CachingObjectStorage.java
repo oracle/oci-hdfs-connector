@@ -146,7 +146,7 @@ public interface CachingObjectStorage extends ObjectStorage {
                 50,
                 50,
                 60L,
-                java.util.concurrent.TimeUnit.SECONDS,
+                TimeUnit.SECONDS,
                 new java.util.concurrent.LinkedBlockingQueue<>(),
                 new com.google.common.util.concurrent.ThreadFactoryBuilder()
                         .setDaemon(true)
@@ -314,6 +314,14 @@ public interface CachingObjectStorage extends ObjectStorage {
      */
     Cache.Statistics getCacheStatistics();
 
+    /**
+     * Populates the cache at the request with the given response.
+     *
+     * @param cacheRequest request entry to fill.
+     * @param cacheResponse content to be put at the cache entry.
+     */
+    void prepopulateCache(GetObjectRequest cacheRequest, GetObjectResponse cacheResponse);
+
     // proxy class
 
     /**
@@ -435,6 +443,11 @@ public interface CachingObjectStorage extends ObjectStorage {
                     {
                         return getObjectUncached((GetObjectRequest) args[0]);
                     }
+                case "prepopulateCache":
+                    {
+                        prepopulateCache((GetObjectRequest) args[0], (GetObjectResponse) args[1]);
+                        return null;
+                    }
                 case "cleanUp":
                     {
                         cleanUp();
@@ -500,6 +513,48 @@ public interface CachingObjectStorage extends ObjectStorage {
                     getObjectCache.put(key, value);
 
                     return value.getResponse();
+                }
+            } finally {
+                LOG.trace("Released lock on key '{}'", key);
+            }
+        }
+
+        /**
+         * Populates the cache at the request with the given response.
+         *
+         * @param cacheRequest request entry to fill.
+         * @param cacheResponse content to be put at the cache entry.
+         */
+        protected void prepopulateCache(GetObjectRequest cacheRequest, GetObjectResponse cacheResponse) {
+            if(cacheRequest == null || cacheResponse == null) {
+                LOG.debug("Cannot prepopulate cache with null values. Request: {}, Response: {}",
+                        cacheRequest, cacheResponse);
+                return;
+            }
+
+            if (uncacheablePredicate.test(cacheRequest)) {
+                LOG.debug("Request is uncacheable: {}", cacheRequest);
+                return;
+            }
+
+            GetObjectRequestCacheKey key = consistencyPolicy.constructKey(cacheRequest);
+
+            try (RowLock lock = rowLockProvider.lock(key)) {
+                LOG.trace("Acquired lock on key '{}'", key);
+                GetObjectResponseCacheValue value = getObjectCache.getIfPresent(key);
+
+                if (value != null) {
+                    LOG.warn("Replacing cache value for request: {}.", cacheRequest);
+                    value = null; // null out to allow garbage collection
+                    getObjectCache.invalidate(key); // will also invoke cacheGarbageCollection
+                }
+                if (maximumWeightInBytes != null && diskSpaceUsedInBytes >= maximumWeightInBytes) {
+                    // this is possible if consumers read streams slowly or don't close them
+                    LOG.warn("Not caching request, cache size '{}' already at maximum '{}' weight",
+                            diskSpaceUsedInBytes, maximumWeightInBytes);
+                } else {
+                    value = load(key, cacheResponse);
+                    getObjectCache.put(key, value);
                 }
             } finally {
                 LOG.trace("Released lock on key '{}'", key);
@@ -791,7 +846,7 @@ public interface CachingObjectStorage extends ObjectStorage {
                 Future<?> future = handler.downloadExecutor.submit(() -> {
                     long length;
                     try {
-                        LOG.debug("Starting to retrieve contents for cache file '{}' ({} bytes exptected)",
+                        LOG.debug("Starting to retrieve contents for cache file '{}' ({} bytes expected)",
                                   cachedContentFile,
                                   response.getContentLength());
                         IOUtils.copy(firstInputStream, NullOutputStream.NULL_OUTPUT_STREAM);
