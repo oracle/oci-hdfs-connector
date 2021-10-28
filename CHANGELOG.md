@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.1.0.0.1 - 2021-10-28
+### Changed
+- Updated to OCI Java SDK version 2.7.1
+
+### Fixed
+- Updated Jetty version to `9.4.44` from `11.0.6` (minimum requirement of Java 11) to add back support for older versions of Java
+
 ## 3.3.1.0.0.0 - 2021-08-31
 ### Added
 - Added support for disabling auto-close of object streams that are obtained through `getObject` operation. This can be disabled by setting `fs.oci.object.autoclose.inputstream` to `false`. If disabled, the streams obtained through `getObject` that are completely read will not be closed automatically. If not specified, this option will be enabled by default.
