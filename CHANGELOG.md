@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.1.0.1.0 - 2021-12-14
+### Changed
+- Updated to OCI Java SDK version 2.11.1
+- Updated `log4j` dependencies to version `2.15.0` to address CVE-2021-44228
+- Removed dependencies `log4j-core`, `log4j-slf4j-impl`, `log4j-1.2-api` by default . To include these dependencies, run `mvn` 
+with option `-Duse-slf4j-log4j`
+
 ## 3.3.1.0.0.1 - 2021-10-28
 ### Changed
 - Updated to OCI Java SDK version 2.7.1
