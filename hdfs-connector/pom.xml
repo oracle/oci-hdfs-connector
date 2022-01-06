@@ -12,7 +12,7 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.3.1.0.3.0</version>
+    <version>3.3.1.0.3.1</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -103,17 +103,17 @@
         <dependency>
           <groupId>org.apache.logging.log4j</groupId>
           <artifactId>log4j-core</artifactId>
-          <version>2.17.0</version>
+          <version>2.17.1</version>
         </dependency>
         <dependency>
           <groupId>org.apache.logging.log4j</groupId>
           <artifactId>log4j-slf4j-impl</artifactId>
-          <version>2.17.0</version>
+          <version>2.17.1</version>
         </dependency>
         <dependency>
           <groupId>org.apache.logging.log4j</groupId>
           <artifactId>log4j-1.2-api</artifactId>
-          <version>2.17.0</version>
+          <version>2.17.1</version>
         </dependency>
       </dependencies>
     </profile>
@@ -295,6 +295,11 @@
         </exclusion>
         <!-- End Deal with CVE-2021-31684 and CVE-2021-27568 -->
       </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>com.google.code.gson</groupId>
+      <artifactId>gson</artifactId>
+      <version>2.8.9</version>
     </dependency>
 
     <!-- Direct dependencies -->
