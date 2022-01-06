@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.1.0.3.1 - 2022-01-06
+### Changed
+- Updated `log4j` dependencies to version `2.17.1` to address CVE-2021-44832
+
 ## 3.3.1.0.3.0 - 2021-12-20
 ### Changed
 - Updated `log4j` dependencies to version `2.17.0` to address CVE-2021-45105
