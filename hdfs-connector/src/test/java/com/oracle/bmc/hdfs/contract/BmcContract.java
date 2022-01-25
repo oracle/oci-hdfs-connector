@@ -62,4 +62,12 @@ public class BmcContract extends AbstractBondedFSContract {
             this.addConfResource(CONTRACT_APACHE_CLOSING_STRATEGY_XML);
         }
     }
+
+    public static class FilesystemCaching extends BmcContract {
+        public static final String FILESYSTEM_CACHING_XML = "contract/oci-filesystemcaching.xml";
+        public FilesystemCaching(Configuration conf) {
+            super(conf);
+            this.addConfResource(FILESYSTEM_CACHING_XML);
+        }
+    }
 }

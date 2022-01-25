@@ -6,6 +6,7 @@
 package com.oracle.bmc.hadoop.example;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -27,7 +28,6 @@ import com.oracle.bmc.hdfs.BmcFilesystem;
 
 import lombok.RequiredArgsConstructor;
 
-@RequiredArgsConstructor
 public class SampleOracleBmcHadoopJob {
     private static final String SAMPLE_JOB_PATH = "/samplehadoopjob";
     private static final String INPUT_FILE = SAMPLE_JOB_PATH + "/input.dat";
@@ -64,6 +64,16 @@ public class SampleOracleBmcHadoopJob {
     private final String configurationFilePath;
     private final String namespace;
     private final String bucket;
+
+    public SampleOracleBmcHadoopJob(String configurationFilePath, String namespace, String bucket) {
+        this.configurationFilePath = configurationFilePath;
+        this.namespace = namespace;
+        this.bucket = bucket;
+
+        if (!new File(configurationFilePath).exists()) {
+            throw new IllegalArgumentException("File '" + configurationFilePath + "' does not exist");
+        }
+    }
 
     public int execute()
             throws IOException, ClassNotFoundException, InterruptedException, URISyntaxException {

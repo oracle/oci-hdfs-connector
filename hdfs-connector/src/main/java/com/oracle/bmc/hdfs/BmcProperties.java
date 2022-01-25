@@ -385,7 +385,53 @@ public enum BmcProperties {
     /**
      * (boolean, optional) Flag to enable/disable auto-close of object streams on full read. The default is true.
      */
-    OBJECT_AUTO_CLOSE_INPUT_STREAM(OBJECT_AUTO_CLOSE_INPUT_STREAM_KEY, true)
+    OBJECT_AUTO_CLOSE_INPUT_STREAM(OBJECT_AUTO_CLOSE_INPUT_STREAM_KEY, true),
+
+    // BmcFilesystem instance caching
+    // These cannot be overridden per namespace and bucket.
+
+    /**
+     * (boolean, optional) Whether {@link BmcFilesystem} caching is enabled. Default is false.
+     *
+     * This setting cannot be overridden per namespace and bucket.
+     */
+    FILESYSTEM_CACHING_ENABLED(FILESYSTEM_CACHING_ENABLED_KEY, false),
+
+    /**
+     * (int, optional) Maximum number of cached {@link BmcFilesystem} items. The default is 1024.
+     *
+     * This setting cannot be overridden per namespace and bucket.
+     */
+    FILESYSTEM_CACHING_MAXIMUM_SIZE(FILESYSTEM_CACHING_MAXIMUM_SIZE_KEY, 1024),
+
+    /**
+     * (int, optional) Initial capacity of cached {@link BmcFilesystem} items. The default is 1024.
+     *
+     * This setting cannot be overridden per namespace and bucket.
+     */
+    FILESYSTEM_CACHING_INITIAL_CAPACITY(FILESYSTEM_CACHING_INITIAL_CAPACITY_KEY, 1024),
+
+    /**
+     * (int, optional) Whether cached {@link BmcFilesystem} items should be expired if a certain number of seconds has
+     * passed since the last access, regardless of whether it was a read or a write. The default is unset, which means
+     * this expiration strategy is not used.
+     *
+     * Cannot be combined with FILESYSTEM_CACHING_EXPIRE_AFTER_WRITE_SECONDS.
+     *
+     * This setting cannot be overridden per namespace and bucket.
+     */
+    FILESYSTEM_CACHING_EXPIRE_AFTER_ACCESS_SECONDS(FILESYSTEM_CACHING_EXPIRE_AFTER_ACCESS_SECONDS_KEY, null),
+
+    /**
+     * (int, optional) Whether cached {@link BmcFilesystem} items should be expired if a certain number of seconds has
+     * passed since the last write access. The default is 30 minutes.
+     *
+     * Cannot be combined with FILESYSTEM_CACHING_EXPIRE_AFTER_ACCESS_SECONDS.
+     *
+     * This setting cannot be overridden per namespace and bucket.
+     */
+    FILESYSTEM_CACHING_EXPIRE_AFTER_WRITE_SECONDS(FILESYSTEM_CACHING_EXPIRE_AFTER_WRITE_SECONDS_KEY, (int) TimeUnit.MINUTES.toSeconds(30)),
+
     ;
 
     @Getter private final String propertyName;

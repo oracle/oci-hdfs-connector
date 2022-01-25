@@ -12,7 +12,7 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.3.1.0.3.1</version>
+    <version>3.3.1.0.3.2</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -545,6 +545,17 @@
       <version>2.4.7</version>
     </dependency>
     <!-- End Deal with CVE-2021-31684 and CVE-2021-27568 -->
+    <dependency>
+      <!--
+        Otherwise, some integration tests fail with java.lang.NoClassDefFoundError: org/assertj/core/api/Assertions 
+        at org.apache.hadoop.fs.contract.AbstractContractRootDirectoryTest.testSimpleRootListing(AbstractContractRootDirectoryTest.java:251)
+        Seems to be a problem with the dependencies of HDFS.
+      -->
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <version>3.21.0</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
 </project>

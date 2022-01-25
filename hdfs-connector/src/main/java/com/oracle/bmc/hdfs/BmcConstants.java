@@ -153,6 +153,23 @@ public final class BmcConstants {
     public static final String OBJECT_AUTO_CLOSE_INPUT_STREAM_KEY =
             "fs.oci.object.autoclose.inputstream";
 
+    // BmcFilesystem instance caching
+
+    public static final String FILESYSTEM_CACHING_ENABLED_KEY =
+            "fs.oci.caching.filesystem.enabled";
+
+    public static final String FILESYSTEM_CACHING_MAXIMUM_SIZE_KEY =
+            "fs.oci.caching.filesystem.maxsize.count";
+
+    public static final String FILESYSTEM_CACHING_INITIAL_CAPACITY_KEY =
+            "fs.oci.caching.filesystem.initialcapacity.count";
+
+    public static final String FILESYSTEM_CACHING_EXPIRE_AFTER_ACCESS_SECONDS_KEY =
+            "fs.oci.caching.filesystem.expireafteraccess.seconds";
+
+    public static final String FILESYSTEM_CACHING_EXPIRE_AFTER_WRITE_SECONDS_KEY =
+            "fs.oci.caching.filesystem.expireafterwrite.seconds";
+
     /**
      * This class contains constants with deprecated values. The HDFS connector will first try the current values
      * in {@link com.oracle.bmc.hdfs.BmcConstants}.

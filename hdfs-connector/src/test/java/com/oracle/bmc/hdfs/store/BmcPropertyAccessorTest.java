@@ -5,9 +5,15 @@
  */
 package com.oracle.bmc.hdfs.store;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 
 import com.oracle.bmc.hdfs.BmcConstants;
 import org.apache.hadoop.conf.Configuration;
@@ -195,5 +201,31 @@ public class BmcPropertyAccessorTest {
         this.configuration.set(BmcProperties.PASS_PHRASE.getPropertyName(), "pass");
 
         propertyAccessor.asPassword().get(BmcProperties.PASS_PHRASE);
+    }
+
+    @Test
+    public void forNonNull() {
+        AtomicBoolean executed = new AtomicBoolean(false);
+        String result = propertyAccessor.asString().forNonNull(BmcProperties.HOST_NAME, s -> {
+            executed.set(true);
+            return s;
+        });
+        assertFalse(executed.get());
+        assertNull(result);
+        this.configuration.set(BmcProperties.HOST_NAME.getPropertyName(), "value");
+        result = propertyAccessor.asString().forNonNull(BmcProperties.HOST_NAME, s -> {
+            executed.set(true);
+            return s;
+        });
+        assertTrue(executed.get());
+        assertEquals("value", result);
+        this.configuration.set(
+                BmcProperties.HOST_NAME.getPropertyName() + PROPERTY_OVERRIDE_SUFFIX, "value2");
+        result = propertyAccessor.asString().forNonNull(BmcProperties.HOST_NAME, s -> {
+            executed.set(true);
+            return s;
+        });
+        assertTrue(executed.get());
+        assertEquals("value2", result);
     }
 }
