@@ -5,6 +5,8 @@
  */
 package com.oracle.bmc.hdfs.contract;
 
+import java.io.IOException;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.contract.AbstractContractRootDirectoryTest;
 import org.apache.hadoop.fs.contract.AbstractFSContract;
@@ -17,5 +19,10 @@ public class TestBmcContractRootDir extends AbstractContractRootDirectoryTest {
     @Override
     protected AbstractFSContract createContract(final Configuration conf) {
         return new BmcContract(conf);
+    }
+
+    @Override
+    public void testSimpleRootListing() throws IOException {
+        super.testSimpleRootListing();
     }
 }

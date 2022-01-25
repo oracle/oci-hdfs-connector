@@ -8,6 +8,7 @@ package com.oracle.bmc.hdfs.store;
 import com.oracle.bmc.hdfs.BmcConstants;
 
 import java.io.IOException;
+import java.util.function.Function;
 
 import org.apache.hadoop.conf.Configuration;
 
@@ -22,7 +23,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @RequiredArgsConstructor
 @Slf4j
-class BmcPropertyAccessor {
+public class BmcPropertyAccessor {
     private final Configuration configuration;
     private final String propertyOverrideSuffix;
 
@@ -41,7 +42,7 @@ class BmcPropertyAccessor {
         return property.getPropertyName() + propertyOverrideSuffix;
     }
 
-    Accessor<Boolean> asBoolean() {
+    public Accessor<Boolean> asBoolean() {
         return new Accessor<Boolean>() {
             @Override
             public Boolean get(BmcProperties property) {
@@ -70,7 +71,7 @@ class BmcPropertyAccessor {
         };
     }
 
-    Accessor<Integer> asInteger() {
+    public Accessor<Integer> asInteger() {
         return new Accessor<Integer>() {
             @Override
             public Integer get(BmcProperties property) {
@@ -99,7 +100,7 @@ class BmcPropertyAccessor {
         };
     }
 
-    Accessor<String> asString() {
+    public Accessor<String> asString() {
         return new Accessor<String>() {
             @Override
             public String get(BmcProperties property) {
@@ -128,7 +129,7 @@ class BmcPropertyAccessor {
         };
     }
 
-    Accessor<char[]> asPassword() {
+    public Accessor<char[]> asPassword() {
         return new Accessor<char[]>() {
             @Override
             public char[] get(BmcProperties property) {
@@ -172,7 +173,7 @@ class BmcPropertyAccessor {
         };
     }
 
-    Accessor<Long> asLong() {
+    public Accessor<Long> asLong() {
         return new Accessor<Long>() {
             @Override
             public Long get(BmcProperties property) {
@@ -239,9 +240,9 @@ class BmcPropertyAccessor {
      * @param <T>
      *            The type of values it returns.
      */
-    interface Accessor<T> {
+    public interface Accessor<T> {
         /**
-         * Get the value of this property, interpreted as type <T>. If the property was not configured, the default
+         * Get the value of this property, interpreted as type T. If the property was not configured, the default
          * value ({@link BmcProperties#getDefaultValue()} will be returned.
          *
          * @param property
@@ -249,5 +250,22 @@ class BmcPropertyAccessor {
          * @return
          */
         T get(BmcProperties property);
+
+        /**
+         * If the value of the property, interpreted as type T, is non-null, apply the function to that value, and
+         * return the result of the function. IF the value is null, return null.
+         * @param property The BMC property
+         * @param fn the function to apply to the non-null value
+         * @param <R> return type
+         * @return result of applying the function to the non-null value, or null if the value is null
+         */
+        default <R> R forNonNull(BmcProperties property, Function<T, R> fn) {
+            T value = get(property);
+            if (value != null) {
+                return fn.apply(value);
+            } else {
+                return null;
+            }
+        }
     }
 }

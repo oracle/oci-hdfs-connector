@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2021, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -13,10 +13,13 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.oracle.bmc.hdfs.store.BmcPropertyAccessor;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -28,6 +31,10 @@ import org.apache.hadoop.fs.ParentNotDirectoryException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.util.Progressable;
+
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 
 import com.oracle.bmc.hdfs.store.BmcDataStore;
 import com.oracle.bmc.hdfs.store.BmcDataStoreFactory;
@@ -44,9 +51,222 @@ import lombok.extern.slf4j.Slf4j;
  * <p>
  * Unless otherwise noted, APIs try to follow the specification as defined by:
  * http://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/filesystem/filesystem.html
+ *
+ * This is the proxy for the actual implementation, {@link BmcFilesystemImpl}, which may be cached.
  */
 @Slf4j
 public class BmcFilesystem extends FileSystem {
+
+    @VisibleForTesting
+    static class UriParser extends BmcFilesystemImpl.UriParser {
+        UriParser(final URI uri) {
+            super(uri);
+        }
+    }
+
+    private volatile BmcFilesystemImpl delegate;
+
+    private static class FSKey {
+        private final URI uri;
+        private final Configuration configuration;
+
+        public FSKey(URI uri, Configuration configuration) {
+            this.uri = uri;
+            this.configuration = configuration;
+        }
+
+        public int hashCode() {
+            return Objects.hash(uri, configuration);
+        }
+
+        public boolean equals(Object o) {
+            try {
+                FSKey that = (FSKey) o;
+                return this.uri.equals(that.uri) && this.configuration.equals(that.configuration);
+            } catch (Exception e) {
+                return false;
+            }
+        }
+    }
+
+    private static volatile LoadingCache<FSKey, BmcFilesystemImpl> fsCache = null;
+
+    private static synchronized void setupFilesystemCache(Configuration configuration) {
+        if (fsCache != null) {
+            return;
+        }
+
+        // cannot be overridden per namespace and bucket, hence propertyOverrideSuffix is ""
+        final BmcPropertyAccessor propertyAccessor = new BmcPropertyAccessor(configuration, "");
+
+        CacheLoader<FSKey, BmcFilesystemImpl> loader =
+                new CacheLoader<FSKey, BmcFilesystemImpl>() {
+                    @Override
+                    public BmcFilesystemImpl load(FSKey key) throws Exception {
+                        LOG.info("Creating new BmcFilesystemImpl delegate for " + key.uri);
+                        BmcFilesystemImpl impl = new BmcFilesystemImpl();
+                        impl.initialize(key.uri, key.configuration);
+                        return impl;
+                    }
+                };
+
+        CacheBuilder<FSKey, BmcFilesystemImpl> cacheBuilder =
+                CacheBuilder.newBuilder().removalListener(rn -> {
+                    LOG.info("Physically closing delegate for " + rn.getKey().uri);
+                    try {
+                        rn.getValue().close();
+                    } catch (IOException ioe) {
+                        LOG.warn("IOException " + ioe + " while physically closing " + rn.getKey().uri);
+                    }
+                });
+
+        if (!propertyAccessor.asBoolean().get(BmcProperties.FILESYSTEM_CACHING_ENABLED)) {
+            LOG.info("BmcFilesystem caching disabled");
+            fsCache = cacheBuilder.maximumSize(0).build(loader);
+            return;
+        }
+
+        propertyAccessor.asInteger().forNonNull(BmcProperties.FILESYSTEM_CACHING_MAXIMUM_SIZE, i -> cacheBuilder.maximumSize(i));
+        propertyAccessor.asInteger().forNonNull(BmcProperties.FILESYSTEM_CACHING_INITIAL_CAPACITY, i -> cacheBuilder.initialCapacity(i));
+        propertyAccessor.asInteger().forNonNull(BmcProperties.FILESYSTEM_CACHING_EXPIRE_AFTER_ACCESS_SECONDS, i -> cacheBuilder.expireAfterAccess(i, TimeUnit.SECONDS));
+        propertyAccessor.asInteger().forNonNull(BmcProperties.FILESYSTEM_CACHING_EXPIRE_AFTER_WRITE_SECONDS, i-> cacheBuilder.expireAfterWrite(i, TimeUnit.SECONDS));
+
+        fsCache = cacheBuilder.build(loader);
+
+        LOG.info("BmcFilesystem caching enabled, settings " + cacheBuilder);
+    }
+
+    public BmcFilesystem() {
+    }
+
+    public void initialize(URI uri, final Configuration configuration) throws IOException {
+        if (delegate != null) {
+            return;
+        }
+        setupFilesystemCache(configuration);
+        delegate = fsCache.getUnchecked(new FSKey(uri, configuration));
+    }
+
+    @Override
+    public String getScheme() {
+        // Can't use delegate here since this is used before initialization
+        return BmcConstants.OCI_SCHEME;
+    }
+
+    @Override
+    public FSDataOutputStream append(
+            final Path path, final int bufferSize, final Progressable progress) throws IOException {
+        return delegate.append(path, bufferSize, progress);
+    }
+
+    @Override
+    public FSDataOutputStream create(
+            final Path path,
+            final FsPermission permission,
+            final boolean overwrite,
+            final int bufferSize,
+            final short replication,
+            final long blockSize,
+            final Progressable progress)
+            throws IOException {
+        return delegate.create(path, permission, overwrite, bufferSize,
+                               replication, blockSize, progress);
+    }
+
+    @Override
+    public FSDataOutputStream createNonRecursive(Path f, FsPermission permission, EnumSet<CreateFlag> flags, int bufferSize, short replication, long blockSize, Progressable progress) throws IOException {
+        return delegate.createNonRecursive(f, permission, flags, bufferSize,
+                                           replication, blockSize, progress);
+    }
+
+    @Override
+    public boolean delete(final Path path, final boolean recursive) throws IOException {
+        return delegate.delete(path, recursive);
+    }
+
+    @Override
+    public FileStatus getFileStatus(final Path path) throws IOException {
+        return delegate.getFileStatus(path);
+    }
+
+    @Override
+    public FileStatus[] listStatus(final Path path) throws IOException {
+        return delegate.listStatus(path);
+    }
+
+    @Override
+    public boolean mkdirs(final Path path, final FsPermission permission) throws IOException {
+        return delegate.mkdirs(path, permission);
+    }
+
+    @Override
+    public FSDataInputStream open(final Path path, final int bufferSize) throws IOException {
+        return delegate.open(path, bufferSize);
+    }
+
+    @Override
+    public boolean rename(final Path source, final Path destination) throws IOException {
+        return delegate.rename(source, destination);
+    }
+
+    @Override
+    public long getDefaultBlockSize() {
+        return delegate.getDefaultBlockSize();
+    }
+
+    @Override
+    public int getDefaultPort() {
+        return delegate.getDefaultPort();
+    }
+
+    @Override
+    public String getCanonicalServiceName() {
+        return delegate.getCanonicalServiceName();
+    }
+
+    @Override
+    public void close() throws IOException {
+    }
+
+    @Override
+    public Path getWorkingDirectory() {
+        return delegate.getWorkingDirectory();
+    }
+
+    @Override
+    public void setWorkingDirectory(final Path workingDirectory) {
+        delegate.setWorkingDirectory(workingDirectory);
+    }
+
+    @Override
+    public URI getUri() {
+        return delegate.getUri();
+    }
+
+    BmcDataStore getDataStore() {
+        return delegate.getDataStore();
+    }
+
+    @Override
+    public Configuration getConf() {
+        return delegate.getConf();
+    }
+
+
+}
+
+/**
+ * Implementation of a HDFS {@link FileSystem} that is backed by the BMC Object Store.
+ * <p>
+ * Filesystems using this store take the URI form: <i>oci://bucket@namespace</i>. The bucket must be pre-created.
+ * <p>
+ * Unless otherwise noted, APIs try to follow the specification as defined by:
+ * http://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/filesystem/filesystem.html
+ *
+ * This is the actual implementation that {@link BmcFilesystem} delegates to.
+ */
+@Slf4j
+class BmcFilesystemImpl extends FileSystem {
     private static final PathLengthComparator PATH_LENGTH_COMPARATOR = new PathLengthComparator();
 
     @Getter(onMethod = @__({@Override}))
@@ -58,6 +278,8 @@ public class BmcFilesystem extends FileSystem {
 
     @Getter(onMethod = @__({@Override}))
     private URI uri;
+
+    private volatile boolean isInitialized;
 
     @VisibleForTesting
     static class UriParser {
@@ -113,6 +335,9 @@ public class BmcFilesystem extends FileSystem {
 
     @Override
     public void initialize(URI uri, final Configuration configuration) throws IOException {
+        if (isInitialized) {
+            return;
+        }
         LOG.info("Attempting to initialize filesystem with URI {}", uri);
         final UriParser uriParser = new UriParser(uri);
         final String scheme = uriParser.getScheme();
@@ -145,6 +370,7 @@ public class BmcFilesystem extends FileSystem {
         // NOTE: working dir is what all relative Paths will be resolved against
         final String username = System.getProperty("user.name");
         this.workingDirectory = super.makeQualified(new Path("/user", username));
+        this.isInitialized = true;
         LOG.info(
                 "Setting working directory to {}, and initialized uri to {}",
                 this.workingDirectory,
