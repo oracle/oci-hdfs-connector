@@ -184,6 +184,10 @@
                   <pattern>javax.xml.bind.</pattern>
                   <shadedPattern>shaded.oracle.javax.xml.bind.</shadedPattern>
                 </relocation>
+                <relocation>
+                  <pattern>org.objectweb.</pattern>
+                  <shadedPattern>shaded.oracle.org.objectweb.</shadedPattern>
+                </relocation>
               </relocations>
               <filters>
                 <filter>
