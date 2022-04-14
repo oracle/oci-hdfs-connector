@@ -776,7 +776,7 @@ public interface CachingObjectStorage extends ObjectStorage {
                                         }
                                     })
                             .collect(Collectors.toList()));
-            return Objects.hash(objects.toArray());
+            return Objects.hash(new HashSet<Object>(objects));
         }
 
         @Override
