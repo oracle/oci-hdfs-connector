@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -24,7 +24,8 @@ public final class BmcConstants {
 
     public static final String IN_MEMORY_READ_BUFFER_KEY = "fs.oci.io.read.inmemory";
 
-    public static final String MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED_KEY = "fs.oci.io.write.multipart.inmemory";
+    public static final String MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED_KEY =
+            "fs.oci.io.write.multipart.inmemory";
 
     public static final String MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS_KEY =
             "fs.oci.io.write.multipart.inmemory.tasktimeout.seconds";
@@ -107,10 +108,10 @@ public final class BmcConstants {
 
     public static final String OBJECT_PARQUET_CACHING_SPEC_KEY =
             "fs.oci.caching.object.parquet.spec";
-            
+
     public static final String RENAME_DIRECTORY_NUM_THREADS_KEY =
             "fs.oci.rename.operation.numthreads";
-            
+
     public static final String APACHE_CONNECTION_CLOSING_STRATEGY_KEY =
             "fs.oci.client.apache.connection.closing.strategy";
 
@@ -143,7 +144,7 @@ public final class BmcConstants {
 
     public static final String OBJECT_PAYLOAD_CACHING_DIRECTORY_KEY =
             "fs.oci.caching.object.payload.directory";
-            
+
     public static final String JERSEY_CLIENT_DEFAULT_CONNECTOR_ENABLED_KEY =
             "fs.oci.client.jersey.default.connector.enabled";
 
@@ -155,8 +156,7 @@ public final class BmcConstants {
 
     // BmcFilesystem instance caching
 
-    public static final String FILESYSTEM_CACHING_ENABLED_KEY =
-            "fs.oci.caching.filesystem.enabled";
+    public static final String FILESYSTEM_CACHING_ENABLED_KEY = "fs.oci.caching.filesystem.enabled";
 
     public static final String FILESYSTEM_CACHING_MAXIMUM_SIZE_KEY =
             "fs.oci.caching.filesystem.maxsize.count";
@@ -223,25 +223,35 @@ public final class BmcConstants {
                         .put(
                                 RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS_KEY,
                                 "fs.oraclebmc.client.retry.reset.threshold.seconds")
-                        .put(OBJECT_METADATA_CACHING_ENABLED_KEY,
-                             "fs.oraclebmc.caching.object.metadata.enabled")
-                        .put(OBJECT_METADATA_CACHING_SPEC_KEY,
-                             "fs.oraclebmc.caching.object.metadata.spec")
-                        .put(JERSEY_CLIENT_LOGGING_ENABLED_KEY,
+                        .put(
+                                OBJECT_METADATA_CACHING_ENABLED_KEY,
+                                "fs.oraclebmc.caching.object.metadata.enabled")
+                        .put(
+                                OBJECT_METADATA_CACHING_SPEC_KEY,
+                                "fs.oraclebmc.caching.object.metadata.spec")
+                        .put(
+                                JERSEY_CLIENT_LOGGING_ENABLED_KEY,
                                 "fs.oraclebmc.client.jersey.logging.enabled")
-                        .put(JERSEY_CLIENT_LOGGING_LEVEL_KEY,
+                        .put(
+                                JERSEY_CLIENT_LOGGING_LEVEL_KEY,
                                 "fs.oraclebmc.client.jersey.logging.level")
-                        .put(JERSEY_CLIENT_LOGGING_VERBOSITY_KEY,
+                        .put(
+                                JERSEY_CLIENT_LOGGING_VERBOSITY_KEY,
                                 "fs.oraclebmc.client.jersey.logging.verbosity")
-                        .put(JERSEY_CLIENT_DEFAULT_CONNECTOR_ENABLED_KEY,
+                        .put(
+                                JERSEY_CLIENT_DEFAULT_CONNECTOR_ENABLED_KEY,
                                 "fs.oraclebmc.client.jersey.default.connector.enabled")
-                        .put(APACHE_MAX_CONNECTION_POOL_SIZE_KEY,
+                        .put(
+                                APACHE_MAX_CONNECTION_POOL_SIZE_KEY,
                                 "fs.oraclebmc.client.apache.max.connection.pool.size")
-                        .put(RENAME_DIRECTORY_NUM_THREADS_KEY,
+                        .put(
+                                RENAME_DIRECTORY_NUM_THREADS_KEY,
                                 "fs.oraclebmc.rename.operation.numthreads")
-                        .put(APACHE_CONNECTION_CLOSING_STRATEGY_KEY,
+                        .put(
+                                APACHE_CONNECTION_CLOSING_STRATEGY_KEY,
                                 "fs.oraclebmc.client.apache.connection.closing.strategy")
-                        .put(OBJECT_AUTO_CLOSE_INPUT_STREAM_KEY,
+                        .put(
+                                OBJECT_AUTO_CLOSE_INPUT_STREAM_KEY,
                                 "fs.oraclebmc.object.autoclose.inputstream")
                         .build();
 
@@ -251,7 +261,8 @@ public final class BmcConstants {
             String oldKey = NEW_TO_OLD_KEYS.get(newKey);
             if (oldKey == null) {
                 if (!newKey.startsWith(FS_OCI_PREFIX)) {
-                    throw new IllegalArgumentException("Cannot determine old key for '" + newKey + "'");
+                    throw new IllegalArgumentException(
+                            "Cannot determine old key for '" + newKey + "'");
                 }
                 oldKey = "fs.oraclebmc." + newKey.substring(FS_OCI_PREFIX.length());
             }

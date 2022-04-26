@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -116,7 +116,9 @@ public class BmcDataStoreFactory {
 
         if (propertyAccessor.get(BmcProperties.REGION_CODE_OR_ID) != null) {
             LOG.info("Getting endpoint using {}", BmcConstants.REGION_CODE_OR_ID_KEY);
-            Region region = Region.fromRegionCodeOrId(propertyAccessor.get(BmcProperties.REGION_CODE_OR_ID));
+            Region region =
+                    Region.fromRegionCodeOrId(
+                            propertyAccessor.get(BmcProperties.REGION_CODE_OR_ID));
             com.google.common.base.Optional<String> endpoint = region.getEndpoint(SERVICE);
             if (endpoint.isPresent()) {
                 return endpoint.get();
@@ -127,7 +129,8 @@ public class BmcDataStoreFactory {
         }
 
         enableInstanceMetadataService();
-        LOG.info("Requesting region code from IMDS at {}",
+        LOG.info(
+                "Requesting region code from IMDS at {}",
                 METADATA_SERVICE_BASE_URL + "instance/region");
         String regionCode =
                 simpleRetry(
@@ -209,29 +212,43 @@ public class BmcDataStoreFactory {
                                     .get(BmcProperties.JERSEY_CLIENT_LOGGING_LEVEL)));
         }
 
-        final Integer apacheMaxConnectionPoolSize = propertyAccessor.asInteger().get(BmcProperties.APACHE_MAX_CONNECTION_POOL_SIZE);
+        final Integer apacheMaxConnectionPoolSize =
+                propertyAccessor.asInteger().get(BmcProperties.APACHE_MAX_CONNECTION_POOL_SIZE);
         // If the Jersery client default connector property is enabled, change the clientConfigurator to
         // JerseyDefaultClientConfigurator. This is to support the jersey default HttpUrlConnector
-        if (propertyAccessor.asBoolean().get(BmcProperties.JERSEY_CLIENT_DEFAULT_CONNECTOR_ENABLED)) {
-            objectStorageBuilder.clientConfigurator(new JerseyDefaultConnectorConfigurator.NonBuffering());
+        if (propertyAccessor
+                .asBoolean()
+                .get(BmcProperties.JERSEY_CLIENT_DEFAULT_CONNECTOR_ENABLED)) {
+            objectStorageBuilder.clientConfigurator(
+                    new JerseyDefaultConnectorConfigurator.NonBuffering());
         }
         // Note : Connection pooling is only supported for Apache Clients (hence, this is in else if)
         // If Jersey default connector is enabled, disregard this property
         else if (apacheMaxConnectionPoolSize != null && apacheMaxConnectionPoolSize > 0) {
-            final String apacheConnectionClosingStrategyString = propertyAccessor.asString().get(BmcProperties.APACHE_CONNECTION_CLOSING_STRATEGY);
+            final String apacheConnectionClosingStrategyString =
+                    propertyAccessor
+                            .asString()
+                            .get(BmcProperties.APACHE_CONNECTION_CLOSING_STRATEGY);
             ApacheConnectionClosingStrategy apacheConnectionClosingStrategy = null;
             if (apacheConnectionClosingStrategyString.equalsIgnoreCase("GRACEFUL")) {
-                apacheConnectionClosingStrategy = new ApacheConnectionClosingStrategy.GracefulClosingStrategy();
+                apacheConnectionClosingStrategy =
+                        new ApacheConnectionClosingStrategy.GracefulClosingStrategy();
             } else {
-                apacheConnectionClosingStrategy = new ApacheConnectionClosingStrategy.ImmediateClosingStrategy();
+                apacheConnectionClosingStrategy =
+                        new ApacheConnectionClosingStrategy.ImmediateClosingStrategy();
             }
-            ApacheConnectionPoolConfig apacheConnectionPoolConfig = ApacheConnectionPoolConfig.newDefault().builder()
-                    .totalOpenConnections(apacheMaxConnectionPoolSize)
-                    .defaultMaxConnectionsPerRoute(apacheMaxConnectionPoolSize).build();
-            objectStorageBuilder.clientConfigurator(new ApacheConfigurator.NonBuffering(
-                    ApacheConnectorProperties.builder()
-                            .connectionClosingStrategy(apacheConnectionClosingStrategy)
-                            .connectionPoolConfig(apacheConnectionPoolConfig).build()));
+            ApacheConnectionPoolConfig apacheConnectionPoolConfig =
+                    ApacheConnectionPoolConfig.newDefault()
+                            .builder()
+                            .totalOpenConnections(apacheMaxConnectionPoolSize)
+                            .defaultMaxConnectionsPerRoute(apacheMaxConnectionPoolSize)
+                            .build();
+            objectStorageBuilder.clientConfigurator(
+                    new ApacheConfigurator.NonBuffering(
+                            ApacheConnectorProperties.builder()
+                                    .connectionClosingStrategy(apacheConnectionClosingStrategy)
+                                    .connectionPoolConfig(apacheConnectionPoolConfig)
+                                    .build()));
         }
 
         if (!propertyAccessor.asBoolean().get(BmcProperties.OBJECT_AUTO_CLOSE_INPUT_STREAM)) {
@@ -245,8 +262,7 @@ public class BmcDataStoreFactory {
                         authDetailsProvider, clientConfig, propertyAccessor, httpProxyUri);
     }
 
-    private ObjectStorage buildClientWithProxy
-            (
+    private ObjectStorage buildClientWithProxy(
             final BasicAuthenticationDetailsProvider authDetailsProvider,
             final ClientConfiguration clientConfig,
             final BmcPropertyAccessor propertyAccessor,

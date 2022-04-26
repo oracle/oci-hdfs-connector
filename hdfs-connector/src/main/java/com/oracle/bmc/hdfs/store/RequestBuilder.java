@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -12,11 +12,8 @@ import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
 
-import com.oracle.bmc.objectstorage.ObjectStorage;
-import com.oracle.bmc.objectstorage.model.MultipartUpload;
 import com.oracle.bmc.objectstorage.model.RenameObjectDetails;
 import com.oracle.bmc.objectstorage.requests.*;
-import com.oracle.bmc.objectstorage.transfer.MultipartObjectAssembler;
 import com.oracle.bmc.objectstorage.transfer.ProgressReporter;
 import com.oracle.bmc.objectstorage.transfer.UploadManager.UploadRequest;
 
@@ -145,7 +142,8 @@ class RequestBuilder {
                         .build();
         UploadRequest.UploadRequestBuilder uploadRequestBuilder =
                 UploadRequest.builder(input, contentLengthInBytes)
-                        .parallelUploadExecutorService(parallelUploadExecutor).allowOverwrite(allowOverwrite);
+                        .parallelUploadExecutorService(parallelUploadExecutor)
+                        .allowOverwrite(allowOverwrite);
 
         if (progressable != null) {
             uploadRequestBuilder.progressReporter(new HadoopProgressReporter(progressable));

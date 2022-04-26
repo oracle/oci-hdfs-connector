@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -118,32 +118,41 @@ public class BmcDataStore {
                 this.createExecutor(propertyAccessor, uploadConfigurationBuilder);
         final UploadConfiguration uploadConfiguration = uploadConfigurationBuilder.build();
         LOG.info("Using upload configuration: {}", uploadConfiguration);
-        this.uploadManager = new UploadManager(configureObjectStorage(objectStorage, propertyAccessor), uploadConfiguration);
+        this.uploadManager =
+                new UploadManager(
+                        configureObjectStorage(objectStorage, propertyAccessor),
+                        uploadConfiguration);
         this.requestBuilder = new RequestBuilder(namespace, bucket);
         this.blockSizeInBytes = propertyAccessor.asLong().get(BmcProperties.BLOCK_SIZE_IN_MB) * MiB;
-        this.multipartUploadRequestBuilder = CreateMultipartUploadRequest.builder()
-                .bucketName(bucket)
-                .namespaceName(namespace);
+        this.multipartUploadRequestBuilder =
+                CreateMultipartUploadRequest.builder().bucketName(bucket).namespaceName(namespace);
         this.useInMemoryReadBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_READ_BUFFER);
         this.useInMemoryWriteBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_WRITE_BUFFER);
         this.useMultipartUploadWriteBuffer =
-                propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
-        this.useReadAhead =
-                propertyAccessor.asBoolean().get(BmcProperties.READ_AHEAD);
-        this.readAheadSizeInBytes = propertyAccessor.asInteger().get(BmcProperties.READ_AHEAD_BLOCK_SIZE);
+                propertyAccessor
+                        .asBoolean()
+                        .get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
+        this.useReadAhead = propertyAccessor.asBoolean().get(BmcProperties.READ_AHEAD);
+        this.readAheadSizeInBytes =
+                propertyAccessor.asInteger().get(BmcProperties.READ_AHEAD_BLOCK_SIZE);
 
         if (this.useInMemoryWriteBuffer && this.useMultipartUploadWriteBuffer) {
             throw new IllegalArgumentException(
-                    BmcProperties.IN_MEMORY_WRITE_BUFFER.getPropertyName() + " and " +
-                            BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED.getPropertyName() +
-                            " are mutually exclusive");
+                    BmcProperties.IN_MEMORY_WRITE_BUFFER.getPropertyName()
+                            + " and "
+                            + BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED
+                                    .getPropertyName()
+                            + " are mutually exclusive");
         }
 
         if (this.useInMemoryReadBuffer && this.useReadAhead) {
-            throw new IllegalArgumentException(BmcProperties.IN_MEMORY_READ_BUFFER.getPropertyName() + " and " +
-                    BmcProperties.READ_AHEAD.getPropertyName() + " are mutually exclusive");
+            throw new IllegalArgumentException(
+                    BmcProperties.IN_MEMORY_READ_BUFFER.getPropertyName()
+                            + " and "
+                            + BmcProperties.READ_AHEAD.getPropertyName()
+                            + " are mutually exclusive");
         }
 
         this.objectMetadataCache = configureHeadObjectCache(propertyAccessor);
@@ -155,15 +164,17 @@ public class BmcDataStore {
         final Integer numThreadsForRenameDirectoryOperation =
                 propertyAccessor.asInteger().get(BmcProperties.RENAME_DIRECTORY_NUM_THREADS);
         final ExecutorService executorService;
-        if (numThreadsForRenameDirectoryOperation == null || numThreadsForRenameDirectoryOperation <= 1) {
+        if (numThreadsForRenameDirectoryOperation == null
+                || numThreadsForRenameDirectoryOperation <= 1) {
             executorService = Executors.newSingleThreadExecutor();
-        }
-        else {
-            executorService = Executors.newFixedThreadPool(numThreadsForRenameDirectoryOperation,
-                    new ThreadFactoryBuilder()
-                        .setDaemon(true)
-                        .setNameFormat("bmcs-hdfs-rename-%d")
-                        .build());
+        } else {
+            executorService =
+                    Executors.newFixedThreadPool(
+                            numThreadsForRenameDirectoryOperation,
+                            new ThreadFactoryBuilder()
+                                    .setDaemon(true)
+                                    .setNameFormat("bmcs-hdfs-rename-%d")
+                                    .build());
         }
         return executorService;
     }
@@ -172,56 +183,103 @@ public class BmcDataStore {
             ObjectStorage originalObjectStorage, BmcPropertyAccessor propertyAccessor) {
         ObjectStorage objectStorage = originalObjectStorage;
 
-        boolean usePayloadCaching = propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PAYLOAD_CACHING_ENABLED);
+        boolean usePayloadCaching =
+                propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PAYLOAD_CACHING_ENABLED);
 
         if (usePayloadCaching) {
             try {
-                String cachingDirectoryProperty = propertyAccessor.asString().get(BmcProperties.OBJECT_PAYLOAD_CACHING_DIRECTORY);
+                String cachingDirectoryProperty =
+                        propertyAccessor
+                                .asString()
+                                .get(BmcProperties.OBJECT_PAYLOAD_CACHING_DIRECTORY);
                 java.nio.file.Path directory =
-                        (cachingDirectoryProperty != null) ? Paths.get(cachingDirectoryProperty) : Paths
-                                .get(System.getProperty("java.io.tmpdir"))
-                                .resolve("oci-hdfs-payload-cache");
+                        (cachingDirectoryProperty != null)
+                                ? Paths.get(cachingDirectoryProperty)
+                                : Paths.get(System.getProperty("java.io.tmpdir"))
+                                        .resolve("oci-hdfs-payload-cache");
                 LOG.debug("Payload caching directory is '{}'", directory);
 
-                Class<ConsistencyPolicy> consistencyPolicyClass = (Class<ConsistencyPolicy>)
-                        Class.forName(propertyAccessor.asString().get(BmcProperties.OBJECT_PAYLOAD_CACHING_CONSISTENCY_POLICY_CLASS));
+                Class<ConsistencyPolicy> consistencyPolicyClass =
+                        (Class<ConsistencyPolicy>)
+                                Class.forName(
+                                        propertyAccessor
+                                                .asString()
+                                                .get(
+                                                        BmcProperties
+                                                                .OBJECT_PAYLOAD_CACHING_CONSISTENCY_POLICY_CLASS));
                 ConsistencyPolicy consistencyPolicy = consistencyPolicyClass.newInstance();
                 LOG.debug("Consistency policy is '{}'", consistencyPolicy.getClass().getName());
 
-                boolean recordStatistics = propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED);
-                CachingObjectStorage.Configuration.ConfigurationBuilder configurationBuilder = CachingObjectStorage
-                        .newConfiguration()
-                        .client(objectStorage)
-                        .cacheDirectory(directory)
-                        .recordStats(recordStatistics)
-                        .initialCapacity(propertyAccessor.asInteger().get(BmcProperties.OBJECT_PAYLOAD_CACHING_INITIAL_CAPACITY))
-                        .consistencyPolicy(consistencyPolicy);
+                boolean recordStatistics =
+                        propertyAccessor
+                                .asBoolean()
+                                .get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED);
+                CachingObjectStorage.Configuration.ConfigurationBuilder configurationBuilder =
+                        CachingObjectStorage.newConfiguration()
+                                .client(objectStorage)
+                                .cacheDirectory(directory)
+                                .recordStats(recordStatistics)
+                                .initialCapacity(
+                                        propertyAccessor
+                                                .asInteger()
+                                                .get(
+                                                        BmcProperties
+                                                                .OBJECT_PAYLOAD_CACHING_INITIAL_CAPACITY))
+                                .consistencyPolicy(consistencyPolicy);
 
-                Integer maxSize = propertyAccessor.asInteger().get(BmcProperties.OBJECT_PAYLOAD_CACHING_MAXIMUM_SIZE);
+                Integer maxSize =
+                        propertyAccessor
+                                .asInteger()
+                                .get(BmcProperties.OBJECT_PAYLOAD_CACHING_MAXIMUM_SIZE);
                 if (maxSize != null) {
                     configurationBuilder = configurationBuilder.maximumSize(maxSize);
                 }
-                Long maxWeight = propertyAccessor.asLong().get(BmcProperties.OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES);
+                Long maxWeight =
+                        propertyAccessor
+                                .asLong()
+                                .get(BmcProperties.OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES);
                 if (maxWeight != null) {
                     configurationBuilder = configurationBuilder.maximumWeight(maxWeight);
                 }
-                Integer expireAfterAccess = propertyAccessor.asInteger().get(BmcProperties.OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS);
+                Integer expireAfterAccess =
+                        propertyAccessor
+                                .asInteger()
+                                .get(
+                                        BmcProperties
+                                                .OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS);
                 if (expireAfterAccess != null) {
-                    configurationBuilder = configurationBuilder.expireAfterAccess(Duration.ofSeconds(expireAfterAccess));
+                    configurationBuilder =
+                            configurationBuilder.expireAfterAccess(
+                                    Duration.ofSeconds(expireAfterAccess));
                 }
-                Integer expireAfterWrite = propertyAccessor.asInteger().get(BmcProperties.OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS);
+                Integer expireAfterWrite =
+                        propertyAccessor
+                                .asInteger()
+                                .get(
+                                        BmcProperties
+                                                .OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS);
                 if (expireAfterWrite != null) {
-                    configurationBuilder = configurationBuilder.expireAfterWrite(Duration.ofSeconds(expireAfterWrite));
+                    configurationBuilder =
+                            configurationBuilder.expireAfterWrite(
+                                    Duration.ofSeconds(expireAfterWrite));
                 }
 
-                CachingObjectStorage cachingObjectStorage = CachingObjectStorage.build(configurationBuilder.build());
+                CachingObjectStorage cachingObjectStorage =
+                        CachingObjectStorage.build(configurationBuilder.build());
                 objectStorage = cachingObjectStorage;
-                long period = propertyAccessor.asLong().get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS);
-                if(recordStatistics) {
-                    logCacheStatistics(period,cachingObjectStorage);
+                long period =
+                        propertyAccessor
+                                .asLong()
+                                .get(
+                                        BmcProperties
+                                                .OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS);
+                if (recordStatistics) {
+                    logCacheStatistics(period, cachingObjectStorage);
                 }
-            } catch(Exception e) {
-                LOG.error("Failed to configure Object Storage payload caching; payload caching disabled", e);
+            } catch (Exception e) {
+                LOG.error(
+                        "Failed to configure Object Storage payload caching; payload caching disabled",
+                        e);
             }
         }
         return objectStorage;
@@ -234,17 +292,21 @@ public class BmcDataStore {
      * @param cachingObjectStorage
      */
     private void logCacheStatistics(long period, CachingObjectStorage cachingObjectStorage) {
-        final ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor(
-                new ThreadFactory() {
-                    public Thread newThread(Runnable r) {
-                        Thread t = Executors.defaultThreadFactory().newThread(r);
-                        t.setDaemon(true);
-                        return t;
-                    }
-                });
+        final ScheduledExecutorService executorService =
+                Executors.newSingleThreadScheduledExecutor(
+                        new ThreadFactory() {
+                            public Thread newThread(Runnable r) {
+                                Thread t = Executors.defaultThreadFactory().newThread(r);
+                                t.setDaemon(true);
+                                return t;
+                            }
+                        });
         try {
             executorService.scheduleAtFixedRate(
-                    () -> LOG.info("Cache statistics: {}", cachingObjectStorage.getCacheStatistics()),
+                    () ->
+                            LOG.info(
+                                    "Cache statistics: {}",
+                                    cachingObjectStorage.getCacheStatistics()),
                     30,
                     period,
                     TimeUnit.SECONDS);
@@ -273,44 +335,51 @@ public class BmcDataStore {
 
         if (!headObjectCachingEnabled) {
             LOG.info("Object metadata caching disabled");
-            return CacheBuilder.newBuilder()
-                    .maximumSize(0)
-                    .build(loader);
+            return CacheBuilder.newBuilder().maximumSize(0).build(loader);
         }
 
-        String headObjectCachingSpec = propertyAccessor.asString().get(BmcProperties.OBJECT_METADATA_CACHING_SPEC);
+        String headObjectCachingSpec =
+                propertyAccessor.asString().get(BmcProperties.OBJECT_METADATA_CACHING_SPEC);
 
         CacheBuilderSpec cacheBuilderSpec = CacheBuilderSpec.parse(headObjectCachingSpec);
 
         LOG.info("Object metadata caching enabled with cache spec: '{}'", cacheBuilderSpec);
 
         return CacheBuilder.from(cacheBuilderSpec)
-                           .removalListener(new RemovalListener<String, HeadPair>() {
-                               @Override
-                               public void onRemoval(RemovalNotification<String, HeadPair> removalNotification) {
-                                   LOG.info("Object metadata cache entry '{}' removed (cause '{}', was evicted '{}')",
-                                            removalNotification.getKey(),
-                                            removalNotification.getCause(),
-                                            removalNotification.wasEvicted());
-                               }
-                           })
-                           .build(loader);
+                .removalListener(
+                        new RemovalListener<String, HeadPair>() {
+                            @Override
+                            public void onRemoval(
+                                    RemovalNotification<String, HeadPair> removalNotification) {
+                                LOG.info(
+                                        "Object metadata cache entry '{}' removed (cause '{}', was evicted '{}')",
+                                        removalNotification.getKey(),
+                                        removalNotification.getCause(),
+                                        removalNotification.wasEvicted());
+                            }
+                        })
+                .build(loader);
     }
 
-    private Cache<String, BmcReadAheadFSInputStream.ParquetFooterInfo> configureParquetCache(BmcPropertyAccessor propertyAccessor) {
+    private Cache<String, BmcReadAheadFSInputStream.ParquetFooterInfo> configureParquetCache(
+            BmcPropertyAccessor propertyAccessor) {
         // this disables the cache by default
         String spec = "maximumSize=0";
         if (propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PARQUET_CACHING_ENABLED)) {
             spec = propertyAccessor.asString().get(BmcProperties.OBJECT_PARQUET_CACHING_SPEC);
-            LOG.info("{} is enabled, setting parquet cache spec to '{}'",
-                     BmcProperties.OBJECT_PARQUET_CACHING_ENABLED.getPropertyName(), spec);
+            LOG.info(
+                    "{} is enabled, setting parquet cache spec to '{}'",
+                    BmcProperties.OBJECT_PARQUET_CACHING_ENABLED.getPropertyName(),
+                    spec);
         } else {
-            LOG.info("{} is disabled, setting parquet cache spec to '{}', which disables the cache",
-                     BmcProperties.OBJECT_PARQUET_CACHING_ENABLED.getPropertyName(), spec);
+            LOG.info(
+                    "{} is disabled, setting parquet cache spec to '{}', which disables the cache",
+                    BmcProperties.OBJECT_PARQUET_CACHING_ENABLED.getPropertyName(),
+                    spec);
         }
         return CacheBuilder.from(CacheBuilderSpec.parse(spec))
-                           .removalListener(BmcReadAheadFSInputStream.getParquetCacheRemovalListener())
-                           .build();
+                .removalListener(BmcReadAheadFSInputStream.getParquetCacheRemovalListener())
+                .build();
     }
 
     private UploadConfigurationBuilder createUploadConfiguration(
@@ -350,9 +419,13 @@ public class BmcDataStore {
         final Integer numThreadsForParallelUpload =
                 propertyAccessor.asInteger().get(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS);
 
-        final boolean streamMultipartEnabled = propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
+        final boolean streamMultipartEnabled =
+                propertyAccessor
+                        .asBoolean()
+                        .get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
 
-        if (!streamMultipartEnabled && (numThreadsForParallelUpload == null || numThreadsForParallelUpload <= 0)) {
+        if (!streamMultipartEnabled
+                && (numThreadsForParallelUpload == null || numThreadsForParallelUpload <= 0)) {
             return null;
         }
         if (!streamMultipartEnabled && numThreadsForParallelUpload == 1) {
@@ -364,27 +437,37 @@ public class BmcDataStore {
             // if !streamMultipartEnabled, then this would have returned null above, so the only case this can happoen
             // is if streamMultipartEnabled and numThreadsForParallelUpload == null
             throw new IllegalArgumentException(
-                    BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED.getPropertyName() + " requires " +
-                            BmcProperties.MULTIPART_NUM_UPLOAD_THREADS.getPropertyName() +
-                            " to be set");
+                    BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED.getPropertyName()
+                            + " requires "
+                            + BmcProperties.MULTIPART_NUM_UPLOAD_THREADS.getPropertyName()
+                            + " to be set");
         }
 
         /*
-            This case is handled differently. When streaming, if we didn't fix the amount of work that the threads can
-            handle at one time, we would read all of the stream into memory while writing was in progress. This defeats
-            the purpose having stream <-> stream uploads without holding the entire stream in memory. This executor
-            will reject work after the queue becomes full and it will wait until a slot opens to re-enqueue that work.
-         */
+           This case is handled differently. When streaming, if we didn't fix the amount of work that the threads can
+           handle at one time, we would read all of the stream into memory while writing was in progress. This defeats
+           the purpose having stream <-> stream uploads without holding the entire stream in memory. This executor
+           will reject work after the queue becomes full and it will wait until a slot opens to re-enqueue that work.
+        */
         if (streamMultipartEnabled) {
-            final int taskTimeout = propertyAccessor.asInteger().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS);
-            final BlockingRejectionHandler rejectedExecutionHandler = new BlockingRejectionHandler(taskTimeout);
+            final int taskTimeout =
+                    propertyAccessor
+                            .asInteger()
+                            .get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS);
+            final BlockingRejectionHandler rejectedExecutionHandler =
+                    new BlockingRejectionHandler(taskTimeout);
 
-            return new ThreadPoolExecutor(numThreadsForParallelUpload, numThreadsForParallelUpload,
-                    0L, TimeUnit.MILLISECONDS,
-                    new LinkedBlockingQueue<Runnable>(numThreadsForParallelUpload), new ThreadFactoryBuilder()
-                    .setDaemon(true)
-                    .setNameFormat("bmcs-hdfs-blocking-upload-%d")
-                    .build(), rejectedExecutionHandler);
+            return new ThreadPoolExecutor(
+                    numThreadsForParallelUpload,
+                    numThreadsForParallelUpload,
+                    0L,
+                    TimeUnit.MILLISECONDS,
+                    new LinkedBlockingQueue<Runnable>(numThreadsForParallelUpload),
+                    new ThreadFactoryBuilder()
+                            .setDaemon(true)
+                            .setNameFormat("bmcs-hdfs-blocking-upload-%d")
+                            .build(),
+                    rejectedExecutionHandler);
         }
         return Executors.newFixedThreadPool(
                 numThreadsForParallelUpload,
@@ -472,14 +555,22 @@ public class BmcDataStore {
         renameOperationsUsingExecutor(objectsToRename, sourceDirectory, destinationDirectory);
     }
 
-    private void renameOperationsUsingExecutor(final ArrayList<String> objectsToRename, final String sourceDirectory, final String destinationDirectory) throws IOException {
+    private void renameOperationsUsingExecutor(
+            final ArrayList<String> objectsToRename,
+            final String sourceDirectory,
+            final String destinationDirectory)
+            throws IOException {
         List<RenameResponse> renameResponses = new ArrayList<>();
         for (final String objectToRename : objectsToRename) {
             final String newObjectName =
-                    objectToRename.replaceFirst(Pattern.quote(sourceDirectory), destinationDirectory);
-            Future<String> futureResponse = this.parallelRenameExecutor.submit(new RenameOperation(
-                    this.objectStorage, this.requestBuilder.renameObject(objectToRename, newObjectName)
-            ));
+                    objectToRename.replaceFirst(
+                            Pattern.quote(sourceDirectory), destinationDirectory);
+            Future<String> futureResponse =
+                    this.parallelRenameExecutor.submit(
+                            new RenameOperation(
+                                    this.objectStorage,
+                                    this.requestBuilder.renameObject(
+                                            objectToRename, newObjectName)));
             renameResponses.add(new RenameResponse(objectToRename, newObjectName, futureResponse));
         }
         awaitRenameOperationTermination(renameResponses);
@@ -492,15 +583,22 @@ public class BmcDataStore {
         @Getter private final Future<String> renameOperationFuture;
     }
 
-    private void awaitRenameOperationTermination(List<RenameResponse> renameResponses) throws IOException {
+    private void awaitRenameOperationTermination(List<RenameResponse> renameResponses)
+            throws IOException {
         LOG.debug("Attempting to rename objects in parallel");
         for (RenameResponse renameResponse : renameResponses) {
             try {
-                LOG.debug("Attempting to rename {} to {}", renameResponse.getOldName(), renameResponse.getNewName());
+                LOG.debug(
+                        "Attempting to rename {} to {}",
+                        renameResponse.getOldName(),
+                        renameResponse.getNewName());
                 Future<String> renameFuture = renameResponse.getRenameOperationFuture();
                 String newEntityTag = renameFuture.get();
                 this.statistics.incrementWriteOps(1); // 1 put
-                LOG.debug("{} renamed to {}", renameResponse.getOldName(), renameResponse.getNewName());
+                LOG.debug(
+                        "{} renamed to {}",
+                        renameResponse.getOldName(),
+                        renameResponse.getNewName());
                 LOG.debug("{} has eTag {}", renameResponse.getNewName(), newEntityTag);
             } catch (InterruptedException e) {
                 LOG.debug("Thread interrupted while waiting for rename completion", e);
@@ -508,7 +606,11 @@ public class BmcDataStore {
             } catch (ExecutionException e) {
                 LOG.debug("Execution exception while waiting for rename completion", e);
             } catch (Exception e) {
-                LOG.debug("Failed to rename {} to {}", renameResponse.getOldName(), renameResponse.getNewName(), e);
+                LOG.debug(
+                        "Failed to rename {} to {}",
+                        renameResponse.getOldName(),
+                        renameResponse.getNewName(),
+                        e);
                 throw new IOException("Unable to perform rename", e);
             }
         }
@@ -836,7 +938,7 @@ public class BmcDataStore {
     private HeadPair getObjectMetadata(final String key) throws IOException {
         try {
             return objectMetadataCache.getUnchecked(key);
-        } catch(UncheckedExecutionException ee) {
+        } catch (UncheckedExecutionException ee) {
             if (ee.getCause() instanceof IOException) {
                 throw (IOException) ee.getCause();
             } else if (ee.getCause() instanceof ObjectMetadataNotFoundException) {
@@ -903,8 +1005,7 @@ public class BmcDataStore {
     }
 
     private static class ObjectMetadataNotFoundException extends RuntimeException {
-        @Getter
-        private final String key;
+        @Getter private final String key;
 
         public ObjectMetadataNotFoundException(String key) {
             super("Object metadata not found for key: " + key);
@@ -935,12 +1036,20 @@ public class BmcDataStore {
                 new GetObjectRequestFunction(path);
 
         if (this.useInMemoryReadBuffer) {
-            return new BmcInMemoryFSInputStream(this.objectStorage, status, requestBuilder, this.statistics);
-        } if (this.useReadAhead) {
-            return new BmcReadAheadFSInputStream(this.objectStorage, status, requestBuilder, this.statistics,
-                                                 this.readAheadSizeInBytes, this.parquetCache);
+            return new BmcInMemoryFSInputStream(
+                    this.objectStorage, status, requestBuilder, this.statistics);
+        }
+        if (this.useReadAhead) {
+            return new BmcReadAheadFSInputStream(
+                    this.objectStorage,
+                    status,
+                    requestBuilder,
+                    this.statistics,
+                    this.readAheadSizeInBytes,
+                    this.parquetCache);
         } else {
-            return new BmcDirectFSInputStream(this.objectStorage, status, requestBuilder, this.statistics);
+            return new BmcDirectFSInputStream(
+                    this.objectStorage, status, requestBuilder, this.statistics);
         }
     }
 
@@ -958,7 +1067,8 @@ public class BmcDataStore {
     public OutputStream openWriteStream(
             final Path path, final int bufferSizeInBytes, final Progressable progress) {
         LOG.debug("Opening write stream to {}", path);
-        final boolean allowOverwrite = this.propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_ALLOW_OVERWRITE);
+        final boolean allowOverwrite =
+                this.propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_ALLOW_OVERWRITE);
         LOG.debug("Allowing overwrites when using Multipart uploads");
         final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn =
                 new UploadDetailsFunction(this.pathToObject(path), allowOverwrite, progress);
@@ -966,17 +1076,20 @@ public class BmcDataStore {
         // takes precedence
         if (this.useMultipartUploadWriteBuffer) {
             final String objectName = this.pathToObject(path);
-            final CreateMultipartUploadDetails details = CreateMultipartUploadDetails.builder()
-                    .object(objectName).build();
+            final CreateMultipartUploadDetails details =
+                    CreateMultipartUploadDetails.builder().object(objectName).build();
             this.multipartUploadRequestBuilder.createMultipartUploadDetails(details);
-            final MultipartUploadRequest multipartUploadRequest = MultipartUploadRequest.builder()
-                    .objectStorage(this.objectStorage)
-                    .multipartUploadRequest(this.multipartUploadRequestBuilder.buildWithoutInvocationCallback())
-                    .allowOverwrite(allowOverwrite).build();
+            final MultipartUploadRequest multipartUploadRequest =
+                    MultipartUploadRequest.builder()
+                            .objectStorage(this.objectStorage)
+                            .multipartUploadRequest(
+                                    this.multipartUploadRequestBuilder
+                                            .buildWithoutInvocationCallback())
+                            .allowOverwrite(allowOverwrite)
+                            .build();
             return new BmcMultipartOutputStream(
                     this.propertyAccessor, multipartUploadRequest, bufferSizeInBytes);
-        }
-        else if (this.useInMemoryWriteBuffer) {
+        } else if (this.useInMemoryWriteBuffer) {
             return new BmcInMemoryOutputStream(
                     this.uploadManager, bufferSizeInBytes, requestBuilderFn);
         } else {

@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates.  All rights reserved.
- * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
+ * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
 package com.oracle.bmc.hdfs.caching.internal;
 
@@ -114,8 +115,7 @@ public class GuavaCacheBuilder<K, V>
     }
 
     @Override
-    public GuavaCacheBuilder<K, V> removalListener(
-            Cache.RemovalListener<K, V> removalListener) {
+    public GuavaCacheBuilder<K, V> removalListener(Cache.RemovalListener<K, V> removalListener) {
         this.removalListener = removalListener;
         return this;
     }
@@ -125,15 +125,17 @@ public class GuavaCacheBuilder<K, V>
         Objects.requireNonNull(removalListener, "removalListener may not be null");
 
         com.google.common.cache.CacheBuilder guavaCacheBuilder =
-                com.google.common.cache.CacheBuilder
-                        .newBuilder()
+                com.google.common.cache.CacheBuilder.newBuilder()
                         .initialCapacity(initialCapacity)
                         .concurrencyLevel(concurrencyLevel)
-                        .removalListener((RemovalListener<K, V>) notification ->
-                                removalListener.onRemoval(new GuavaRemovalNotification<K, V>(
-                                        notification.getKey(),
-                                        notification.getValue(),
-                                        notification.getCause())));
+                        .removalListener(
+                                (RemovalListener<K, V>)
+                                        notification ->
+                                                removalListener.onRemoval(
+                                                        new GuavaRemovalNotification<K, V>(
+                                                                notification.getKey(),
+                                                                notification.getValue(),
+                                                                notification.getCause())));
 
         if (maximumSize != null) {
             guavaCacheBuilder = guavaCacheBuilder.maximumSize(maximumSize);
@@ -143,7 +145,8 @@ public class GuavaCacheBuilder<K, V>
         }
         if (weigher != null && maximumSize == null) {
             guavaCacheBuilder =
-                    guavaCacheBuilder.weigher((Weigher<K, V>) (key, value) -> weigher.weigh(key, value));
+                    guavaCacheBuilder.weigher(
+                            (Weigher<K, V>) (key, value) -> weigher.weigh(key, value));
         }
         if (recordStats) {
             guavaCacheBuilder = guavaCacheBuilder.recordStats();
@@ -167,8 +170,7 @@ public class GuavaCacheBuilder<K, V>
      * @param <KK> key type
      * @param <VV> value type
      */
-    public static class GuavaRemovalNotification<KK, VV>
-            extends Cache.RemovalNotification<KK, VV> {
+    public static class GuavaRemovalNotification<KK, VV> extends Cache.RemovalNotification<KK, VV> {
         @Getter private final RemovalCause cause;
 
         public GuavaRemovalNotification(KK key, VV value, RemovalCause cause) {

@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates.  All rights reserved.
- * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
+ * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
 package com.oracle.bmc.hdfs.caching;
 
@@ -45,21 +46,24 @@ public class NoOpConsistencyPolicy implements ConsistencyPolicy {
     public CachingObjectStorage.GetObjectRequestCacheKey constructKey(GetObjectRequest request) {
         return new CachingObjectStorage.GetObjectRequestCacheKey(
                 GetObjectRequest.builder()
-                                .copy(request)
-                                .opcClientRequestId(null)
-                                .retryConfiguration(null)
-                                .invocationCallback(null)
-                                .build());
+                        .copy(request)
+                        .opcClientRequestId(null)
+                        .retryConfiguration(null)
+                        .invocationCallback(null)
+                        .build());
     }
 
     @Override
     public GetObjectResponse initiateRequest(
-            ObjectStorage client, DownloadManager downloadManager,
-            GetObjectRequest request, CachingObjectStorage.GetObjectRequestCacheKey key,
+            ObjectStorage client,
+            DownloadManager downloadManager,
+            GetObjectRequest request,
+            CachingObjectStorage.GetObjectRequestCacheKey key,
             CachingObjectStorage.GetObjectResponseCacheValue previousValue) {
         // if we have a previous ETag, it means we had something in the cache
         if (previousValue != null) {
-            LOG.debug("Reusing cached request with ETag='{}' check for key '{}'", previousValue, key);
+            LOG.debug(
+                    "Reusing cached request with ETag='{}' check for key '{}'", previousValue, key);
             return null;
         }
 

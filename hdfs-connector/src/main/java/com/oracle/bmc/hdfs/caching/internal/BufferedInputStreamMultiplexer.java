@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
+ * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
+ */
 package com.oracle.bmc.hdfs.caching.internal;
 
 import java.io.BufferedInputStream;
@@ -59,7 +64,7 @@ public class BufferedInputStreamMultiplexer {
                 buffer.write(read);
             }
             return read;
-        } catch(IOException ioe) {
+        } catch (IOException ioe) {
             buffer.closeSource();
             StreamUtils.closeQuietly(source);
             throw ioe;
@@ -83,7 +88,7 @@ public class BufferedInputStreamMultiplexer {
                 buffer.write(b, off, read);
             }
             return read;
-        } catch(IOException ioe) {
+        } catch (IOException ioe) {
             buffer.closeSource();
             throw ioe;
         }
@@ -173,11 +178,9 @@ public class BufferedInputStreamMultiplexer {
     protected static abstract class AbstractBuffer implements Buffer {
         protected volatile BufferedInputStreamMultiplexer multiplexer;
 
-        @Getter
-        protected volatile long bytesWritten = 0;
+        @Getter protected volatile long bytesWritten = 0;
 
-        @Getter
-        protected volatile boolean isSourceClosed = false;
+        @Getter protected volatile boolean isSourceClosed = false;
 
         @Override
         public void setMultiplexer(BufferedInputStreamMultiplexer multiplexer) {
@@ -230,7 +233,8 @@ public class BufferedInputStreamMultiplexer {
                     }
                     System.arraycopy(buf, 0, newBuffer, 0, buf.length);
                     buf = newBuffer;
-                    remainingInBuffer = buf.length - bytesWritten;;
+                    remainingInBuffer = buf.length - bytesWritten;
+                    ;
                 }
                 long bytesToCopy = Math.min(len, remainingInBuffer);
                 System.arraycopy(b, off, buf, (int) bytesWritten, (int) bytesToCopy);
@@ -245,9 +249,9 @@ public class BufferedInputStreamMultiplexer {
             return new MemoryBufferInputStream();
         }
 
-        protected class MemoryBufferInputStream extends MultiplexerInputStream implements Closeable, AutoCloseable {
-            @Getter
-            private long bytesRead = 0;
+        protected class MemoryBufferInputStream extends MultiplexerInputStream
+                implements Closeable, AutoCloseable {
+            @Getter private long bytesRead = 0;
 
             @Override
             public int read(byte[] b) throws IOException {
@@ -272,7 +276,7 @@ public class BufferedInputStreamMultiplexer {
                         bytesReturned += bytesAvailable;
                     }
 
-                    while(len > 0) {
+                    while (len > 0) {
                         if (isSourceClosed) {
                             break;
                         }
@@ -302,7 +306,7 @@ public class BufferedInputStreamMultiplexer {
 
                     if (bytesRead < bytesWritten) {
                         // more has been read already
-                        return buf[(int)bytesRead++] & 0xff;
+                        return buf[(int) bytesRead++] & 0xff;
                     }
                     if (isSourceClosed) {
                         // we're at the end
@@ -324,8 +328,7 @@ public class BufferedInputStreamMultiplexer {
      * File-backed buffer.
      */
     public static class FileBuffer extends AbstractBuffer {
-        @Getter
-        private final RandomAccessFile bufferFile;
+        @Getter private final RandomAccessFile bufferFile;
         private final FileChannel channel;
 
         /**
@@ -346,7 +349,7 @@ public class BufferedInputStreamMultiplexer {
                 channel.write(bb);
                 bytesWritten += len;
                 LOG.trace("Wrote {} more bytes, {} bytes written in total", len, bytesWritten);
-            } catch(IOException ioe) {
+            } catch (IOException ioe) {
                 closeSource();
                 throw ioe;
             }
@@ -357,9 +360,9 @@ public class BufferedInputStreamMultiplexer {
             return new FileBufferInputStream();
         }
 
-        protected class FileBufferInputStream extends MultiplexerInputStream implements Closeable, AutoCloseable {
-            @Getter
-            private long bytesRead = 0;
+        protected class FileBufferInputStream extends MultiplexerInputStream
+                implements Closeable, AutoCloseable {
+            @Getter private long bytesRead = 0;
 
             @Override
             public int read(byte[] b) throws IOException {
@@ -373,7 +376,11 @@ public class BufferedInputStreamMultiplexer {
                         return -1;
                     }
                     int bytesReturned = 0;
-                    int bytesAvailable = (int) Math.min(Integer.MAX_VALUE, Math.min(len, bytesWritten - bytesRead));
+                    int bytesAvailable =
+                            (int)
+                                    Math.min(
+                                            Integer.MAX_VALUE,
+                                            Math.min(len, bytesWritten - bytesRead));
                     if (bytesAvailable > 0) {
                         // more has been read already
                         ByteBuffer bb = ByteBuffer.wrap(b, off, bytesAvailable);
@@ -386,7 +393,7 @@ public class BufferedInputStreamMultiplexer {
                         bytesReturned += bytesAvailable;
                     }
 
-                    while(len > 0) {
+                    while (len > 0) {
                         if (isSourceClosed) {
                             break;
                         }
@@ -404,8 +411,11 @@ public class BufferedInputStreamMultiplexer {
                         return -1;
                     }
 
-                    LOG.trace("FileBufferInputStream {} read {} bytes, {} bytes read in total",
-                              System.identityHashCode(this), bytesReturned, bytesRead);
+                    LOG.trace(
+                            "FileBufferInputStream {} read {} bytes, {} bytes read in total",
+                            System.identityHashCode(this),
+                            bytesReturned,
+                            bytesRead);
 
                     return bytesReturned;
                 }
@@ -423,13 +433,16 @@ public class BufferedInputStreamMultiplexer {
                         // this reads starting at bytesRead, and does not modify the channel's current position
                         int read = channel.read(bb, bytesRead);
                         if (read == -1) {
-                            throw new IllegalStateException("There should have been more bytes available, but read() returned -1");
+                            throw new IllegalStateException(
+                                    "There should have been more bytes available, but read() returned -1");
                         }
                         ++bytesRead;
                         bb.position(0);
 
-                        LOG.trace("FileBufferInputStream {} read 1 byte, {} bytes read in total",
-                                  System.identityHashCode(this), bytesRead);
+                        LOG.trace(
+                                "FileBufferInputStream {} read 1 byte, {} bytes read in total",
+                                System.identityHashCode(this),
+                                bytesRead);
 
                         return bb.get();
                     }
@@ -443,8 +456,10 @@ public class BufferedInputStreamMultiplexer {
                         ++bytesRead;
                     }
 
-                    LOG.trace("FileBufferInputStream {} read 1 byte, {} bytes read in total",
-                              System.identityHashCode(this), bytesRead);
+                    LOG.trace(
+                            "FileBufferInputStream {} read 1 byte, {} bytes read in total",
+                            System.identityHashCode(this),
+                            bytesRead);
 
                     return read;
                 }

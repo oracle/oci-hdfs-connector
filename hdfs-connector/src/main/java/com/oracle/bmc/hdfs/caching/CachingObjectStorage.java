@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates.  All rights reserved.
- * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
+ * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
 package com.oracle.bmc.hdfs.caching;
 
@@ -88,10 +89,9 @@ public interface CachingObjectStorage extends ObjectStorage {
         /**
          * Default is to not download in parallel.
          */
-        @lombok.Builder.Default private DownloadConfiguration downloadConfiguration = DownloadConfiguration
-                .builder()
-                .parallelDownloads(1)
-                .build();
+        @lombok.Builder.Default
+        private DownloadConfiguration downloadConfiguration =
+                DownloadConfiguration.builder().parallelDownloads(1).build();
 
         private Path cacheDirectory;
 
@@ -134,7 +134,8 @@ public interface CachingObjectStorage extends ObjectStorage {
          */
         @lombok.Builder.Default private Duration expireAfterWrite = null;
 
-        @lombok.Builder.Default private ConsistencyPolicy consistencyPolicy = new StrongConsistencyPolicy();
+        @lombok.Builder.Default
+        private ConsistencyPolicy consistencyPolicy = new StrongConsistencyPolicy();
 
         /**
          * This executor provides the threads in requests will be made. This controls how many requests can be made
@@ -142,35 +143,43 @@ public interface CachingObjectStorage extends ObjectStorage {
          *
          * By default, 50 requests can be made in parallel.
          */
-        @lombok.Builder.Default private ExecutorService downloadExecutor = new java.util.concurrent.ThreadPoolExecutor(
-                50,
-                50,
-                60L,
-                TimeUnit.SECONDS,
-                new java.util.concurrent.LinkedBlockingQueue<>(),
-                new com.google.common.util.concurrent.ThreadFactoryBuilder()
-                        .setDaemon(true)
-                        .setNameFormat(CachingObjectStorage.class.getSimpleName() + "-download-%d")
-                        .build());
+        @lombok.Builder.Default
+        private ExecutorService downloadExecutor =
+                new java.util.concurrent.ThreadPoolExecutor(
+                        50,
+                        50,
+                        60L,
+                        TimeUnit.SECONDS,
+                        new java.util.concurrent.LinkedBlockingQueue<>(),
+                        new com.google.common.util.concurrent.ThreadFactoryBuilder()
+                                .setDaemon(true)
+                                .setNameFormat(
+                                        CachingObjectStorage.class.getSimpleName() + "-download-%d")
+                                .build());
 
         /**
          * This executor provides the thread in which files will be deleted from the cache.
          */
-        @lombok.Builder.Default private ExecutorService deletionExecutor = Executors.newSingleThreadExecutor(
-                new com.google.common.util.concurrent.ThreadFactoryBuilder()
-                        .setDaemon(true)
-                        .setNameFormat(CachingObjectStorage.class.getSimpleName() + "-deletion-%d")
-                        .build());
+        @lombok.Builder.Default
+        private ExecutorService deletionExecutor =
+                Executors.newSingleThreadExecutor(
+                        new com.google.common.util.concurrent.ThreadFactoryBuilder()
+                                .setDaemon(true)
+                                .setNameFormat(
+                                        CachingObjectStorage.class.getSimpleName() + "-deletion-%d")
+                                .build());
 
         /**
          * Sets the predicate that decides if a request cannot be cached.
          */
-        @lombok.Builder.Default private UncacheablePredicate uncacheablePredicate = new DefaultUncacheablePredicate();
+        @lombok.Builder.Default
+        private UncacheablePredicate uncacheablePredicate = new DefaultUncacheablePredicate();
 
         /**
          * Sets the row lock provider.
          */
-        @lombok.Builder.Default private RowLockProvider rowLockProvider = new DefaultRowLockProvider(1024);
+        @lombok.Builder.Default
+        private RowLockProvider rowLockProvider = new DefaultRowLockProvider(1024);
 
         /**
          * Sets additional operations to be run when garbage collection is possible.
@@ -188,15 +197,16 @@ public interface CachingObjectStorage extends ObjectStorage {
              * @return this builder
              */
             public ConfigurationBuilder aggressiveCacheGarbageCollection(int sleepMillis) {
-                return this.cacheGarbageCollection(() -> {
-                    LOG.info("Aggressive garbage collection");
-                    System.gc();
-                    try {
-                        TimeUnit.MILLISECONDS.sleep(sleepMillis);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                });
+                return this.cacheGarbageCollection(
+                        () -> {
+                            LOG.info("Aggressive garbage collection");
+                            System.gc();
+                            try {
+                                TimeUnit.MILLISECONDS.sleep(sleepMillis);
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                            }
+                        });
             }
         }
     }
@@ -216,31 +226,34 @@ public interface CachingObjectStorage extends ObjectStorage {
      */
     static CachingObjectStorage build(Configuration config) {
         Objects.requireNonNull(config.client, "must provide ObjectStorage client to client to");
-        Objects.requireNonNull(config.downloadConfiguration, "must provide ObjectdownloadConfiguration");
+        Objects.requireNonNull(
+                config.downloadConfiguration, "must provide ObjectdownloadConfiguration");
         Objects.requireNonNull(config.cacheDirectory, "must provide cache directory");
         Objects.requireNonNull(config.consistencyPolicy, "must provide consistency policy");
         Objects.requireNonNull(config.deletionExecutor, "must provide deletion executor");
         Objects.requireNonNull(config.uncacheablePredicate, "must provide uncacheable predicate");
         Objects.requireNonNull(config.downloadExecutor, "must provide download executor");
         Objects.requireNonNull(config.rowLockProvider, "must provide row lock provider");
-        Objects.requireNonNull(config.cacheGarbageCollection, "must provide cacheGarbageCollection");
-        return CachingObjectStorage.build(config.client,
-                                          config.downloadConfiguration,
-                                          config.cacheDirectory,
-                                          config.downloadExecutor,
-                                          config.uncacheablePredicate,
-                                          config.consistencyPolicy,
-                                          new GuavaCacheBuilder<GetObjectRequestCacheKey, GetObjectResponseCacheValue>()
-                                                  .concurrencyLevel(config.concurrencyLevel)
-                                                  .expireAfterAccess(config.expireAfterAccess)
-                                                  .expireAfterWrite(config.expireAfterWrite)
-                                                  .initialCapacity(config.initialCapacity)
-                                                  .maximumSize(config.maximumSize)
-                                                  .maximumWeight(config.maximumWeight)
-                                                  .recordStats(config.recordStats),
-                                          config.deletionExecutor,
-                                          config.rowLockProvider,
-                                          config.cacheGarbageCollection);
+        Objects.requireNonNull(
+                config.cacheGarbageCollection, "must provide cacheGarbageCollection");
+        return CachingObjectStorage.build(
+                config.client,
+                config.downloadConfiguration,
+                config.cacheDirectory,
+                config.downloadExecutor,
+                config.uncacheablePredicate,
+                config.consistencyPolicy,
+                new GuavaCacheBuilder<GetObjectRequestCacheKey, GetObjectResponseCacheValue>()
+                        .concurrencyLevel(config.concurrencyLevel)
+                        .expireAfterAccess(config.expireAfterAccess)
+                        .expireAfterWrite(config.expireAfterWrite)
+                        .initialCapacity(config.initialCapacity)
+                        .maximumSize(config.maximumSize)
+                        .maximumWeight(config.maximumWeight)
+                        .recordStats(config.recordStats),
+                config.deletionExecutor,
+                config.rowLockProvider,
+                config.cacheGarbageCollection);
     }
 
     /**
@@ -272,9 +285,17 @@ public interface CachingObjectStorage extends ObjectStorage {
                 Proxy.newProxyInstance(
                         CachingObjectStorage.class.getClassLoader(),
                         new Class[] {CachingObjectStorage.class},
-                        new Handler(client, downloadConfiguration, cacheDirectory, downloadExecutor, uncacheablePredicate,
-                                    consistencyPolicy, cacheBuilder, deletionExecutor, rowLockProvider,
-                                    cacheGarbageCollection));
+                        new Handler(
+                                client,
+                                downloadConfiguration,
+                                cacheDirectory,
+                                downloadExecutor,
+                                uncacheablePredicate,
+                                consistencyPolicy,
+                                cacheBuilder,
+                                deletionExecutor,
+                                rowLockProvider,
+                                cacheGarbageCollection));
     }
 
     // new interface methods
@@ -395,29 +416,30 @@ public interface CachingObjectStorage extends ObjectStorage {
             Cache.RemovalListener<GetObjectRequestCacheKey, GetObjectResponseCacheValue>
                     removalListener = new CachingObjectStorage.RemovalListener(this);
 
-            Cache.Weigher<GetObjectRequestCacheKey, GetObjectResponseCacheValue>
-                    weighByLength =
-                            (key, value) -> {
-                                Long contentLength = value.originalResponse.getContentLength();
-                                if (contentLength == null) {
-                                    if (value.cachedContent != null) {
-                                        contentLength = value.cachedContent.getPath().toFile().length();
-                                    } else {
-                                        contentLength = 0L;
-                                    }
-                                }
-                                if (contentLength > Integer.MAX_VALUE) {
-                                    contentLength = Long.valueOf(Integer.MAX_VALUE);
-                                }
-                                LOG.debug("Weight for '{}' is '{}'", value.cachedContent, contentLength);
-                                return contentLength.intValue();
-                            };
+            Cache.Weigher<GetObjectRequestCacheKey, GetObjectResponseCacheValue> weighByLength =
+                    (key, value) -> {
+                        Long contentLength = value.originalResponse.getContentLength();
+                        if (contentLength == null) {
+                            if (value.cachedContent != null) {
+                                contentLength = value.cachedContent.getPath().toFile().length();
+                            } else {
+                                contentLength = 0L;
+                            }
+                        }
+                        if (contentLength > Integer.MAX_VALUE) {
+                            contentLength = Long.valueOf(Integer.MAX_VALUE);
+                        }
+                        LOG.debug("Weight for '{}' is '{}'", value.cachedContent, contentLength);
+                        return contentLength.intValue();
+                    };
             cacheBuilder = cacheBuilder.removalListener(removalListener);
-
 
             if (cacheBuilder instanceof CacheBuilderWithWeight) {
                 Long maximumWeightInBytes =
-                        ((CacheBuilderWithWeight<GetObjectRequestCacheKey, GetObjectResponseCacheValue, ?>) cacheBuilder)
+                        ((CacheBuilderWithWeight<
+                                                GetObjectRequestCacheKey,
+                                                GetObjectResponseCacheValue, ?>)
+                                        cacheBuilder)
                                 .getMaximumWeight();
                 this.maximumWeightInBytes = maximumWeightInBytes;
                 if (maximumWeightInBytes != null) {
@@ -434,11 +456,11 @@ public interface CachingObjectStorage extends ObjectStorage {
         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
             // these are the methods for which we have special handling
             switch (method.getName()) {
-                // the overridden method
+                    // the overridden method
                 case "getObject":
                     return getObject((GetObjectRequest) args[0]);
 
-                // the newly added methods, found in CachingObjectStorage, but not in ObjectStorage
+                    // the newly added methods, found in CachingObjectStorage, but not in ObjectStorage
                 case "getObjectUncached":
                     {
                         return getObjectUncached((GetObjectRequest) args[0]);
@@ -489,10 +511,12 @@ public interface CachingObjectStorage extends ObjectStorage {
                 LOG.trace("Acquired lock on key '{}'", key);
                 GetObjectResponseCacheValue value = getObjectCache.getIfPresent(key);
                 GetObjectResponse getObjectResponse =
-                        consistencyPolicy.initiateRequest(client, downloadManager, getObjectRequest, key, value);
+                        consistencyPolicy.initiateRequest(
+                                client, downloadManager, getObjectRequest, key, value);
                 if (getObjectResponse == null) {
                     if (value == null) {
-                        throw new IllegalStateException("No previous value in cache, but no new request initiated");
+                        throw new IllegalStateException(
+                                "No previous value in cache, but no new request initiated");
                     }
                     // 304, not changed
                     return value.getResponse();
@@ -505,8 +529,10 @@ public interface CachingObjectStorage extends ObjectStorage {
                 }
                 if (maximumWeightInBytes != null && diskSpaceUsedInBytes >= maximumWeightInBytes) {
                     // this is possible if consumers read streams slowly or don't close them
-                    LOG.warn("Not caching request, cache size '{}' already at maximum '{}' weight",
-                             diskSpaceUsedInBytes, maximumWeightInBytes);
+                    LOG.warn(
+                            "Not caching request, cache size '{}' already at maximum '{}' weight",
+                            diskSpaceUsedInBytes,
+                            maximumWeightInBytes);
                     return getObjectResponse;
                 } else {
                     value = load(key, getObjectResponse);
@@ -525,10 +551,13 @@ public interface CachingObjectStorage extends ObjectStorage {
          * @param cacheRequest request entry to fill.
          * @param cacheResponse content to be put at the cache entry.
          */
-        protected void prepopulateCache(GetObjectRequest cacheRequest, GetObjectResponse cacheResponse) {
-            if(cacheRequest == null || cacheResponse == null) {
-                LOG.debug("Cannot prepopulate cache with null values. Request: {}, Response: {}",
-                        cacheRequest, cacheResponse);
+        protected void prepopulateCache(
+                GetObjectRequest cacheRequest, GetObjectResponse cacheResponse) {
+            if (cacheRequest == null || cacheResponse == null) {
+                LOG.debug(
+                        "Cannot prepopulate cache with null values. Request: {}, Response: {}",
+                        cacheRequest,
+                        cacheResponse);
                 return;
             }
 
@@ -550,8 +579,10 @@ public interface CachingObjectStorage extends ObjectStorage {
                 }
                 if (maximumWeightInBytes != null && diskSpaceUsedInBytes >= maximumWeightInBytes) {
                     // this is possible if consumers read streams slowly or don't close them
-                    LOG.warn("Not caching request, cache size '{}' already at maximum '{}' weight",
-                            diskSpaceUsedInBytes, maximumWeightInBytes);
+                    LOG.warn(
+                            "Not caching request, cache size '{}' already at maximum '{}' weight",
+                            diskSpaceUsedInBytes,
+                            maximumWeightInBytes);
                 } else {
                     value = load(key, cacheResponse);
                     getObjectCache.put(key, value);
@@ -564,10 +595,12 @@ public interface CachingObjectStorage extends ObjectStorage {
         static GetObjectRequest.Builder updateRequestId(
                 GetObjectRequest.Builder builder, GetObjectRequest getObjectRequest) {
             if (getObjectRequest.getOpcClientRequestId() != null) {
-                String clientRequestId = getObjectRequest.getOpcClientRequestId() + "-" + System.currentTimeMillis();
-                LOG.trace("Instead of client-provided opcClientRequestId '{}', using opcClientRequestId '{}'",
-                          getObjectRequest.getOpcClientRequestId(),
-                          clientRequestId);
+                String clientRequestId =
+                        getObjectRequest.getOpcClientRequestId() + "-" + System.currentTimeMillis();
+                LOG.trace(
+                        "Instead of client-provided opcClientRequestId '{}', using opcClientRequestId '{}'",
+                        getObjectRequest.getOpcClientRequestId(),
+                        clientRequestId);
                 builder = builder.opcClientRequestId(clientRequestId);
             }
             return builder;
@@ -608,7 +641,7 @@ public interface CachingObjectStorage extends ObjectStorage {
          * @return read-only set of paths to files that have been evicted but not yet deleted
          */
         protected Set<Path> getEvictedButNotDeleted() {
-            synchronized(evictedButNotDeleted) {
+            synchronized (evictedButNotDeleted) {
                 return Collections.unmodifiableSet(new HashSet<>(evictedButNotDeleted));
             }
         }
@@ -643,7 +676,9 @@ public interface CachingObjectStorage extends ObjectStorage {
             Path cachedContent = null;
             try {
                 if (getObjectResponse.getInputStream() != null) {
-                    cachedContent = Files.createTempFile(cacheDirectory, String.format("%08x-", hashCode()), ".tmp");
+                    cachedContent =
+                            Files.createTempFile(
+                                    cacheDirectory, String.format("%08x-", hashCode()), ".tmp");
                     cachedContent.toFile().deleteOnExit();
 
                     LOG.debug(
@@ -653,8 +688,7 @@ public interface CachingObjectStorage extends ObjectStorage {
                             getObjectResponse.getContentLength());
                 }
                 GetObjectResponseCacheValue cacheValue =
-                        new GetObjectResponseCacheValue(
-                                this, getObjectResponse, cachedContent);
+                        new GetObjectResponseCacheValue(this, getObjectResponse, cachedContent);
 
                 if (getObjectResponse.getInputStream() != null) {
                     LOG.debug(
@@ -666,11 +700,10 @@ public interface CachingObjectStorage extends ObjectStorage {
                 }
 
                 return cacheValue;
-            } catch(IOException ioe) {
+            } catch (IOException ioe) {
                 throw new RuntimeException(ioe);
             }
         }
-
     }
 
     // helper classes
@@ -697,7 +730,9 @@ public interface CachingObjectStorage extends ObjectStorage {
                                 && !m.getName().equals("getRetryConfiguration")
                                 && !m.getName().equals("getClass");
 
-        private static final Map<String, Function<Object, Object>> specialEqualsHashCodeRegistry = new HashMap<>();
+        private static final Map<String, Function<Object, Object>> specialEqualsHashCodeRegistry =
+                new HashMap<>();
+
         {
             specialEqualsHashCodeRegistry.put("getRange", o -> o != null ? o.toString() : null);
         }
@@ -731,7 +766,8 @@ public interface CachingObjectStorage extends ObjectStorage {
                                     Object thisValue = m.invoke(request);
                                     Object thatValue = m.invoke(that.request);
                                     Function<Object, Object> specialEqualsHashCode =
-                                            GetObjectRequestCacheKey.specialEqualsHashCodeRegistry.get(m.getName());
+                                            GetObjectRequestCacheKey.specialEqualsHashCodeRegistry
+                                                    .get(m.getName());
                                     if (specialEqualsHashCode != null) {
                                         thisValue = specialEqualsHashCode.apply(thisValue);
                                         thatValue = specialEqualsHashCode.apply(thatValue);
@@ -763,7 +799,9 @@ public interface CachingObjectStorage extends ObjectStorage {
                                         try {
                                             Object thisValue = m.invoke(request);
                                             Function<Object, Object> specialEqualsHashCode =
-                                                    GetObjectRequestCacheKey.specialEqualsHashCodeRegistry.get(m.getName());
+                                                    GetObjectRequestCacheKey
+                                                            .specialEqualsHashCodeRegistry.get(
+                                                            m.getName());
                                             if (specialEqualsHashCode != null) {
                                                 thisValue = specialEqualsHashCode.apply(thisValue);
                                             }
@@ -809,9 +847,7 @@ public interface CachingObjectStorage extends ObjectStorage {
                                         }
                                     })
                             .collect(Collectors.joining(", "));
-            return "GetObjectRequestCacheKey{"
-                    + s
-                    + "}";
+            return "GetObjectRequestCacheKey{" + s + "}";
         }
     }
 
@@ -832,38 +868,55 @@ public interface CachingObjectStorage extends ObjectStorage {
                 File cachedContentFile = cachedContent.getPath().toFile();
                 cachedContentFile.getParentFile().mkdirs();
                 PathPhantomReference pathPhantomReference =
-                        new PathPhantomReference(cachedContent, handler.referenceQueue, response.getContentLength());
+                        new PathPhantomReference(
+                                cachedContent, handler.referenceQueue, response.getContentLength());
                 synchronized (handler.phantomReferences) {
                     handler.phantomReferences.add(pathPhantomReference);
-                    LOG.trace("Phantom reference # {}: {}", handler.phantomReferences.size(), pathPhantomReference);
+                    LOG.trace(
+                            "Phantom reference # {}: {}",
+                            handler.phantomReferences.size(),
+                            pathPhantomReference);
                 }
 
-                BufferedInputStreamMultiplexer.Buffer buf = new BufferedInputStreamMultiplexer.FileBuffer(cachedContentFile);
+                BufferedInputStreamMultiplexer.Buffer buf =
+                        new BufferedInputStreamMultiplexer.FileBuffer(cachedContentFile);
                 mux = new BufferedInputStreamMultiplexer(response.getInputStream(), buf);
 
                 // immediately start downloading
-                final BufferedInputStreamMultiplexer.MultiplexerInputStream firstInputStream = mux.getInputStream();
-                Future<?> future = handler.downloadExecutor.submit(() -> {
-                    long length;
-                    try {
-                        LOG.debug("Starting to retrieve contents for cache file '{}' ({} bytes expected)",
-                                  cachedContentFile,
-                                  response.getContentLength());
-                        IOUtils.copy(firstInputStream, NullOutputStream.NULL_OUTPUT_STREAM);
-                        length = cachedContentFile.length();
-                        LOG.debug("Retrieved contents for cache file '{}' ({} bytes)",
-                                  cachedContentFile, length);
-                    } catch (IOException ioe) {
-                        length = cachedContentFile.length();
-                        LOG.error("Failed to retrieve contents cache file '{}' ({} bytes)",
-                                  cachedContentFile, length,
-                                  ioe);
-                    }
-                    synchronized(handler) {
-                        handler.diskSpaceUsedInBytes += length;
-                        LOG.info("Cache size is now {} bytes", handler.diskSpaceUsedInBytes);
-                    }
-                });
+                final BufferedInputStreamMultiplexer.MultiplexerInputStream firstInputStream =
+                        mux.getInputStream();
+                Future<?> future =
+                        handler.downloadExecutor.submit(
+                                () -> {
+                                    long length;
+                                    try {
+                                        LOG.debug(
+                                                "Starting to retrieve contents for cache file '{}' ({} bytes expected)",
+                                                cachedContentFile,
+                                                response.getContentLength());
+                                        IOUtils.copy(
+                                                firstInputStream,
+                                                NullOutputStream.NULL_OUTPUT_STREAM);
+                                        length = cachedContentFile.length();
+                                        LOG.debug(
+                                                "Retrieved contents for cache file '{}' ({} bytes)",
+                                                cachedContentFile,
+                                                length);
+                                    } catch (IOException ioe) {
+                                        length = cachedContentFile.length();
+                                        LOG.error(
+                                                "Failed to retrieve contents cache file '{}' ({} bytes)",
+                                                cachedContentFile,
+                                                length,
+                                                ioe);
+                                    }
+                                    synchronized (handler) {
+                                        handler.diskSpaceUsedInBytes += length;
+                                        LOG.info(
+                                                "Cache size is now {} bytes",
+                                                handler.diskSpaceUsedInBytes);
+                                    }
+                                });
             } else {
                 mux = null;
             }
@@ -872,7 +925,8 @@ public interface CachingObjectStorage extends ObjectStorage {
         public GetObjectResponse getResponse() {
             if (mux != null) {
                 try {
-                    InputStream inputStream = new CachedInputStream(cachedContent, mux.getInputStream());
+                    InputStream inputStream =
+                            new CachedInputStream(cachedContent, mux.getInputStream());
 
                     LOG.debug("Reusing cached content at " + cachedContent);
                     return GetObjectResponse.builder()
@@ -909,7 +963,8 @@ public interface CachingObjectStorage extends ObjectStorage {
 
         public CachedInputStream(PathHolder cachedContent, InputStream muxInputStream) {
             super(muxInputStream);
-            this.cachedContent = Objects.requireNonNull(cachedContent, "cachedContent must be non-null");
+            this.cachedContent =
+                    Objects.requireNonNull(cachedContent, "cachedContent must be non-null");
             this.cachedContentPath = cachedContent.getPath();
         }
 
@@ -921,7 +976,9 @@ public interface CachingObjectStorage extends ObjectStorage {
 
         private void clearCachedContent() {
             this.cachedContent = null;
-            LOG.trace("Closed stream, clearing cachedContent for '{}' to allow garbage collection", cachedContentPath);
+            LOG.trace(
+                    "Closed stream, clearing cachedContent for '{}' to allow garbage collection",
+                    cachedContentPath);
         }
 
         @Override
@@ -974,7 +1031,8 @@ public interface CachingObjectStorage extends ObjectStorage {
         @Getter final long dataSizeInBytes;
         @Getter volatile boolean isCleared = false;
 
-        public PathPhantomReference(PathHolder referent, ReferenceQueue<? super PathHolder> q, long dataSizeInBytes) {
+        public PathPhantomReference(
+                PathHolder referent, ReferenceQueue<? super PathHolder> q, long dataSizeInBytes) {
             super(referent, q);
             this.cachedContentPath = referent.getPath();
             this.dataSizeInBytes = dataSizeInBytes;
@@ -988,8 +1046,17 @@ public interface CachingObjectStorage extends ObjectStorage {
 
         @Override
         public String toString() {
-            return "PathPhantomReference{" + "cachedContentPath='" + cachedContentPath + '\'' + ", dataSizeInBytes='" +
-                    dataSizeInBytes + "', isCleared='" + isCleared + "', isEnqueued='" + isEnqueued() + "'}";
+            return "PathPhantomReference{"
+                    + "cachedContentPath='"
+                    + cachedContentPath
+                    + '\''
+                    + ", dataSizeInBytes='"
+                    + dataSizeInBytes
+                    + "', isCleared='"
+                    + isCleared
+                    + "', isEnqueued='"
+                    + isEnqueued()
+                    + "'}";
         }
 
         @Override
@@ -1041,11 +1108,16 @@ public interface CachingObjectStorage extends ObjectStorage {
                     referenceFromQueue = handler.referenceQueue.remove();
                     if (referenceFromQueue != null) {
                         PathPhantomReference reference = (PathPhantomReference) referenceFromQueue;
-                        LOG.debug("Dequeued reference in deletion loop: " + reference.cachedContentPath);
+                        LOG.debug(
+                                "Dequeued reference in deletion loop: "
+                                        + reference.cachedContentPath);
                         long dataSizeInBytes = deleteCachedFile(reference);
                         synchronized (handler) {
                             handler.diskSpaceUsedInBytes -= dataSizeInBytes;
-                            LOG.info("Freed {} bytes, cache size is now {} bytes", dataSizeInBytes, handler.diskSpaceUsedInBytes);
+                            LOG.info(
+                                    "Freed {} bytes, cache size is now {} bytes",
+                                    dataSizeInBytes,
+                                    handler.diskSpaceUsedInBytes);
                         }
                         referenceFromQueue.clear();
                         synchronized (handler.phantomReferences) {
@@ -1084,7 +1156,9 @@ public interface CachingObjectStorage extends ObjectStorage {
     }
 
     @Slf4j
-    class RemovalListener implements Cache.RemovalListener<GetObjectRequestCacheKey, GetObjectResponseCacheValue> {
+    class RemovalListener
+            implements Cache.RemovalListener<
+                    GetObjectRequestCacheKey, GetObjectResponseCacheValue> {
         private final Handler handler;
 
         public RemovalListener(Handler handler) {
@@ -1092,10 +1166,13 @@ public interface CachingObjectStorage extends ObjectStorage {
         }
 
         @Override
-        public void onRemoval(Cache.RemovalNotification<GetObjectRequestCacheKey, GetObjectResponseCacheValue> removalNotification) {
-            LOG.debug("Removed object content cache entry '{}' ('{}')",
-                      removalNotification.getKey(),
-                      removalNotification.toString());
+        public void onRemoval(
+                Cache.RemovalNotification<GetObjectRequestCacheKey, GetObjectResponseCacheValue>
+                        removalNotification) {
+            LOG.debug(
+                    "Removed object content cache entry '{}' ('{}')",
+                    removalNotification.getKey(),
+                    removalNotification.toString());
             Path cachedContent = removalNotification.getValue().cachedContent.getPath();
             if (cachedContent != null) {
                 synchronized (handler.evictedButNotDeleted) {
@@ -1109,9 +1186,7 @@ public interface CachingObjectStorage extends ObjectStorage {
     /**
      * Interface for deciding if a request cannot be cached.
      */
-    interface UncacheablePredicate extends Predicate<GetObjectRequest> {
-
-    }
+    interface UncacheablePredicate extends Predicate<GetObjectRequest> {}
 
     /**
      * By default, this implementation does not cache requests with if-none-match set.
@@ -1150,7 +1225,7 @@ public interface CachingObjectStorage extends ObjectStorage {
 
         public DefaultRowLockProvider(int size) {
             this.locks = new ReentrantLock[size];
-            for(int i=0; i<size; ++i) {
+            for (int i = 0; i < size; ++i) {
                 this.locks[i] = new ReentrantLock();
             }
         }

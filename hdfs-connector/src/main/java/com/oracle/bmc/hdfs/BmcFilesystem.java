@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -111,14 +111,20 @@ public class BmcFilesystem extends FileSystem {
                 };
 
         CacheBuilder<FSKey, BmcFilesystemImpl> cacheBuilder =
-                CacheBuilder.newBuilder().removalListener(rn -> {
-                    LOG.info("Physically closing delegate for " + rn.getKey().uri);
-                    try {
-                        rn.getValue().close();
-                    } catch (IOException ioe) {
-                        LOG.warn("IOException " + ioe + " while physically closing " + rn.getKey().uri);
-                    }
-                });
+                CacheBuilder.newBuilder()
+                        .removalListener(
+                                rn -> {
+                                    LOG.info("Physically closing delegate for " + rn.getKey().uri);
+                                    try {
+                                        rn.getValue().close();
+                                    } catch (IOException ioe) {
+                                        LOG.warn(
+                                                "IOException "
+                                                        + ioe
+                                                        + " while physically closing "
+                                                        + rn.getKey().uri);
+                                    }
+                                });
 
         if (!propertyAccessor.asBoolean().get(BmcProperties.FILESYSTEM_CACHING_ENABLED)) {
             LOG.info("BmcFilesystem caching disabled");
@@ -126,18 +132,33 @@ public class BmcFilesystem extends FileSystem {
             return;
         }
 
-        propertyAccessor.asInteger().forNonNull(BmcProperties.FILESYSTEM_CACHING_MAXIMUM_SIZE, i -> cacheBuilder.maximumSize(i));
-        propertyAccessor.asInteger().forNonNull(BmcProperties.FILESYSTEM_CACHING_INITIAL_CAPACITY, i -> cacheBuilder.initialCapacity(i));
-        propertyAccessor.asInteger().forNonNull(BmcProperties.FILESYSTEM_CACHING_EXPIRE_AFTER_ACCESS_SECONDS, i -> cacheBuilder.expireAfterAccess(i, TimeUnit.SECONDS));
-        propertyAccessor.asInteger().forNonNull(BmcProperties.FILESYSTEM_CACHING_EXPIRE_AFTER_WRITE_SECONDS, i-> cacheBuilder.expireAfterWrite(i, TimeUnit.SECONDS));
+        propertyAccessor
+                .asInteger()
+                .forNonNull(
+                        BmcProperties.FILESYSTEM_CACHING_MAXIMUM_SIZE,
+                        i -> cacheBuilder.maximumSize(i));
+        propertyAccessor
+                .asInteger()
+                .forNonNull(
+                        BmcProperties.FILESYSTEM_CACHING_INITIAL_CAPACITY,
+                        i -> cacheBuilder.initialCapacity(i));
+        propertyAccessor
+                .asInteger()
+                .forNonNull(
+                        BmcProperties.FILESYSTEM_CACHING_EXPIRE_AFTER_ACCESS_SECONDS,
+                        i -> cacheBuilder.expireAfterAccess(i, TimeUnit.SECONDS));
+        propertyAccessor
+                .asInteger()
+                .forNonNull(
+                        BmcProperties.FILESYSTEM_CACHING_EXPIRE_AFTER_WRITE_SECONDS,
+                        i -> cacheBuilder.expireAfterWrite(i, TimeUnit.SECONDS));
 
         fsCache = cacheBuilder.build(loader);
 
         LOG.info("BmcFilesystem caching enabled, settings " + cacheBuilder);
     }
 
-    public BmcFilesystem() {
-    }
+    public BmcFilesystem() {}
 
     public void initialize(URI uri, final Configuration configuration) throws IOException {
         if (delegate != null) {
@@ -169,14 +190,22 @@ public class BmcFilesystem extends FileSystem {
             final long blockSize,
             final Progressable progress)
             throws IOException {
-        return delegate.create(path, permission, overwrite, bufferSize,
-                               replication, blockSize, progress);
+        return delegate.create(
+                path, permission, overwrite, bufferSize, replication, blockSize, progress);
     }
 
     @Override
-    public FSDataOutputStream createNonRecursive(Path f, FsPermission permission, EnumSet<CreateFlag> flags, int bufferSize, short replication, long blockSize, Progressable progress) throws IOException {
-        return delegate.createNonRecursive(f, permission, flags, bufferSize,
-                                           replication, blockSize, progress);
+    public FSDataOutputStream createNonRecursive(
+            Path f,
+            FsPermission permission,
+            EnumSet<CreateFlag> flags,
+            int bufferSize,
+            short replication,
+            long blockSize,
+            Progressable progress)
+            throws IOException {
+        return delegate.createNonRecursive(
+                f, permission, flags, bufferSize, replication, blockSize, progress);
     }
 
     @Override
@@ -225,8 +254,7 @@ public class BmcFilesystem extends FileSystem {
     }
 
     @Override
-    public void close() throws IOException {
-    }
+    public void close() throws IOException {}
 
     @Override
     public Path getWorkingDirectory() {
@@ -251,8 +279,6 @@ public class BmcFilesystem extends FileSystem {
     public Configuration getConf() {
         return delegate.getConf();
     }
-
-
 }
 
 /**
@@ -411,9 +437,9 @@ class BmcFilesystemImpl extends FileSystem {
             final long blockSize,
             final Progressable progress)
             throws IOException {
-        return create(path, permission, overwrite, bufferSize, replication, blockSize, progress, true);
+        return create(
+                path, permission, overwrite, bufferSize, replication, blockSize, progress, true);
     }
-
 
     /**
      * Creates a new output stream. Permissions are not used.
@@ -460,8 +486,8 @@ class BmcFilesystemImpl extends FileSystem {
                 this.mkdirs(path.getParent(), permission);
             } else {
                 if (this.getNullableFileStatus(path.getParent()) == null) {
-                    throw new FileNotFoundException("Cannot create file " + path +
-                                                            ", the parent directory does not exist");
+                    throw new FileNotFoundException(
+                            "Cannot create file " + path + ", the parent directory does not exist");
                 }
             }
         }
@@ -471,8 +497,24 @@ class BmcFilesystemImpl extends FileSystem {
     }
 
     @Override
-    public FSDataOutputStream createNonRecursive(Path f, FsPermission permission, EnumSet<CreateFlag> flags, int bufferSize, short replication, long blockSize, Progressable progress) throws IOException {
-        return create(f, permission, flags.contains(CreateFlag.OVERWRITE), bufferSize, replication, blockSize, progress, false);
+    public FSDataOutputStream createNonRecursive(
+            Path f,
+            FsPermission permission,
+            EnumSet<CreateFlag> flags,
+            int bufferSize,
+            short replication,
+            long blockSize,
+            Progressable progress)
+            throws IOException {
+        return create(
+                f,
+                permission,
+                flags.contains(CreateFlag.OVERWRITE),
+                bufferSize,
+                replication,
+                blockSize,
+                progress,
+                false);
     }
 
     @Override
@@ -676,7 +718,8 @@ class BmcFilesystemImpl extends FileSystem {
         // trivial check, need to check resolved path later still
         if (absoluteSource.equals(absoluteDestination)) {
             if (sourceStatus.isDirectory()) {
-                LOG.debug("Destination is the same as source, renaming directory to itself not allowed");
+                LOG.debug(
+                        "Destination is the same as source, renaming directory to itself not allowed");
                 return false;
             } else {
                 LOG.debug("Destination is the same as source, renaming file to itself is allowed");
@@ -712,10 +755,12 @@ class BmcFilesystemImpl extends FileSystem {
         // ex, moving /foo/bar.json to /foo/, or /foo/bar/ to /foo/
         if (absoluteSource.equals(destinationPathToUse)) {
             if (sourceStatus.isDirectory()) {
-                LOG.debug("Resolved destination is the same as source, renaming directory to itself not allowed");
+                LOG.debug(
+                        "Resolved destination is the same as source, renaming directory to itself not allowed");
                 return false;
             } else {
-                LOG.debug("Resolved destination is the same as source, renaming file to itself is allowed");
+                LOG.debug(
+                        "Resolved destination is the same as source, renaming file to itself is allowed");
                 return true;
             }
         }

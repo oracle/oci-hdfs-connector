@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates.  All rights reserved.
- * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
+ * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
 package com.oracle.bmc.hdfs.caching;
 
@@ -93,7 +94,7 @@ public class CachingObjectStorageTest {
 
         boolean deletedWhileOpen = tempFile.delete();
 
-        while(read != -1) {
+        while (read != -1) {
             retrieved[rerievedIndex++] = (byte) read;
             read = fis.read();
         }
@@ -122,31 +123,36 @@ public class CachingObjectStorageTest {
         directory.toFile().deleteOnExit();
 
         long maximumWeight = 44;
-        int expireSeconds = 3; getExpireAfterWriteSeconds();
+        int expireSeconds = 3;
+        getExpireAfterWriteSeconds();
 
         when(mockClient.getObject(any()))
                 .thenAnswer(
                         i -> {
                             // create a new response, with a new ByteArrayInputStream, every time
                             return GetObjectResponse.builder()
-                                                    .contentLength(Long.valueOf(CONTENT.length()))
-                                                    .inputStream(new ByteArrayInputStream(CONTENT.getBytes()))
-                                                    .eTag("etag1")
-                                                    .build();
+                                    .contentLength(Long.valueOf(CONTENT.length()))
+                                    .inputStream(new ByteArrayInputStream(CONTENT.getBytes()))
+                                    .eTag("etag1")
+                                    .build();
                         });
 
         CachingObjectStorage cachingObjectStorageClient =
                 CachingObjectStorage.build(
                         CachingObjectStorage.newConfiguration()
-                                            .client(mockClient)
-                                            .cacheDirectory(directory)
-                                            .maximumWeight(maximumWeight)
-                                            .expireAfterWrite(Duration.ofSeconds(expireSeconds))
-                                            .consistencyPolicy(new NoOpConsistencyPolicy())
-                                            .build());
+                                .client(mockClient)
+                                .cacheDirectory(directory)
+                                .maximumWeight(maximumWeight)
+                                .expireAfterWrite(Duration.ofSeconds(expireSeconds))
+                                .consistencyPolicy(new NoOpConsistencyPolicy())
+                                .build());
 
         GetObjectRequest request =
-                GetObjectRequest.builder().namespaceName("namespace").bucketName("bucket").objectName("object").build();
+                GetObjectRequest.builder()
+                        .namespaceName("namespace")
+                        .bucketName("bucket")
+                        .objectName("object")
+                        .build();
 
         GetObjectResponse response = cachingObjectStorageClient.getObject(request);
 
@@ -157,7 +163,10 @@ public class CachingObjectStorageTest {
         // evicted right away, because of size
         Set<Path> evictedButNotDeleted = cachingObjectStorageClient.getEvictedButNotDeleted();
         assertFalse(evictedButNotDeleted.isEmpty());
-        assertTrue(evictedButNotDeleted.contains(((CachingObjectStorage.CachedInputStream)response.getInputStream()).getCachedContentPath()));
+        assertTrue(
+                evictedButNotDeleted.contains(
+                        ((CachingObjectStorage.CachedInputStream) response.getInputStream())
+                                .getCachedContentPath()));
 
         LOG.debug("Trying to force the cache to be cleared");
         cachingObjectStorageClient.cleanUp();
@@ -179,30 +188,35 @@ public class CachingObjectStorageTest {
         Path directory = Files.createTempDirectory(this.getClass().getSimpleName());
         directory.toFile().deleteOnExit();
 
-        int expireSeconds = 3; getExpireAfterWriteSeconds();
+        int expireSeconds = 3;
+        getExpireAfterWriteSeconds();
 
         when(mockClient.getObject(any()))
                 .thenAnswer(
                         i -> {
                             // create a new response, with a new ByteArrayInputStream, every time
                             return GetObjectResponse.builder()
-                                                    .contentLength(Long.valueOf(CONTENT.length()))
-                                                    .inputStream(new ByteArrayInputStream(CONTENT.getBytes()))
-                                                    .eTag("etag1")
-                                                    .build();
+                                    .contentLength(Long.valueOf(CONTENT.length()))
+                                    .inputStream(new ByteArrayInputStream(CONTENT.getBytes()))
+                                    .eTag("etag1")
+                                    .build();
                         });
 
         CachingObjectStorage cachingObjectStorageClient =
                 CachingObjectStorage.build(
                         CachingObjectStorage.newConfiguration()
-                                            .client(mockClient)
-                                            .cacheDirectory(directory)
-                                            .expireAfterWrite(Duration.ofSeconds(expireSeconds))
-                                            .consistencyPolicy(new NoOpConsistencyPolicy())
-                                            .build());
+                                .client(mockClient)
+                                .cacheDirectory(directory)
+                                .expireAfterWrite(Duration.ofSeconds(expireSeconds))
+                                .consistencyPolicy(new NoOpConsistencyPolicy())
+                                .build());
 
         GetObjectRequest request =
-                GetObjectRequest.builder().namespaceName("namespace").bucketName("bucket").objectName("object").build();
+                GetObjectRequest.builder()
+                        .namespaceName("namespace")
+                        .bucketName("bucket")
+                        .objectName("object")
+                        .build();
 
         GetObjectResponse response = cachingObjectStorageClient.getObject(request);
 
@@ -210,14 +224,16 @@ public class CachingObjectStorageTest {
         IOUtils.copy(new InputStreamReader(response.getInputStream()), sw);
         assertEquals(CONTENT, sw.toString());
         Path cachedContentPath =
-                ((CachingObjectStorage.CachedInputStream) response.getInputStream()).getCachedContentPath();
+                ((CachingObjectStorage.CachedInputStream) response.getInputStream())
+                        .getCachedContentPath();
 
         GetObjectResponse response2 = cachingObjectStorageClient.getObject(request);
         StringWriter sw2 = new StringWriter();
         IOUtils.copy(new InputStreamReader(response2.getInputStream()), sw2);
         assertEquals(CONTENT, sw2.toString());
         Path cachedContentPath2 =
-                ((CachingObjectStorage.CachedInputStream) response2.getInputStream()).getCachedContentPath();
+                ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
+                        .getCachedContentPath();
 
         // not yet evicted
         assertTrue(cachingObjectStorageClient.getEvictedButNotDeleted().isEmpty());
@@ -270,25 +286,32 @@ public class CachingObjectStorageTest {
         CachingObjectStorage cachingObjectStorageClient =
                 CachingObjectStorage.build(
                         CachingObjectStorage.newConfiguration()
-                                            .client(mockClient)
-                                            .cacheDirectory(directory)
-                                            .maximumWeight(maximumWeight)
-                                            .expireAfterWrite(Duration.ofSeconds(expireSeconds))
-                                            .consistencyPolicy(new NoOpConsistencyPolicy())
-                                            .build());
+                                .client(mockClient)
+                                .cacheDirectory(directory)
+                                .maximumWeight(maximumWeight)
+                                .expireAfterWrite(Duration.ofSeconds(expireSeconds))
+                                .consistencyPolicy(new NoOpConsistencyPolicy())
+                                .build());
 
         GetObjectRequest request =
-                GetObjectRequest.builder().namespaceName("namespace").bucketName("bucket").objectName("object").build();
+                GetObjectRequest.builder()
+                        .namespaceName("namespace")
+                        .bucketName("bucket")
+                        .objectName("object")
+                        .build();
 
         List<File> files = new ArrayList<>();
-        for(int i=0; i<requestCount; ++i) {
+        for (int i = 0; i < requestCount; ++i) {
             GetObjectResponse response = cachingObjectStorageClient.getObject(request);
 
             StringWriter sw = new StringWriter();
             IOUtils.copy(new InputStreamReader(response.getInputStream()), sw);
             assertEquals(CONTENT, sw.toString());
 
-            File file = ((CachingObjectStorage.CachedInputStream) response.getInputStream()).getCachedContentPath().toFile();
+            File file =
+                    ((CachingObjectStorage.CachedInputStream) response.getInputStream())
+                            .getCachedContentPath()
+                            .toFile();
             files.add(file);
 
             LOG.debug("Trying to force the cache to be cleared");
@@ -308,7 +331,7 @@ public class CachingObjectStorageTest {
         Thread.sleep(500);
 
         // the files have been evicted and cleared, so they should not still be there
-        for(File f: files) {
+        for (File f : files) {
             assertFalse(f.exists());
         }
 
@@ -335,13 +358,14 @@ public class CachingObjectStorageTest {
                         });
 
         CachingObjectStorage cachingObjectStorageClient =
-                CachingObjectStorage.build(CachingObjectStorage.newConfiguration()
-                                                               .client(mockClient)
-                                                               .cacheDirectory(directory)
-                                                               .consistencyPolicy(new NoOpConsistencyPolicy())
-                                                               .maximumWeight(maximumWeight)
-                                                               .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
-                                           .build());
+                CachingObjectStorage.build(
+                        CachingObjectStorage.newConfiguration()
+                                .client(mockClient)
+                                .cacheDirectory(directory)
+                                .consistencyPolicy(new NoOpConsistencyPolicy())
+                                .maximumWeight(maximumWeight)
+                                .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
+                                .build());
 
         GetObjectRequest request =
                 GetObjectRequest.builder()
@@ -371,11 +395,13 @@ public class CachingObjectStorageTest {
         // the file hasn't been evicted yet, so it should still be there
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // and they should be the same file
@@ -389,11 +415,13 @@ public class CachingObjectStorageTest {
         cachingObjectStorageClient.cleanUp();
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // sleep
@@ -404,7 +432,8 @@ public class CachingObjectStorageTest {
 
         assertFalse(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         cachingObjectStorageClient.close();
@@ -466,13 +495,14 @@ public class CachingObjectStorageTest {
                         });
 
         CachingObjectStorage cachingObjectStorageClient =
-                CachingObjectStorage.build(CachingObjectStorage.newConfiguration()
-                                                               .client(mockClient)
-                                                               .cacheDirectory(directory)
-                                                               .consistencyPolicy(new NoOpConsistencyPolicy())
-                                                               .maximumWeight(maximumWeight)
-                                                               .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
-                                                               .build());
+                CachingObjectStorage.build(
+                        CachingObjectStorage.newConfiguration()
+                                .client(mockClient)
+                                .cacheDirectory(directory)
+                                .consistencyPolicy(new NoOpConsistencyPolicy())
+                                .maximumWeight(maximumWeight)
+                                .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
+                                .build());
 
         GetObjectResponse response = cachingObjectStorageClient.getObject(request);
 
@@ -497,11 +527,13 @@ public class CachingObjectStorageTest {
         // the files haven't been evicted yet, so they should still be there
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // but they should be the different files
@@ -515,11 +547,13 @@ public class CachingObjectStorageTest {
         cachingObjectStorageClient.cleanUp();
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // sleep
@@ -531,11 +565,13 @@ public class CachingObjectStorageTest {
         // now the files should have been evicted
         assertFalse(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertFalse(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         cachingObjectStorageClient.close();
@@ -563,12 +599,13 @@ public class CachingObjectStorageTest {
                         });
 
         CachingObjectStorage cachingObjectStorageClient =
-                CachingObjectStorage.build(CachingObjectStorage.newConfiguration()
-                                                               .client(mockClient)
-                                                               .cacheDirectory(directory)
-                                                               .maximumWeight(maximumWeight)
-                                                               .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
-                                                               .build());
+                CachingObjectStorage.build(
+                        CachingObjectStorage.newConfiguration()
+                                .client(mockClient)
+                                .cacheDirectory(directory)
+                                .maximumWeight(maximumWeight)
+                                .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
+                                .build());
 
         GetObjectRequest request =
                 GetObjectRequest.builder()
@@ -604,11 +641,13 @@ public class CachingObjectStorageTest {
         // the files have been evicted, so they should not still be there
         assertFalse(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertFalse(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         cachingObjectStorageClient.close();
@@ -634,20 +673,22 @@ public class CachingObjectStorageTest {
                                     .build();
                         });
         when(mockClient.getObject(where(r -> r.getIfNoneMatch() != null)))
-                .thenReturn(GetObjectResponse.builder()
-                                             .eTag("etag1a")
-                                             .__httpStatusCode__(Response.Status.NOT_MODIFIED.getStatusCode())
-                                             .isNotModified(true)
-                                             .inputStream(null)
-                                             .build());
+                .thenReturn(
+                        GetObjectResponse.builder()
+                                .eTag("etag1a")
+                                .__httpStatusCode__(Response.Status.NOT_MODIFIED.getStatusCode())
+                                .isNotModified(true)
+                                .inputStream(null)
+                                .build());
 
         CachingObjectStorage cachingObjectStorageClient =
-                CachingObjectStorage.build(CachingObjectStorage.newConfiguration()
-                                                               .client(mockClient)
-                                                               .cacheDirectory(directory)
-                                                               .maximumWeight(maximumWeight)
-                                                               .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
-                                                               .build());
+                CachingObjectStorage.build(
+                        CachingObjectStorage.newConfiguration()
+                                .client(mockClient)
+                                .cacheDirectory(directory)
+                                .maximumWeight(maximumWeight)
+                                .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
+                                .build());
 
         GetObjectRequest request =
                 GetObjectRequest.builder()
@@ -674,11 +715,13 @@ public class CachingObjectStorageTest {
         // the file hasn't been evicted yet, so it should still be there
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // and they should be the same file
@@ -692,11 +735,13 @@ public class CachingObjectStorageTest {
         cachingObjectStorageClient.cleanUp();
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // sleep
@@ -708,7 +753,8 @@ public class CachingObjectStorageTest {
         // now it should have been evicted
         assertFalse(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         cachingObjectStorageClient.close();
@@ -738,8 +784,14 @@ public class CachingObjectStorageTest {
         Predicate<GetObjectRequest> lambda1with, lambda1without, lambda2with, lambda2without;
 
         // first object, without if-none-match
-        when(mockClient.getObject(where(lambda1without = r -> request.getObjectName().equals(r.getObjectName())
-                && r.getIfNoneMatch() == null)))
+        when(
+                        mockClient.getObject(
+                                where(
+                                        lambda1without =
+                                                r ->
+                                                        request.getObjectName()
+                                                                        .equals(r.getObjectName())
+                                                                && r.getIfNoneMatch() == null)))
                 .thenAnswer(
                         i -> {
                             // create a new response, with a new ByteArrayInputStream, every time
@@ -751,18 +803,31 @@ public class CachingObjectStorageTest {
                                     .build();
                         });
         // first object, with if-none-match
-        when(mockClient.getObject(where(lambda1with = r -> request.getObjectName().equals(r.getObjectName())
-                && r.getIfNoneMatch() != null)))
-                .thenReturn(GetObjectResponse.builder()
-                                             .eTag("etag1a")
-                                             .__httpStatusCode__(Response.Status.NOT_MODIFIED.getStatusCode())
-                                             .isNotModified(true)
-                                             .inputStream(null)
-                                             .build());
+        when(
+                        mockClient.getObject(
+                                where(
+                                        lambda1with =
+                                                r ->
+                                                        request.getObjectName()
+                                                                        .equals(r.getObjectName())
+                                                                && r.getIfNoneMatch() != null)))
+                .thenReturn(
+                        GetObjectResponse.builder()
+                                .eTag("etag1a")
+                                .__httpStatusCode__(Response.Status.NOT_MODIFIED.getStatusCode())
+                                .isNotModified(true)
+                                .inputStream(null)
+                                .build());
 
         // second object, without if-none-match
-        when(mockClient.getObject(where(lambda2without = r -> request2.getObjectName().equals(r.getObjectName())
-                && r.getIfNoneMatch() == null)))
+        when(
+                        mockClient.getObject(
+                                where(
+                                        lambda2without =
+                                                r ->
+                                                        request2.getObjectName()
+                                                                        .equals(r.getObjectName())
+                                                                && r.getIfNoneMatch() == null)))
                 .thenAnswer(
                         i -> {
                             // create a new response, with a new ByteArrayInputStream, every time
@@ -774,22 +839,30 @@ public class CachingObjectStorageTest {
                                     .build();
                         });
         // second object, with if-none-match
-        when(mockClient.getObject(where(lambda2with = r -> request2.getObjectName().equals(r.getObjectName())
-                && r.getIfNoneMatch() != null)))
-                .thenReturn(GetObjectResponse.builder()
-                                             .eTag("etag2a")
-                                             .__httpStatusCode__(Response.Status.NOT_MODIFIED.getStatusCode())
-                                             .isNotModified(true)
-                                             .inputStream(null)
-                                             .build());
+        when(
+                        mockClient.getObject(
+                                where(
+                                        lambda2with =
+                                                r ->
+                                                        request2.getObjectName()
+                                                                        .equals(r.getObjectName())
+                                                                && r.getIfNoneMatch() != null)))
+                .thenReturn(
+                        GetObjectResponse.builder()
+                                .eTag("etag2a")
+                                .__httpStatusCode__(Response.Status.NOT_MODIFIED.getStatusCode())
+                                .isNotModified(true)
+                                .inputStream(null)
+                                .build());
 
         CachingObjectStorage cachingObjectStorageClient =
-                CachingObjectStorage.build(CachingObjectStorage.newConfiguration()
-                                                               .client(mockClient)
-                                                               .cacheDirectory(directory)
-                                                               .maximumWeight(maximumWeight)
-                                                               .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
-                                                               .build());
+                CachingObjectStorage.build(
+                        CachingObjectStorage.newConfiguration()
+                                .client(mockClient)
+                                .cacheDirectory(directory)
+                                .maximumWeight(maximumWeight)
+                                .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
+                                .build());
 
         // first read of both
         GetObjectResponse response = cachingObjectStorageClient.getObject(request);
@@ -827,11 +900,13 @@ public class CachingObjectStorageTest {
         // the files haven't been evicted yet, so they should still be there
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // but they should be the different files
@@ -845,11 +920,13 @@ public class CachingObjectStorageTest {
         cachingObjectStorageClient.cleanUp();
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // sleep
@@ -861,19 +938,20 @@ public class CachingObjectStorageTest {
         // now the files should have been evicted
         assertFalse(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertFalse(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         cachingObjectStorageClient.close();
     }
 
     @Test
-    public void testTwoDistinctGets_StrongConsistency_ETagChanges()
-            throws Exception {
+    public void testTwoDistinctGets_StrongConsistency_ETagChanges() throws Exception {
         Path directory = Files.createTempDirectory(this.getClass().getSimpleName());
         directory.toFile().deleteOnExit();
 
@@ -936,13 +1014,14 @@ public class CachingObjectStorageTest {
                         });
 
         CachingObjectStorage cachingObjectStorageClient =
-                CachingObjectStorage.build(CachingObjectStorage.newConfiguration()
-                                                               .client(mockClient)
-                                                               .cacheDirectory(directory)
-                                                               .maximumWeight(maximumWeight)
-                                                               .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
-                                                               .aggressiveCacheGarbageCollection(500)
-                                                               .build());
+                CachingObjectStorage.build(
+                        CachingObjectStorage.newConfiguration()
+                                .client(mockClient)
+                                .cacheDirectory(directory)
+                                .maximumWeight(maximumWeight)
+                                .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
+                                .aggressiveCacheGarbageCollection(500)
+                                .build());
 
         // first read of both
         GetObjectResponse response = cachingObjectStorageClient.getObject(request);
@@ -995,11 +1074,13 @@ public class CachingObjectStorageTest {
         // the files haven't been evicted yet, so they should still be there
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // but they should be the different files
@@ -1013,11 +1094,13 @@ public class CachingObjectStorageTest {
         cachingObjectStorageClient.cleanUp();
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // sleep
@@ -1029,11 +1112,13 @@ public class CachingObjectStorageTest {
         // now the files should have been evicted
         assertFalse(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertFalse(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         cachingObjectStorageClient.close();
@@ -1054,29 +1139,30 @@ public class CachingObjectStorageTest {
                         i -> {
                             // create a new response, with a new ByteArrayInputStream, every time
                             return GetObjectResponse.builder()
-                                                    .contentLength(Long.valueOf(CONTENT.length()))
-                                                    .inputStream(new ByteArrayInputStream(CONTENT.getBytes()))
-                                                    .eTag("etag1")
-                                                    .__httpStatusCode__(200)
-                                                    .build();
+                                    .contentLength(Long.valueOf(CONTENT.length()))
+                                    .inputStream(new ByteArrayInputStream(CONTENT.getBytes()))
+                                    .eTag("etag1")
+                                    .__httpStatusCode__(200)
+                                    .build();
                         });
 
         CachingObjectStorage cachingObjectStorageClient =
-                CachingObjectStorage.build(CachingObjectStorage.newConfiguration()
-                                                               .client(mockClient)
-                                                               .cacheDirectory(directory)
-                                                               .maximumWeight(maximumWeight)
-                                                               .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
-                                                               .aggressiveCacheGarbageCollection(500)
-                                                               .build());
+                CachingObjectStorage.build(
+                        CachingObjectStorage.newConfiguration()
+                                .client(mockClient)
+                                .cacheDirectory(directory)
+                                .maximumWeight(maximumWeight)
+                                .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
+                                .aggressiveCacheGarbageCollection(500)
+                                .build());
 
         GetObjectRequest request =
                 GetObjectRequest.builder()
-                                .namespaceName("namespace")
-                                .bucketName("bucket")
-                                .objectName("object")
-                                .ifMatch("etag1")
-                                .build();
+                        .namespaceName("namespace")
+                        .bucketName("bucket")
+                        .objectName("object")
+                        .ifMatch("etag1")
+                        .build();
         GetObjectResponse response = cachingObjectStorageClient.getObject(request);
 
         StringWriter sw = new StringWriter();
@@ -1106,17 +1192,18 @@ public class CachingObjectStorageTest {
         // the files have been evicted, so they should not still be there
         assertFalse(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         // now it should have been evicted
         assertFalse(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         cachingObjectStorageClient.close();
     }
-
 
     @Test
     public void testTwoGets_Cached_StrongConsistency_ifMatch() throws Exception {
@@ -1131,39 +1218,51 @@ public class CachingObjectStorageTest {
                         i -> {
                             // create a new response, with a new ByteArrayInputStream, every time
                             return GetObjectResponse.builder()
-                                                    .contentLength(Long.valueOf(CONTENT.length()))
-                                                    .inputStream(new ByteArrayInputStream(CONTENT.getBytes()))
-                                                    .eTag("etag1a")
-                                                    .__httpStatusCode__(200)
-                                                    .build();
+                                    .contentLength(Long.valueOf(CONTENT.length()))
+                                    .inputStream(new ByteArrayInputStream(CONTENT.getBytes()))
+                                    .eTag("etag1a")
+                                    .__httpStatusCode__(200)
+                                    .build();
                         });
 
         // second request is with "etag1a" and for a 1-byte range
-        when(mockClient.getObject(where(r -> r.getIfMatch().equals("etag1a")
-                && r.getRange() != null
-                && Long.valueOf(0).equals(r.getRange().getStartByte())
-                && Long.valueOf(0).equals(r.getRange().getEndByte()))))
-                .thenReturn(GetObjectResponse.builder()
-                                             .eTag("etag1a")
-                                             .__httpStatusCode__(200)
-                                             .inputStream(new ByteArrayInputStream(new byte[] { CONTENT.getBytes()[0] }))
-                                             .build());
+        when(
+                        mockClient.getObject(
+                                where(
+                                        r ->
+                                                r.getIfMatch().equals("etag1a")
+                                                        && r.getRange() != null
+                                                        && Long.valueOf(0)
+                                                                .equals(r.getRange().getStartByte())
+                                                        && Long.valueOf(0)
+                                                                .equals(
+                                                                        r.getRange()
+                                                                                .getEndByte()))))
+                .thenReturn(
+                        GetObjectResponse.builder()
+                                .eTag("etag1a")
+                                .__httpStatusCode__(200)
+                                .inputStream(
+                                        new ByteArrayInputStream(
+                                                new byte[] {CONTENT.getBytes()[0]}))
+                                .build());
 
         CachingObjectStorage cachingObjectStorageClient =
-                CachingObjectStorage.build(CachingObjectStorage.newConfiguration()
-                                                               .client(mockClient)
-                                                               .cacheDirectory(directory)
-                                                               .maximumWeight(maximumWeight)
-                                                               .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
-                                                               .build());
+                CachingObjectStorage.build(
+                        CachingObjectStorage.newConfiguration()
+                                .client(mockClient)
+                                .cacheDirectory(directory)
+                                .maximumWeight(maximumWeight)
+                                .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
+                                .build());
 
         GetObjectRequest request =
                 GetObjectRequest.builder()
-                                .namespaceName("namespace")
-                                .bucketName("bucket")
-                                .objectName("object")
-                                .ifMatch("etag1a")
-                                .build();
+                        .namespaceName("namespace")
+                        .bucketName("bucket")
+                        .objectName("object")
+                        .ifMatch("etag1a")
+                        .build();
         GetObjectResponse response = cachingObjectStorageClient.getObject(request);
         GetObjectResponse response2 = cachingObjectStorageClient.getObject(request);
 
@@ -1183,11 +1282,13 @@ public class CachingObjectStorageTest {
         // the file hasn't been evicted yet, so it should still be there
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // and they should be the same file
@@ -1201,11 +1302,13 @@ public class CachingObjectStorageTest {
         cachingObjectStorageClient.cleanUp();
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // sleep
@@ -1217,7 +1320,8 @@ public class CachingObjectStorageTest {
         // now it should have been evicted
         assertFalse(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         cachingObjectStorageClient.close();
@@ -1236,46 +1340,57 @@ public class CachingObjectStorageTest {
                         i -> {
                             // create a new response, with a new ByteArrayInputStream, every time
                             return GetObjectResponse.builder()
-                                                    .contentLength(Long.valueOf(CONTENT.length()))
-                                                    .inputStream(new ByteArrayInputStream(CONTENT.getBytes()))
-                                                    .eTag("etag1a")
-                                                    .__httpStatusCode__(200)
-                                                    .build();
+                                    .contentLength(Long.valueOf(CONTENT.length()))
+                                    .inputStream(new ByteArrayInputStream(CONTENT.getBytes()))
+                                    .eTag("etag1a")
+                                    .__httpStatusCode__(200)
+                                    .build();
                         });
 
         // second request is with "etag1a" and for a 1-byte range
-        when(mockClient.getObject(where(r -> r.getIfMatch().equals("etag1a")
-                && r.getRange() != null
-                && Long.valueOf(0).equals(r.getRange().getStartByte())
-                && Long.valueOf(0).equals(r.getRange().getEndByte()))))
-                .thenThrow(new BmcException(Response.Status.PRECONDITION_FAILED.getStatusCode(),
-                                            Response.Status.PRECONDITION_FAILED.getReasonPhrase(),
-                                            "etag doesn't match if-match",
-                                            "request-id"));
+        when(
+                        mockClient.getObject(
+                                where(
+                                        r ->
+                                                r.getIfMatch().equals("etag1a")
+                                                        && r.getRange() != null
+                                                        && Long.valueOf(0)
+                                                                .equals(r.getRange().getStartByte())
+                                                        && Long.valueOf(0)
+                                                                .equals(
+                                                                        r.getRange()
+                                                                                .getEndByte()))))
+                .thenThrow(
+                        new BmcException(
+                                Response.Status.PRECONDITION_FAILED.getStatusCode(),
+                                Response.Status.PRECONDITION_FAILED.getReasonPhrase(),
+                                "etag doesn't match if-match",
+                                "request-id"));
 
         CachingObjectStorage cachingObjectStorageClient =
-                CachingObjectStorage.build(CachingObjectStorage.newConfiguration()
-                                                               .client(mockClient)
-                                                               .cacheDirectory(directory)
-                                                               .maximumWeight(maximumWeight)
-                                                               .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
-                                                               .build());
+                CachingObjectStorage.build(
+                        CachingObjectStorage.newConfiguration()
+                                .client(mockClient)
+                                .cacheDirectory(directory)
+                                .maximumWeight(maximumWeight)
+                                .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
+                                .build());
 
         GetObjectRequest request =
                 GetObjectRequest.builder()
-                                .namespaceName("namespace")
-                                .bucketName("bucket")
-                                .objectName("object")
-                                .ifMatch("etag1a")
-                                .build();
+                        .namespaceName("namespace")
+                        .bucketName("bucket")
+                        .objectName("object")
+                        .ifMatch("etag1a")
+                        .build();
         GetObjectResponse response = cachingObjectStorageClient.getObject(request);
 
         try {
             cachingObjectStorageClient.getObject(request);
             fail("Should have failed");
-        } catch(BmcException e) {
+        } catch (BmcException e) {
             assertEquals(412, e.getStatusCode());
-        } catch(Exception e) {
+        } catch (Exception e) {
             fail("Should have failed with 412");
         }
 
@@ -1291,14 +1406,16 @@ public class CachingObjectStorageTest {
         // the file hasn't been evicted yet, so it should still be there
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // clean-up doesn't do anything
         cachingObjectStorageClient.cleanUp();
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // sleep
@@ -1310,7 +1427,8 @@ public class CachingObjectStorageTest {
         // now it should have been evicted
         assertFalse(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         cachingObjectStorageClient.close();
@@ -1329,52 +1447,59 @@ public class CachingObjectStorageTest {
                         i -> {
                             // create a new response, with a new ByteArrayInputStream, every time
                             return GetObjectResponse.builder()
-                                                    .contentLength(Long.valueOf(CONTENT.length()))
-                                                    .inputStream(new ByteArrayInputStream(CONTENT.getBytes()))
-                                                    .eTag("etag1a")
-                                                    .__httpStatusCode__(200)
-                                                    .build();
+                                    .contentLength(Long.valueOf(CONTENT.length()))
+                                    .inputStream(new ByteArrayInputStream(CONTENT.getBytes()))
+                                    .eTag("etag1a")
+                                    .__httpStatusCode__(200)
+                                    .build();
                         });
 
         // second request is with "etag1b"
-        when(mockClient.getObject(where(r -> r.getIfMatch().equals("etag1b")
-                && r.getRange() == null)))
-                .thenThrow(new BmcException(Response.Status.PRECONDITION_FAILED.getStatusCode(),
-                                            Response.Status.PRECONDITION_FAILED.getReasonPhrase(),
-                                            "etag doesn't match if-match",
-                                            "request-id"));
+        when(
+                        mockClient.getObject(
+                                where(
+                                        r ->
+                                                r.getIfMatch().equals("etag1b")
+                                                        && r.getRange() == null)))
+                .thenThrow(
+                        new BmcException(
+                                Response.Status.PRECONDITION_FAILED.getStatusCode(),
+                                Response.Status.PRECONDITION_FAILED.getReasonPhrase(),
+                                "etag doesn't match if-match",
+                                "request-id"));
 
         CachingObjectStorage cachingObjectStorageClient =
-                CachingObjectStorage.build(CachingObjectStorage.newConfiguration()
-                                                               .client(mockClient)
-                                                               .cacheDirectory(directory)
-                                                               .maximumWeight(maximumWeight)
-                                                               .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
-                                                               .build());
+                CachingObjectStorage.build(
+                        CachingObjectStorage.newConfiguration()
+                                .client(mockClient)
+                                .cacheDirectory(directory)
+                                .maximumWeight(maximumWeight)
+                                .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
+                                .build());
 
         GetObjectRequest request =
                 GetObjectRequest.builder()
-                                .namespaceName("namespace")
-                                .bucketName("bucket")
-                                .objectName("object")
-                                .ifMatch("etag1a")
-                                .build();
+                        .namespaceName("namespace")
+                        .bucketName("bucket")
+                        .objectName("object")
+                        .ifMatch("etag1a")
+                        .build();
         GetObjectResponse response = cachingObjectStorageClient.getObject(request);
 
         GetObjectRequest request2 =
                 GetObjectRequest.builder()
-                                .namespaceName("namespace")
-                                .bucketName("bucket")
-                                .objectName("object")
-                                .ifMatch("etag1b")
-                                .build();
+                        .namespaceName("namespace")
+                        .bucketName("bucket")
+                        .objectName("object")
+                        .ifMatch("etag1b")
+                        .build();
 
         try {
             cachingObjectStorageClient.getObject(request2);
             fail("Should have failed");
-        } catch(BmcException e) {
+        } catch (BmcException e) {
             assertEquals(412, e.getStatusCode());
-        } catch(Exception e) {
+        } catch (Exception e) {
             fail("Should have failed with 412");
         }
 
@@ -1390,14 +1515,16 @@ public class CachingObjectStorageTest {
         // the file hasn't been evicted yet, so it should still be there
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // clean-up doesn't do anything
         cachingObjectStorageClient.cleanUp();
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // sleep
@@ -1409,7 +1536,8 @@ public class CachingObjectStorageTest {
         // now it should have been evicted
         assertFalse(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         cachingObjectStorageClient.close();
@@ -1423,47 +1551,58 @@ public class CachingObjectStorageTest {
         long maximumWeight = CONTENT.length() * 2;
         int expireAfterWriteSeconds = getExpireAfterWriteSeconds();
 
-        when(mockClient.getObject(where(r -> r.getIfMatch().equals("etag1a") && r.getRange() == null)))
+        when(
+                        mockClient.getObject(
+                                where(
+                                        r ->
+                                                r.getIfMatch().equals("etag1a")
+                                                        && r.getRange() == null)))
                 .thenAnswer(
                         i -> {
                             // create a new response, with a new ByteArrayInputStream, every time
                             return GetObjectResponse.builder()
-                                                    .contentLength(Long.valueOf(CONTENT.length()))
-                                                    .inputStream(new ByteArrayInputStream(CONTENT.getBytes()))
-                                                    .eTag("etag1a")
-                                                    .__httpStatusCode__(200)
-                                                    .build();
+                                    .contentLength(Long.valueOf(CONTENT.length()))
+                                    .inputStream(new ByteArrayInputStream(CONTENT.getBytes()))
+                                    .eTag("etag1a")
+                                    .__httpStatusCode__(200)
+                                    .build();
                         });
 
         // second request is with "etag1b"
-        when(mockClient.getObject(where(r -> r.getIfMatch().equals("etag1b") && r.getRange() == null)))
+        when(
+                        mockClient.getObject(
+                                where(
+                                        r ->
+                                                r.getIfMatch().equals("etag1b")
+                                                        && r.getRange() == null)))
                 .thenAnswer(
                         i -> {
                             // create a new response, with a new ByteArrayInputStream, every time
                             return GetObjectResponse.builder()
-                                                    .contentLength(Long.valueOf(CONTENT2.length()))
-                                                    .inputStream(new ByteArrayInputStream(CONTENT2.getBytes()))
-                                                    .eTag("etag1b")
-                                                    .__httpStatusCode__(200)
-                                                    .build();
+                                    .contentLength(Long.valueOf(CONTENT2.length()))
+                                    .inputStream(new ByteArrayInputStream(CONTENT2.getBytes()))
+                                    .eTag("etag1b")
+                                    .__httpStatusCode__(200)
+                                    .build();
                         });
 
         CachingObjectStorage cachingObjectStorageClient =
-                CachingObjectStorage.build(CachingObjectStorage.newConfiguration()
-                                                               .client(mockClient)
-                                                               .cacheDirectory(directory)
-                                                               .maximumWeight(maximumWeight)
-                                                               .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
-                                                               .aggressiveCacheGarbageCollection(1000)
-                                                               .build());
+                CachingObjectStorage.build(
+                        CachingObjectStorage.newConfiguration()
+                                .client(mockClient)
+                                .cacheDirectory(directory)
+                                .maximumWeight(maximumWeight)
+                                .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
+                                .aggressiveCacheGarbageCollection(1000)
+                                .build());
 
         GetObjectRequest request =
                 GetObjectRequest.builder()
-                                .namespaceName("namespace")
-                                .bucketName("bucket")
-                                .objectName("object")
-                                .ifMatch("etag1a")
-                                .build();
+                        .namespaceName("namespace")
+                        .bucketName("bucket")
+                        .objectName("object")
+                        .ifMatch("etag1a")
+                        .build();
         GetObjectResponse response = cachingObjectStorageClient.getObject(request);
 
         StringWriter sw = new StringWriter();
@@ -1472,13 +1611,12 @@ public class CachingObjectStorageTest {
 
         GetObjectRequest request2 =
                 GetObjectRequest.builder()
-                                .namespaceName("namespace")
-                                .bucketName("bucket")
-                                .objectName("object")
-                                .ifMatch("etag1b")
-                                .build();
+                        .namespaceName("namespace")
+                        .bucketName("bucket")
+                        .objectName("object")
+                        .ifMatch("etag1b")
+                        .build();
         GetObjectResponse response2 = cachingObjectStorageClient.getObject(request2);
-
 
         StringWriter sw2 = new StringWriter();
         IOUtils.copy(new InputStreamReader(response2.getInputStream()), sw2);
@@ -1491,22 +1629,26 @@ public class CachingObjectStorageTest {
         // the file hasn't been evicted yet, so it should still be there
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // clean-up doesn't do anything
         cachingObjectStorageClient.cleanUp();
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
         assertTrue(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         // sleep
@@ -1518,7 +1660,8 @@ public class CachingObjectStorageTest {
         // now it should have been evicted
         assertFalse(
                 ((CachingObjectStorage.CachedInputStream) response2.getInputStream())
-                        .getCachedContentPath().toFile()
+                        .getCachedContentPath()
+                        .toFile()
                         .exists());
 
         cachingObjectStorageClient.close();
@@ -1677,7 +1820,7 @@ public class CachingObjectStorageTest {
         assertNotEquals(key5.hashCode(), key6.hashCode());
         assertNotEquals(key5.hashCode(), key7.hashCode());
         assertNotEquals(key6.hashCode(), key7.hashCode());
-        
+
         // toString
         assertEquals(key1.toString(), key1a.toString());
         assertEquals(key1.toString(), key1b.toString());
@@ -1726,19 +1869,19 @@ public class CachingObjectStorageTest {
 
         int maxRetries = 1;
         CachingObjectStorage cachingObjectStorageClient =
-                CachingObjectStorage.build(CachingObjectStorage.newConfiguration()
-                                                               .client(mockClient)
-                                                               .cacheDirectory(directory)
-                                                               .consistencyPolicy(new NoOpConsistencyPolicy())
-                                                               .maximumWeight(maximumWeight)
-                                                               .expireAfterWrite(Duration.ofSeconds(5))
-                                                               .downloadConfiguration(
-                                                                       DownloadConfiguration
-                                                                               .builder()
-                                                                               .maxRetries(maxRetries)
-                                                                               .maxBackoff(Duration.ofMillis(300))
-                                                                               .build())
-                                                               .build());
+                CachingObjectStorage.build(
+                        CachingObjectStorage.newConfiguration()
+                                .client(mockClient)
+                                .cacheDirectory(directory)
+                                .consistencyPolicy(new NoOpConsistencyPolicy())
+                                .maximumWeight(maximumWeight)
+                                .expireAfterWrite(Duration.ofSeconds(5))
+                                .downloadConfiguration(
+                                        DownloadConfiguration.builder()
+                                                .maxRetries(maxRetries)
+                                                .maxBackoff(Duration.ofMillis(300))
+                                                .build())
+                                .build());
 
         GetObjectRequest request =
                 GetObjectRequest.builder()
@@ -1791,9 +1934,10 @@ public class CachingObjectStorageTest {
     }
 
     public static boolean isBeingDebugged() {
-        return java.lang.management.ManagementFactory
-                .getRuntimeMXBean()
-                .getInputArguments().toString().contains("jdwp");
+        return java.lang.management.ManagementFactory.getRuntimeMXBean()
+                .getInputArguments()
+                .toString()
+                .contains("jdwp");
     }
 
     //
@@ -1807,21 +1951,24 @@ public class CachingObjectStorageTest {
         List<CachingObjectStorage.PathHolder> pathObjects = new ArrayList<>();
 
         for (int i = 0; i < 10; ++i) {
-            CachingObjectStorage.PathHolder pathObject = new CachingObjectStorage.PathHolder(Paths.get("/tmp/" + i + ".txt"));
+            CachingObjectStorage.PathHolder pathObject =
+                    new CachingObjectStorage.PathHolder(Paths.get("/tmp/" + i + ".txt"));
             pathObjects.add(pathObject);
         }
 
         CachingObjectStorage.PathHolder path0 = pathObjects.get(0);
 
         for (int i = 0; i < 10; ++i) {
-            references.add(new CachingObjectStorage.PathPhantomReference(pathObjects.get(i), referenceQueue, i));
+            references.add(
+                    new CachingObjectStorage.PathPhantomReference(
+                            pathObjects.get(i), referenceQueue, i));
         }
 
         for (int i = 0; i < 10; ++i) {
             PhantomReference<CachingObjectStorage.PathHolder> reference = references.get(i);
             System.out.println(reference);
             assertFalse(reference.isEnqueued());
-            assertFalse(((CachingObjectStorage.PathPhantomReference)reference).isCleared());
+            assertFalse(((CachingObjectStorage.PathPhantomReference) reference).isCleared());
         }
 
         pathObjects = null;
@@ -1868,13 +2015,14 @@ public class CachingObjectStorageTest {
         int expireAfterWriteSeconds = getExpireAfterWriteSeconds();
 
         CachingObjectStorage cachingObjectStorageClient =
-                CachingObjectStorage.build(CachingObjectStorage.newConfiguration()
-                        .client(mockClient)
-                        .cacheDirectory(directory)
-                        .consistencyPolicy(new NoOpConsistencyPolicy())
-                        .maximumWeight(maximumWeight)
-                        .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
-                        .build());
+                CachingObjectStorage.build(
+                        CachingObjectStorage.newConfiguration()
+                                .client(mockClient)
+                                .cacheDirectory(directory)
+                                .consistencyPolicy(new NoOpConsistencyPolicy())
+                                .maximumWeight(maximumWeight)
+                                .expireAfterWrite(Duration.ofSeconds(expireAfterWriteSeconds))
+                                .build());
 
         GetObjectResponse response =
                 GetObjectResponse.builder()
@@ -1904,6 +2052,5 @@ public class CachingObjectStorageTest {
         assertEquals(response.getContentLength(), cacheResponse.getContentLength());
         assertEquals(response.getETag(), cacheResponse.getETag());
         assertEquals(response.get__httpStatusCode__(), cacheResponse.get__httpStatusCode__());
-
     }
 }

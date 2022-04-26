@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -45,7 +45,12 @@ import static org.powermock.api.mockito.PowerMockito.whenNew;
 
 @RunWith(PowerMockRunner.class)
 @PowerMockIgnore({"jdk.internal.reflect.*", "javax.management.*"})
-@PrepareForTest({BmcDataStoreFactory.class, ObjectStorageClient.class, Region.class, AbstractFederationClientAuthenticationDetailsProviderBuilder.class})
+@PrepareForTest({
+    BmcDataStoreFactory.class,
+    ObjectStorageClient.class,
+    Region.class,
+    AbstractFederationClientAuthenticationDetailsProviderBuilder.class
+})
 public class BmcDataStoreFactoryTest {
 
     @Mock private Configuration mockConfiguration;
@@ -70,7 +75,8 @@ public class BmcDataStoreFactoryTest {
         // Setup mockIntegerAccessor
         when(mockIntegerAccessor.get(eq(BmcProperties.CONNECTION_TIMEOUT_MILLIS))).thenReturn(null);
         when(mockIntegerAccessor.get(eq(BmcProperties.READ_TIMEOUT_MILLIS))).thenReturn(null);
-        when(mockIntegerAccessor.get(eq(BmcProperties.APACHE_MAX_CONNECTION_POOL_SIZE))).thenReturn(null);
+        when(mockIntegerAccessor.get(eq(BmcProperties.APACHE_MAX_CONNECTION_POOL_SIZE)))
+                .thenReturn(null);
 
         // Setup mockLongAccessor
         when(mockLongAccessor.get(eq(BmcProperties.RETRY_TIMEOUT_IN_SECONDS))).thenReturn(30L);
@@ -92,7 +98,7 @@ public class BmcDataStoreFactoryTest {
                 .thenReturn(null);
         when(mockBooleanAccessor.get(eq(BmcProperties.OBJECT_AUTO_CLOSE_INPUT_STREAM)))
                 .thenReturn(true);
-        
+
         // Allow stubbing of other methods inside the factory
         factoryUnderTest = spy(new BmcDataStoreFactory(mockConfiguration));
     }
@@ -126,7 +132,8 @@ public class BmcDataStoreFactoryTest {
 
         verifyStatic(ObjectStorageClient.class, Mockito.times(2));
         ObjectStorageClient.builder();
-        verify(mockObjectStorageClientBuilder, Mockito.times(2)).configuration(isA(ClientConfiguration.class));
+        verify(mockObjectStorageClientBuilder, Mockito.times(2))
+                .configuration(isA(ClientConfiguration.class));
 
         final ArgumentCaptor<ClientConfigurator> configuratorCaptor =
                 ArgumentCaptor.forClass(ClientConfigurator.class);
@@ -143,7 +150,8 @@ public class BmcDataStoreFactoryTest {
     public void createClient_withRegionIdAndNoHostname_shouldUseObjectStorageClientConstructor()
             throws Exception {
         when(mockStringAccessor.get(eq(BmcProperties.HOST_NAME))).thenReturn(null);
-        when(mockStringAccessor.get(eq(BmcProperties.REGION_CODE_OR_ID))).thenReturn("us-phoenix-1");
+        when(mockStringAccessor.get(eq(BmcProperties.REGION_CODE_OR_ID)))
+                .thenReturn("us-phoenix-1");
         setUpStubForCreateAuthenticator();
         setUpObjectStorageClientBuilder();
         whenNew(ObjectStorageClient.class).withAnyArguments().thenReturn(mockObjectStorageClient);
@@ -170,16 +178,19 @@ public class BmcDataStoreFactoryTest {
     }
 
     @Test
-    public void createClient_withImds_shouldUseObjectStorageClientConstructor()
-            throws Exception {
+    public void createClient_withImds_shouldUseObjectStorageClientConstructor() throws Exception {
         when(mockStringAccessor.get(eq(BmcProperties.HOST_NAME))).thenReturn(null);
         setUpStubForCreateAuthenticator();
         setUpObjectStorageClientBuilder();
         whenNew(ObjectStorageClient.class).withAnyArguments().thenReturn(mockObjectStorageClient);
         mockStatic(AbstractFederationClientAuthenticationDetailsProviderBuilder.class);
-        BDDMockito.given(AbstractFederationClientAuthenticationDetailsProviderBuilder.simpleRetry(any(), anyString(), anyString())).willReturn("phx");
+        BDDMockito.given(
+                        AbstractFederationClientAuthenticationDetailsProviderBuilder.simpleRetry(
+                                any(), anyString(), anyString()))
+                .willReturn("phx");
         mockStatic(Region.class);
-        BDDMockito.given(Region.formatDefaultRegionEndpoint(any(), anyString())).willReturn("some_endpoint");
+        BDDMockito.given(Region.formatDefaultRegionEndpoint(any(), anyString()))
+                .willReturn("some_endpoint");
 
         final ObjectStorage client = factoryUnderTest.createClient(mockPropAccessor);
 
