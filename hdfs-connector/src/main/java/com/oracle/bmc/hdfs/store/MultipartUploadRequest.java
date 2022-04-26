@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
+ * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
+ */
 package com.oracle.bmc.hdfs.store;
 
 import java.util.Objects;
@@ -26,23 +31,25 @@ public class MultipartUploadRequest {
     /**
      * Retry condition that also retries on 409 - ConcurrentObjectUpdate.
      */
-    private static final RetryCondition RETRY_CONDITION = new DefaultRetryCondition() {
-        public boolean shouldBeRetried(@NonNull BmcException e) {
-            if (e == null) {
-                // wanted to setup some sane defaults if someone attempts to send in null for the exception
-                throw new NullPointerException("e is marked non-null but is null");
-            } else {
-                return super.shouldBeRetried(e) ||
-                        e.getStatusCode() == 409 && "ConcurrentObjectUpdate".equals(e.getServiceCode());
-            }
-        }
-    };
-    static final RetryConfiguration RETRY_CONFIGURATION = RetryConfiguration
-            .builder()
-            .terminationStrategy(new MaxAttemptsTerminationStrategy(5))
-            .delayStrategy(new ExponentialBackoffDelayStrategy(100L))
-            .retryCondition((exception) -> RETRY_CONDITION.shouldBeRetried(exception))
-            .build();
+    private static final RetryCondition RETRY_CONDITION =
+            new DefaultRetryCondition() {
+                public boolean shouldBeRetried(@NonNull BmcException e) {
+                    if (e == null) {
+                        // wanted to setup some sane defaults if someone attempts to send in null for the exception
+                        throw new NullPointerException("e is marked non-null but is null");
+                    } else {
+                        return super.shouldBeRetried(e)
+                                || e.getStatusCode() == 409
+                                        && "ConcurrentObjectUpdate".equals(e.getServiceCode());
+                    }
+                }
+            };
+    static final RetryConfiguration RETRY_CONFIGURATION =
+            RetryConfiguration.builder()
+                    .terminationStrategy(new MaxAttemptsTerminationStrategy(5))
+                    .delayStrategy(new ExponentialBackoffDelayStrategy(100L))
+                    .retryCondition((exception) -> RETRY_CONDITION.shouldBeRetried(exception))
+                    .build();
 
     @lombok.Builder
     MultipartUploadRequest(
@@ -51,15 +58,18 @@ public class MultipartUploadRequest {
             boolean allowOverwrite,
             RetryConfiguration retryConfiguration) {
         this.multipartUploadRequest =
-                Objects.requireNonNull(multipartUploadRequest, "multipartUploadRequest must be non-null");
+                Objects.requireNonNull(
+                        multipartUploadRequest, "multipartUploadRequest must be non-null");
 
         // we cannot write any data if this object is not set
         if (multipartUploadRequest.getCreateMultipartUploadDetails() == null) {
             throw new NullPointerException("CreateMultipartUploadDetails must be non-null");
         }
 
-        this.objectStorage = Objects.requireNonNull(objectStorage, "objectStorage must be non-null");
+        this.objectStorage =
+                Objects.requireNonNull(objectStorage, "objectStorage must be non-null");
         this.allowOverwrite = allowOverwrite;
-        this.retryConfiguration = retryConfiguration == null ? RETRY_CONFIGURATION : retryConfiguration;
+        this.retryConfiguration =
+                retryConfiguration == null ? RETRY_CONFIGURATION : retryConfiguration;
     }
 }

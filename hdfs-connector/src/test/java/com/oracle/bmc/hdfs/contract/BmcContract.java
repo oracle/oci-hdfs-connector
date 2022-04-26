@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -25,6 +25,7 @@ public class BmcContract extends AbstractBondedFSContract {
 
     public static class InMemory extends BmcContract {
         public static final String CONTRACT_IN_MEMORY_XML = "contract/oci-inmemory.xml";
+
         public InMemory(Configuration conf) {
             super(conf);
             this.addConfResource(CONTRACT_IN_MEMORY_XML);
@@ -32,7 +33,9 @@ public class BmcContract extends AbstractBondedFSContract {
     }
 
     public static class MultipartInMemoryWrite extends BmcContract {
-        public static final String CONTRACT_MULTIPART_IN_MEMORY_WRITE_XML = "contract/oci-multipartinmemorywrite.xml";
+        public static final String CONTRACT_MULTIPART_IN_MEMORY_WRITE_XML =
+                "contract/oci-multipartinmemorywrite.xml";
+
         public MultipartInMemoryWrite(Configuration conf) {
             super(conf);
             this.addConfResource(CONTRACT_MULTIPART_IN_MEMORY_WRITE_XML);
@@ -41,6 +44,7 @@ public class BmcContract extends AbstractBondedFSContract {
 
     public static class ReadAhead extends BmcContract {
         public static final String CONTRACT_READ_AHEAD_XML = "contract/oci-readahead.xml";
+
         public ReadAhead(Configuration conf) {
             super(conf);
             this.addConfResource(CONTRACT_READ_AHEAD_XML);
@@ -49,6 +53,7 @@ public class BmcContract extends AbstractBondedFSContract {
 
     public static class PayloadCaching extends BmcContract {
         public static final String CONTRACT_PAYLOAD_CACHING_XML = "contract/oci-payloadcaching.xml";
+
         public PayloadCaching(Configuration conf) {
             super(conf);
             this.addConfResource(CONTRACT_PAYLOAD_CACHING_XML);
@@ -56,7 +61,9 @@ public class BmcContract extends AbstractBondedFSContract {
     }
 
     public static class ApacheClosingStrategy extends BmcContract {
-        public static final String CONTRACT_APACHE_CLOSING_STRATEGY_XML = "contract/oci-apacheclosingstrategy.xml";
+        public static final String CONTRACT_APACHE_CLOSING_STRATEGY_XML =
+                "contract/oci-apacheclosingstrategy.xml";
+
         public ApacheClosingStrategy(Configuration conf) {
             super(conf);
             this.addConfResource(CONTRACT_APACHE_CLOSING_STRATEGY_XML);
@@ -65,6 +72,7 @@ public class BmcContract extends AbstractBondedFSContract {
 
     public static class FilesystemCaching extends BmcContract {
         public static final String FILESYSTEM_CACHING_XML = "contract/oci-filesystemcaching.xml";
+
         public FilesystemCaching(Configuration conf) {
             super(conf);
             this.addConfResource(FILESYSTEM_CACHING_XML);

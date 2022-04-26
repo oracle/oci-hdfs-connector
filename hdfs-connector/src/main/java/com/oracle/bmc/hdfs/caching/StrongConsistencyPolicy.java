@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates.  All rights reserved.
- * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
+ * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
 package com.oracle.bmc.hdfs.caching;
 
@@ -37,19 +38,20 @@ public class StrongConsistencyPolicy implements ConsistencyPolicy {
     public CachingObjectStorage.GetObjectRequestCacheKey constructKey(GetObjectRequest request) {
         return new CachingObjectStorage.GetObjectRequestCacheKey(
                 GetObjectRequest.builder()
-                                .copy(request)
-                                .opcClientRequestId(null)
-                                .retryConfiguration(null)
-                                .invocationCallback(null)
-                                .ifMatch(null)
-                                .build());
-
+                        .copy(request)
+                        .opcClientRequestId(null)
+                        .retryConfiguration(null)
+                        .invocationCallback(null)
+                        .ifMatch(null)
+                        .build());
     }
 
     @Override
     public GetObjectResponse initiateRequest(
-            ObjectStorage client, DownloadManager downloadManager,
-            GetObjectRequest request, CachingObjectStorage.GetObjectRequestCacheKey key,
+            ObjectStorage client,
+            DownloadManager downloadManager,
+            GetObjectRequest request,
+            CachingObjectStorage.GetObjectRequestCacheKey key,
             CachingObjectStorage.GetObjectResponseCacheValue previousValue) {
         if (request.getIfMatch() == null) {
             return withoutIfMatch(client, downloadManager, request, key, previousValue);
@@ -59,8 +61,10 @@ public class StrongConsistencyPolicy implements ConsistencyPolicy {
     }
 
     private GetObjectResponse withoutIfMatch(
-            ObjectStorage client, DownloadManager downloadManager,
-            GetObjectRequest request, CachingObjectStorage.GetObjectRequestCacheKey key,
+            ObjectStorage client,
+            DownloadManager downloadManager,
+            GetObjectRequest request,
+            CachingObjectStorage.GetObjectRequestCacheKey key,
             CachingObjectStorage.GetObjectResponseCacheValue previousValue) {
         // we want strong consistency, so we do a GetObject request with if-none-match=<etag>
         GetObjectRequest.Builder builder = GetObjectRequest.builder().copy(request);
@@ -86,18 +90,17 @@ public class StrongConsistencyPolicy implements ConsistencyPolicy {
             // single thread
             object = client.getObject(builder.build());
         } else {
-            LOG.debug(
-                    "Making new get request (without if-none-match check) for key='{}'",
-                    key);
+            LOG.debug("Making new get request (without if-none-match check) for key='{}'", key);
             object = downloadManager.getObject(builder.build());
         }
 
-        LOG.debug("Service returned '{}-{}' for key='{}', ETag is '{}', body is '{}'",
-                  object.get__httpStatusCode__(),
-                  Response.Status.fromStatusCode(object.get__httpStatusCode__()).getReasonPhrase(),
-                  key,
-                  object.getETag(),
-                  object.getInputStream());
+        LOG.debug(
+                "Service returned '{}-{}' for key='{}', ETag is '{}', body is '{}'",
+                object.get__httpStatusCode__(),
+                Response.Status.fromStatusCode(object.get__httpStatusCode__()).getReasonPhrase(),
+                key,
+                object.getETag(),
+                object.getInputStream());
         if (object.get__httpStatusCode__() == Response.Status.NOT_MODIFIED.getStatusCode()) {
             return null;
         }
@@ -105,8 +108,10 @@ public class StrongConsistencyPolicy implements ConsistencyPolicy {
     }
 
     private GetObjectResponse withIfMatch(
-            ObjectStorage client, DownloadManager downloadManager,
-            GetObjectRequest request, CachingObjectStorage.GetObjectRequestCacheKey key,
+            ObjectStorage client,
+            DownloadManager downloadManager,
+            GetObjectRequest request,
+            CachingObjectStorage.GetObjectRequestCacheKey key,
             CachingObjectStorage.GetObjectResponseCacheValue previousValue) {
         String previousEtag = null;
         if (previousValue != null) {
@@ -136,10 +141,13 @@ public class StrongConsistencyPolicy implements ConsistencyPolicy {
             // do a really short request to check if that is also the still the etag on the server is
             LOG.trace("Previously cached request with same etag '{}' for '{}'", previousEtag, key);
 
-            GetObjectRequest.Builder builder = GetObjectRequest
-                    .builder()
-                    .copy(request)
-                    .range(new Range(0L, 0L)); // doing this is easier than a HeadObject request
+            GetObjectRequest.Builder builder =
+                    GetObjectRequest.builder()
+                            .copy(request)
+                            .range(
+                                    new Range(
+                                            0L,
+                                            0L)); // doing this is easier than a HeadObject request
 
             builder = CachingObjectStorage.Handler.updateRequestId(builder, request);
 
@@ -155,20 +163,24 @@ public class StrongConsistencyPolicy implements ConsistencyPolicy {
         }
 
         // this value has been cached, but the cached etag is different than what the request is asking for
-        LOG.trace("Request with if-match '{}' for previously cached request with different etag '{}' for '{}'",
-                  request.getIfMatch(), previousEtag, key);
+        LOG.trace(
+                "Request with if-match '{}' for previously cached request with different etag '{}' for '{}'",
+                request.getIfMatch(),
+                previousEtag,
+                key);
 
-        GetObjectRequest.Builder builder = GetObjectRequest
-                .builder()
-                .copy(request);
+        GetObjectRequest.Builder builder = GetObjectRequest.builder().copy(request);
 
         // it could throw a 412 - Precondition Failed here because of the if-match,
         // but in that case, the right thing to do is to throw anyway, so just
         // make the request and don't catch the exception
         GetObjectResponse getObjectResponse = downloadManager.getObject(builder.build());
 
-        LOG.trace("Etag matched if-match in request '{}', not previous etag '{}', updating cache for '{}'",
-                  request.getIfMatch(), previousEtag, key);
+        LOG.trace(
+                "Etag matched if-match in request '{}', not previous etag '{}', updating cache for '{}'",
+                request.getIfMatch(),
+                previousEtag,
+                key);
 
         return getObjectResponse;
     }

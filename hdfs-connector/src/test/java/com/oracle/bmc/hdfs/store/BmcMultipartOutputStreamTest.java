@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
+ * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
+ */
 package com.oracle.bmc.hdfs.store;
 
 import com.oracle.bmc.hdfs.BmcProperties;
@@ -25,8 +30,7 @@ import static org.powermock.api.mockito.PowerMockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
 public class BmcMultipartOutputStreamTest {
-    @Mock
-    private ObjectStorage objectStorage;
+    @Mock private ObjectStorage objectStorage;
 
     @Mock private BmcPropertyAccessor mockPropAccessor;
     @Mock private BmcPropertyAccessor.Accessor<Integer> mockIntegerAccessor;
@@ -42,8 +46,12 @@ public class BmcMultipartOutputStreamTest {
     public void setUp() {
         // Setup mockIntegerAccessor
         when(mockIntegerAccessor.get(eq(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS))).thenReturn(1);
-        when(mockBooleanAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED))).thenReturn(true);
-        when(mockIntegerAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS))).thenReturn(900);
+        when(mockBooleanAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED)))
+                .thenReturn(true);
+        when(
+                        mockIntegerAccessor.get(
+                                eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS)))
+                .thenReturn(900);
         when(mockBooleanAccessor.get(eq(BmcProperties.MULTIPART_ALLOW_OVERWRITE))).thenReturn(true);
 
         when(mockPropAccessor.asInteger()).thenReturn(mockIntegerAccessor);
@@ -55,28 +63,38 @@ public class BmcMultipartOutputStreamTest {
         String bucket = "test-bucket";
         String namespace = "testing";
         String objectName = "test-object.txt";
-        CreateMultipartUploadDetails details = CreateMultipartUploadDetails.builder().object(objectName).build();
-        CreateMultipartUploadRequest multipartUploadRequest = CreateMultipartUploadRequest.builder()
-                .bucketName(bucket)
-                .namespaceName(namespace)
-                .createMultipartUploadDetails(details).build();
-        MultipartUploadRequest uploadRequest = MultipartUploadRequest.builder()
-                                                                     .objectStorage(objectStorage)
-                                                                     .multipartUploadRequest(multipartUploadRequest)
-                                                                     .allowOverwrite(true).build();
-        BmcMultipartOutputStream bmos = new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE);
+        CreateMultipartUploadDetails details =
+                CreateMultipartUploadDetails.builder().object(objectName).build();
+        CreateMultipartUploadRequest multipartUploadRequest =
+                CreateMultipartUploadRequest.builder()
+                        .bucketName(bucket)
+                        .namespaceName(namespace)
+                        .createMultipartUploadDetails(details)
+                        .build();
+        MultipartUploadRequest uploadRequest =
+                MultipartUploadRequest.builder()
+                        .objectStorage(objectStorage)
+                        .multipartUploadRequest(multipartUploadRequest)
+                        .allowOverwrite(true)
+                        .build();
+        BmcMultipartOutputStream bmos =
+                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE);
 
         String uploadId = "TestRequest";
-        MultipartUpload upload = MultipartUpload.builder()
-                .uploadId(uploadId)
-                .bucket(bucket)
-                .namespace(namespace)
-                .object(objectName)
-                .storageTier(StorageTier.Standard).build();
+        MultipartUpload upload =
+                MultipartUpload.builder()
+                        .uploadId(uploadId)
+                        .bucket(bucket)
+                        .namespace(namespace)
+                        .object(objectName)
+                        .storageTier(StorageTier.Standard)
+                        .build();
         Mockito.when(objectStorage.createMultipartUpload(any(CreateMultipartUploadRequest.class)))
-                .thenReturn(CreateMultipartUploadResponse.builder().multipartUpload(upload).build());
+                .thenReturn(
+                        CreateMultipartUploadResponse.builder().multipartUpload(upload).build());
 
-        Mockito.when(objectStorage.uploadPart(any(UploadPartRequest.class))).thenReturn(UploadPartResponse.builder().eTag("etag").build());
+        Mockito.when(objectStorage.uploadPart(any(UploadPartRequest.class)))
+                .thenReturn(UploadPartResponse.builder().eTag("etag").build());
 
         Mockito.when(objectStorage.commitMultipartUpload(any(CommitMultipartUploadRequest.class)))
                 .thenReturn(CommitMultipartUploadResponse.builder().eTag("testingEtag").build());
@@ -89,8 +107,10 @@ public class BmcMultipartOutputStreamTest {
         bmos.close();
 
         Mockito.verify(objectStorage, times(2)).uploadPart(any(UploadPartRequest.class));
-        Mockito.verify(objectStorage, times(1)).createMultipartUpload(any(CreateMultipartUploadRequest.class));
-        Mockito.verify(objectStorage, times(1)).commitMultipartUpload(any(CommitMultipartUploadRequest.class));
+        Mockito.verify(objectStorage, times(1))
+                .createMultipartUpload(any(CreateMultipartUploadRequest.class));
+        Mockito.verify(objectStorage, times(1))
+                .commitMultipartUpload(any(CommitMultipartUploadRequest.class));
     }
 
     @Test
@@ -98,28 +118,38 @@ public class BmcMultipartOutputStreamTest {
         String bucket = "test-bucket";
         String namespace = "testing";
         String objectName = "test-object.txt";
-        CreateMultipartUploadDetails details = CreateMultipartUploadDetails.builder().object(objectName).build();
-        CreateMultipartUploadRequest multipartUploadRequest = CreateMultipartUploadRequest.builder()
-                .bucketName(bucket)
-                .namespaceName(namespace)
-                .createMultipartUploadDetails(details).build();
-        MultipartUploadRequest uploadRequest = MultipartUploadRequest.builder()
-                                                                     .objectStorage(objectStorage)
-                                                                     .multipartUploadRequest(multipartUploadRequest)
-                                                                     .allowOverwrite(true).build();
-        BmcMultipartOutputStream bmos = new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE);
+        CreateMultipartUploadDetails details =
+                CreateMultipartUploadDetails.builder().object(objectName).build();
+        CreateMultipartUploadRequest multipartUploadRequest =
+                CreateMultipartUploadRequest.builder()
+                        .bucketName(bucket)
+                        .namespaceName(namespace)
+                        .createMultipartUploadDetails(details)
+                        .build();
+        MultipartUploadRequest uploadRequest =
+                MultipartUploadRequest.builder()
+                        .objectStorage(objectStorage)
+                        .multipartUploadRequest(multipartUploadRequest)
+                        .allowOverwrite(true)
+                        .build();
+        BmcMultipartOutputStream bmos =
+                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE);
 
         String uploadId = "TestRequest";
-        MultipartUpload upload = MultipartUpload.builder()
-                .uploadId(uploadId)
-                .bucket(bucket)
-                .namespace(namespace)
-                .object(objectName)
-                .storageTier(StorageTier.Standard).build();
+        MultipartUpload upload =
+                MultipartUpload.builder()
+                        .uploadId(uploadId)
+                        .bucket(bucket)
+                        .namespace(namespace)
+                        .object(objectName)
+                        .storageTier(StorageTier.Standard)
+                        .build();
         Mockito.when(objectStorage.createMultipartUpload(any(CreateMultipartUploadRequest.class)))
-                .thenReturn(CreateMultipartUploadResponse.builder().multipartUpload(upload).build());
+                .thenReturn(
+                        CreateMultipartUploadResponse.builder().multipartUpload(upload).build());
 
-        Mockito.when(objectStorage.uploadPart(any(UploadPartRequest.class))).thenReturn(UploadPartResponse.builder().eTag("etag").build());
+        Mockito.when(objectStorage.uploadPart(any(UploadPartRequest.class)))
+                .thenReturn(UploadPartResponse.builder().eTag("etag").build());
 
         Mockito.when(objectStorage.commitMultipartUpload(any(CommitMultipartUploadRequest.class)))
                 .thenReturn(CommitMultipartUploadResponse.builder().eTag("testingEtag").build());
@@ -133,8 +163,10 @@ public class BmcMultipartOutputStreamTest {
 
         // 3 parts * 1296 = 3888 / 1024 (max buffer) ~ 4 uploads
         Mockito.verify(objectStorage, times(4)).uploadPart(any(UploadPartRequest.class));
-        Mockito.verify(objectStorage, times(1)).createMultipartUpload(any(CreateMultipartUploadRequest.class));
-        Mockito.verify(objectStorage, times(1)).commitMultipartUpload(any(CommitMultipartUploadRequest.class));
+        Mockito.verify(objectStorage, times(1))
+                .createMultipartUpload(any(CreateMultipartUploadRequest.class));
+        Mockito.verify(objectStorage, times(1))
+                .commitMultipartUpload(any(CommitMultipartUploadRequest.class));
     }
 
     @Test()
@@ -142,33 +174,43 @@ public class BmcMultipartOutputStreamTest {
         String bucket = "test-bucket";
         String namespace = "testing";
         String objectName = "test-object.txt";
-        CreateMultipartUploadDetails details = CreateMultipartUploadDetails.builder().object(objectName).build();
-        CreateMultipartUploadRequest multipartUploadRequest = CreateMultipartUploadRequest.builder()
-                .bucketName(bucket)
-                .namespaceName(namespace)
-                .createMultipartUploadDetails(details).build();
-        MultipartUploadRequest uploadRequest = MultipartUploadRequest.builder()
-                                                                     .objectStorage(objectStorage)
-                                                                     .multipartUploadRequest(multipartUploadRequest)
-                                                                     .allowOverwrite(true).build();
+        CreateMultipartUploadDetails details =
+                CreateMultipartUploadDetails.builder().object(objectName).build();
+        CreateMultipartUploadRequest multipartUploadRequest =
+                CreateMultipartUploadRequest.builder()
+                        .bucketName(bucket)
+                        .namespaceName(namespace)
+                        .createMultipartUploadDetails(details)
+                        .build();
+        MultipartUploadRequest uploadRequest =
+                MultipartUploadRequest.builder()
+                        .objectStorage(objectStorage)
+                        .multipartUploadRequest(multipartUploadRequest)
+                        .allowOverwrite(true)
+                        .build();
 
         String uploadId = "TestRequest";
-        MultipartUpload upload = MultipartUpload.builder()
-                .uploadId(uploadId)
-                .bucket(bucket)
-                .namespace(namespace)
-                .object(objectName)
-                .storageTier(StorageTier.Standard).build();
+        MultipartUpload upload =
+                MultipartUpload.builder()
+                        .uploadId(uploadId)
+                        .bucket(bucket)
+                        .namespace(namespace)
+                        .object(objectName)
+                        .storageTier(StorageTier.Standard)
+                        .build();
         Mockito.when(objectStorage.createMultipartUpload(any(CreateMultipartUploadRequest.class)))
-                .thenReturn(CreateMultipartUploadResponse.builder().multipartUpload(upload).build());
+                .thenReturn(
+                        CreateMultipartUploadResponse.builder().multipartUpload(upload).build());
 
-        Mockito.when(objectStorage.uploadPart(any(UploadPartRequest.class))).thenThrow(Exception.class);
+        Mockito.when(objectStorage.uploadPart(any(UploadPartRequest.class)))
+                .thenThrow(Exception.class);
 
         Mockito.when(objectStorage.commitMultipartUpload(any(CommitMultipartUploadRequest.class)))
                 .thenReturn(CommitMultipartUploadResponse.builder().eTag("testingEtag").build());
 
         Exception exception = null;
-        try (BmcMultipartOutputStream bmos = new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE)) {
+        try (BmcMultipartOutputStream bmos =
+                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE)) {
             for (int parts = 0; parts < 1; ++parts) {
                 bmos.write(generateRandomBytes(1024));
             }
@@ -176,32 +218,39 @@ public class BmcMultipartOutputStreamTest {
             exception = ioe;
         }
 
-        assert(exception != null);
+        assert (exception != null);
         Mockito.verify(objectStorage, times(1)).uploadPart(any(UploadPartRequest.class));
-        Mockito.verify(objectStorage, times(1)).createMultipartUpload(any(CreateMultipartUploadRequest.class));
-        Mockito.verify(objectStorage, never()).commitMultipartUpload(any(CommitMultipartUploadRequest.class));
-        Mockito.verify(objectStorage, times(1)).abortMultipartUpload(any(AbortMultipartUploadRequest.class));
+        Mockito.verify(objectStorage, times(1))
+                .createMultipartUpload(any(CreateMultipartUploadRequest.class));
+        Mockito.verify(objectStorage, never())
+                .commitMultipartUpload(any(CommitMultipartUploadRequest.class));
+        Mockito.verify(objectStorage, times(1))
+                .abortMultipartUpload(any(AbortMultipartUploadRequest.class));
     }
 
     @Test
     public void failOnNullDetails() {
         String bucket = "test-bucket";
         String namespace = "testing";
-        CreateMultipartUploadRequest multipartUploadRequest = CreateMultipartUploadRequest.builder()
-                .bucketName(bucket)
-                .namespaceName(namespace).build();
+        CreateMultipartUploadRequest multipartUploadRequest =
+                CreateMultipartUploadRequest.builder()
+                        .bucketName(bucket)
+                        .namespaceName(namespace)
+                        .build();
         Exception exception = null;
         try {
             MultipartUploadRequest.builder()
-                                  .objectStorage(objectStorage)
-                                  .multipartUploadRequest(multipartUploadRequest)
-                                  .allowOverwrite(true).build();
+                    .objectStorage(objectStorage)
+                    .multipartUploadRequest(multipartUploadRequest)
+                    .allowOverwrite(true)
+                    .build();
         } catch (NullPointerException npe) {
             exception = npe;
         }
 
         assert (exception != null);
-        Mockito.verify(objectStorage, never()).createMultipartUpload(any(CreateMultipartUploadRequest.class));
+        Mockito.verify(objectStorage, never())
+                .createMultipartUpload(any(CreateMultipartUploadRequest.class));
     }
 
     private static byte[] generateRandomBytes(int num) {

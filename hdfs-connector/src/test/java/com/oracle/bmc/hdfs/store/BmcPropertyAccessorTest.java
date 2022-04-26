@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -52,10 +52,25 @@ public class BmcPropertyAccessorTest {
         this.configuration.setLong(
                 BmcProperties.BLOCK_SIZE_IN_MB.getPropertyName() + PROPERTY_OVERRIDE_SUFFIX, 100L);
         assertThat(propertyAccessor.asLong().get(BmcProperties.BLOCK_SIZE_IN_MB), is(100L));
-        assertThat(propertyAccessor.asLong().get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS), is(60L));
+        assertThat(
+                propertyAccessor
+                        .asLong()
+                        .get(
+                                BmcProperties
+                                        .OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS),
+                is(60L));
         this.configuration.setLong(
-                BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS.getPropertyName() + PROPERTY_OVERRIDE_SUFFIX, 180L);
-        assertThat(propertyAccessor.asLong().get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS), is(180L));
+                BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS
+                                .getPropertyName()
+                        + PROPERTY_OVERRIDE_SUFFIX,
+                180L);
+        assertThat(
+                propertyAccessor
+                        .asLong()
+                        .get(
+                                BmcProperties
+                                        .OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS),
+                is(180L));
     }
 
     @Test
@@ -80,11 +95,20 @@ public class BmcPropertyAccessorTest {
                 false);
         assertThat(
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_READ_BUFFER), is(false));
-        assertThat(propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED), is(false));
+        assertThat(
+                propertyAccessor
+                        .asBoolean()
+                        .get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED),
+                is(false));
         this.configuration.setBoolean(
-                BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED.getPropertyName() + PROPERTY_OVERRIDE_SUFFIX,
+                BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED.getPropertyName()
+                        + PROPERTY_OVERRIDE_SUFFIX,
                 true);
-        assertThat(propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED), is(true));
+        assertThat(
+                propertyAccessor
+                        .asBoolean()
+                        .get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED),
+                is(true));
     }
 
     @Test
@@ -206,25 +230,40 @@ public class BmcPropertyAccessorTest {
     @Test
     public void forNonNull() {
         AtomicBoolean executed = new AtomicBoolean(false);
-        String result = propertyAccessor.asString().forNonNull(BmcProperties.HOST_NAME, s -> {
-            executed.set(true);
-            return s;
-        });
+        String result =
+                propertyAccessor
+                        .asString()
+                        .forNonNull(
+                                BmcProperties.HOST_NAME,
+                                s -> {
+                                    executed.set(true);
+                                    return s;
+                                });
         assertFalse(executed.get());
         assertNull(result);
         this.configuration.set(BmcProperties.HOST_NAME.getPropertyName(), "value");
-        result = propertyAccessor.asString().forNonNull(BmcProperties.HOST_NAME, s -> {
-            executed.set(true);
-            return s;
-        });
+        result =
+                propertyAccessor
+                        .asString()
+                        .forNonNull(
+                                BmcProperties.HOST_NAME,
+                                s -> {
+                                    executed.set(true);
+                                    return s;
+                                });
         assertTrue(executed.get());
         assertEquals("value", result);
         this.configuration.set(
                 BmcProperties.HOST_NAME.getPropertyName() + PROPERTY_OVERRIDE_SUFFIX, "value2");
-        result = propertyAccessor.asString().forNonNull(BmcProperties.HOST_NAME, s -> {
-            executed.set(true);
-            return s;
-        });
+        result =
+                propertyAccessor
+                        .asString()
+                        .forNonNull(
+                                BmcProperties.HOST_NAME,
+                                s -> {
+                                    executed.set(true);
+                                    return s;
+                                });
         assertTrue(executed.get());
         assertEquals("value2", result);
     }

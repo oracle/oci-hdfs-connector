@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -53,7 +53,9 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
     }
 
     @Override
-    public long getPos() { return filePos; }
+    public long getPos() {
+        return filePos;
+    }
 
     @Override
     public int read() throws IOException {
@@ -65,7 +67,20 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
             return -1;
         }
         filePos++;
-        return Byte.toUnsignedInt(data[dataCurOffset++]);
+        int result = Byte.toUnsignedInt(data[dataCurOffset++]);
+        if (atEndOfBuffer()) {
+            clearBuffer();
+        }
+        return result;
+    }
+
+    private void clearBuffer() {
+        dataPos = -1;
+        data = null;
+    }
+
+    private boolean atEndOfBuffer() {
+        return dataCurOffset == dataMax;
     }
 
     @Override
@@ -82,18 +97,17 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
             fillBuffer();
         }
         if (dataPos == -1) {
-            return -1;  // EOF
+            return -1; // EOF
         }
         int n = Math.min(length, dataMax - dataCurOffset);
         System.arraycopy(data, dataCurOffset, buffer, offset, n);
         dataCurOffset += n;
         filePos += n;
-        if (dataCurOffset == dataMax) {
+        if (atEndOfBuffer()) {
             if (n != length) {
                 LOG.debug("{}: Short Read; exhausted buffer", this);
             }
-            dataPos = -1;
-            data = null;
+            clearBuffer();
         }
         return n;
     }
@@ -130,11 +144,9 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
         filePos = pos;
         if (filePos < dataPos) {
             dataPos = -1;
-        }
-        else if (dataPos != -1 && filePos > (dataPos + dataMax)) {
+        } else if (dataPos != -1 && filePos > (dataPos + dataMax)) {
             dataPos = -1;
-        }
-        else {
+        } else {
             dataCurOffset = (int) (filePos - dataPos);
         }
     }
@@ -147,8 +159,7 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
     @Override
     public void close() {
         LOG.debug("{}: Closing", this);
-        dataPos = -1;
-        data = null;
+        clearBuffer();
     }
 
     /**
@@ -169,7 +180,13 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
             return;
         }
         int len = (int) (end - start);
-        LOG.debug("{}: Filling requesting {} bytes from {} to {} (size {})", this, len, start, end, status.getLen());
+        LOG.debug(
+                "{}: Filling requesting {} bytes from {} to {} (size {})",
+                this,
+                len,
+                start,
+                end,
+                status.getLen());
         Range range = new Range(start, end);
         GetObjectRequest request = requestBuilder.get().range(range).build();
         String key = request.getObjectName();
@@ -178,33 +195,38 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
             // Parquet footer. Load from cache (side effect: will load info)
             ParquetFooterInfo fi;
             try {
-                fi = parquetCache.get(key, () -> {
-                    LOG.debug("Loading parquet cache for {}", key);
-                    GetObjectResponse response = objectStorage.getObject(request);
-                    ParquetFooterInfo ret = new ParquetFooterInfo();
-                    try (final InputStream is = response.getInputStream()) {
-                        ret.footer = new byte[8];
-                        if (is.read(ret.footer) != 8) {
-                            throw new IOException("Not a parquet file");
-                        }
-                    }
-                    ret.metadataLen = 
-                        Byte.toUnsignedInt(ret.footer[3]) << 24
-                        | Byte.toUnsignedInt(ret.footer[2]) << 16
-                        | Byte.toUnsignedInt(ret.footer[1]) << 8
-                        | Byte.toUnsignedInt(ret.footer[0]) << 0;
-                    long metaEnd = status.getLen() - 8;
-                    long metaStart = metaEnd - ret.metadataLen;
-                    ret.metadataStart = metaStart;
-                    Range mdRange = new Range(metaStart, metaEnd);
-                    GetObjectRequest mdRequest = requestBuilder.get().range(mdRange).build();
-                    GetObjectResponse mdResponse = objectStorage.getObject(mdRequest);
-                    ret.metadata = new byte[ret.metadataLen];
-                    try (InputStream is = mdResponse.getInputStream()) {
-                        readAllBytes(is, ret.metadata);
-                    }
-                    return ret;
-                });
+                fi =
+                        parquetCache.get(
+                                key,
+                                () -> {
+                                    LOG.debug("Loading parquet cache for {}", key);
+                                    GetObjectResponse response = objectStorage.getObject(request);
+                                    ParquetFooterInfo ret = new ParquetFooterInfo();
+                                    try (final InputStream is = response.getInputStream()) {
+                                        ret.footer = new byte[8];
+                                        if (is.read(ret.footer) != 8) {
+                                            throw new IOException("Not a parquet file");
+                                        }
+                                    }
+                                    ret.metadataLen =
+                                            Byte.toUnsignedInt(ret.footer[3]) << 24
+                                                    | Byte.toUnsignedInt(ret.footer[2]) << 16
+                                                    | Byte.toUnsignedInt(ret.footer[1]) << 8
+                                                    | Byte.toUnsignedInt(ret.footer[0]) << 0;
+                                    long metaEnd = status.getLen() - 8;
+                                    long metaStart = metaEnd - ret.metadataLen;
+                                    ret.metadataStart = metaStart;
+                                    Range mdRange = new Range(metaStart, metaEnd);
+                                    GetObjectRequest mdRequest =
+                                            requestBuilder.get().range(mdRange).build();
+                                    GetObjectResponse mdResponse =
+                                            objectStorage.getObject(mdRequest);
+                                    ret.metadata = new byte[ret.metadataLen];
+                                    try (InputStream is = mdResponse.getInputStream()) {
+                                        readAllBytes(is, ret.metadata);
+                                    }
+                                    return ret;
+                                });
             } catch (ExecutionException ex) {
                 throw new IOException("Error getting file", ex);
             }
@@ -239,7 +261,12 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
         dataPos = filePos;
         dataMax = len;
         dataCurOffset = 0;
-        LOG.debug("{}: After filling, dataPos {}, filePos {}, dataMax {}", this, dataPos, filePos, dataMax);
+        LOG.debug(
+                "{}: After filling, dataPos {}, filePos {}, dataMax {}",
+                this,
+                dataPos,
+                filePos,
+                dataMax);
     }
 
     private String reqString;
@@ -267,6 +294,4 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
             LOG.debug("Removed entry {}, cause {}", rn.getKey(), rn.getCause());
         };
     }
-
-
 }

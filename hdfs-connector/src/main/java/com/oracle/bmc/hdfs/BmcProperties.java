@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2020, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -15,7 +15,6 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.lang.Deprecated;
-import java.nio.file.Files;
 import java.util.concurrent.TimeUnit;
 
 import static com.oracle.bmc.hdfs.BmcConstants.*;
@@ -189,7 +188,8 @@ public enum BmcProperties {
      * responses for an unlimited amount of time, and only re-requesting them if they had to be evicted because of
      * the maximum cache size.
      */
-    OBJECT_METADATA_CACHING_SPEC(OBJECT_METADATA_CACHING_SPEC_KEY, "maximumSize=1024,expireAfterWrite=5m"),
+    OBJECT_METADATA_CACHING_SPEC(
+            OBJECT_METADATA_CACHING_SPEC_KEY, "maximumSize=1024,expireAfterWrite=5m"),
 
     /**
      * (boolean, optional) Flag to enable jersey client logging. See
@@ -252,7 +252,8 @@ public enum BmcProperties {
      * objects for an unlimited amount of time, and only re-requesting them if they had to be evicted because of
      * the maximum cache size.
      */
-    OBJECT_PARQUET_CACHING_SPEC(OBJECT_PARQUET_CACHING_SPEC_KEY, "maximumSize=10240,expireAfterWrite=15m"),
+    OBJECT_PARQUET_CACHING_SPEC(
+            OBJECT_PARQUET_CACHING_SPEC_KEY, "maximumSize=10240,expireAfterWrite=15m"),
 
     /**
      * (string, optional) Connection Closing Strategy for the Apache Connection. Values supported : IMMEDIATE - for
@@ -282,7 +283,8 @@ public enum BmcProperties {
      *
      * Cannot be combined with OBJECT_PAYLOAD_CACHING_MAXIMUM_SIZE.
      */
-    OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES(OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES_KEY, 4L * 1024 * 1024 * 1024),
+    OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES(
+            OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES_KEY, 4L * 1024 * 1024 * 1024),
 
     /**
      * (int, optional) Maximum number of cached items. The default is unset.
@@ -299,12 +301,14 @@ public enum BmcProperties {
     /**
      * (boolean, optional) Whether to record cache statistics. The default is false.
      */
-    OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED(OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED_KEY, false),
+    OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED(
+            OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED_KEY, false),
 
     /**
      * (long, optional) The time interval (in seconds) between successive logging of cache statistics. The default is 60 seconds.
      */
-    OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS(OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS_KEY, 60L),
+    OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS(
+            OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS_KEY, 60L),
 
     /**
      * (int, optional) Whether cached items should be expired if a certain number of seconds has passed since the
@@ -313,7 +317,8 @@ public enum BmcProperties {
      *
      * Cannot be combined with OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS.
      */
-    OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS(OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS_KEY, null),
+    OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS(
+            OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_ACCESS_SECONDS_KEY, null),
 
     /**
      * (int, optional) Whether cached items should be expired if a certain number of seconds has passed since the
@@ -321,16 +326,18 @@ public enum BmcProperties {
      *
      * Cannot be combined with OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS.
      */
-    OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS(OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS_KEY,
-                                                      (int) TimeUnit.MINUTES.toSeconds(10)),
+    OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS(
+            OBJECT_PAYLOAD_CACHING_EXPIRE_AFTER_WRITE_SECONDS_KEY,
+            (int) TimeUnit.MINUTES.toSeconds(10)),
 
     /**
      * (string, optional) The consistency policy to use for the object payload cache. The default is
      * "com.oracle.bmc.hdfs.caching.StrongConsistencyPolicy", which checks if the object was updated on the server.
      * If you know your data does not change, you can set it to "com.oracle.bmc.hdfs.caching.NoOpConsistencyPolicy".
      */
-    OBJECT_PAYLOAD_CACHING_CONSISTENCY_POLICY_CLASS(OBJECT_PAYLOAD_CACHING_CONSISTENCY_POLICY_CLASS_KEY,
-                                                    StrongConsistencyPolicy.class.getName()),
+    OBJECT_PAYLOAD_CACHING_CONSISTENCY_POLICY_CLASS(
+            OBJECT_PAYLOAD_CACHING_CONSISTENCY_POLICY_CLASS_KEY,
+            StrongConsistencyPolicy.class.getName()),
 
     /**
      * (string, optional) The directory for the object payload cache. The default is the value of the "java.io.tmpdir"
@@ -374,7 +381,8 @@ public enum BmcProperties {
      * (int, optional) The amount of time in seconds to block waiting for a slot in the multipart upload executor.
      * See {@link BmcConstants#MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS_KEY} for config key name. Default is 900.
      */
-    MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS(MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS_KEY, 900),
+    MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS(
+            MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS_KEY, 900),
 
     /**
      * (boolean, optional) Flag to enable overwrites while using Multipart Uploads.
@@ -420,7 +428,8 @@ public enum BmcProperties {
      *
      * This setting cannot be overridden per namespace and bucket.
      */
-    FILESYSTEM_CACHING_EXPIRE_AFTER_ACCESS_SECONDS(FILESYSTEM_CACHING_EXPIRE_AFTER_ACCESS_SECONDS_KEY, null),
+    FILESYSTEM_CACHING_EXPIRE_AFTER_ACCESS_SECONDS(
+            FILESYSTEM_CACHING_EXPIRE_AFTER_ACCESS_SECONDS_KEY, null),
 
     /**
      * (int, optional) Whether cached {@link BmcFilesystem} items should be expired if a certain number of seconds has
@@ -430,8 +439,9 @@ public enum BmcProperties {
      *
      * This setting cannot be overridden per namespace and bucket.
      */
-    FILESYSTEM_CACHING_EXPIRE_AFTER_WRITE_SECONDS(FILESYSTEM_CACHING_EXPIRE_AFTER_WRITE_SECONDS_KEY, (int) TimeUnit.MINUTES.toSeconds(30)),
-
+    FILESYSTEM_CACHING_EXPIRE_AFTER_WRITE_SECONDS(
+            FILESYSTEM_CACHING_EXPIRE_AFTER_WRITE_SECONDS_KEY,
+            (int) TimeUnit.MINUTES.toSeconds(30)),
     ;
 
     @Getter private final String propertyName;

@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
+ * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
+ */
 package com.oracle.bmc.hdfs.util;
 
 import lombok.extern.slf4j.Slf4j;
@@ -14,7 +19,11 @@ public class BlockingRejectionHandler implements RejectedExecutionHandler {
         } else {
             this.timeout = timeout;
             if (LOG.isDebugEnabled()) {
-                LOG.debug(String.format("Initializing %s with timeout: %d seconds", this.getClass().getSimpleName(), this.timeout));
+                LOG.debug(
+                        String.format(
+                                "Initializing %s with timeout: %d seconds",
+                                this.getClass().getSimpleName(),
+                                this.timeout));
             }
         }
     }
@@ -27,12 +36,17 @@ public class BlockingRejectionHandler implements RejectedExecutionHandler {
             BlockingQueue<Runnable> executorQueue = executor.getQueue();
             try {
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug(String.format("Attempting to block and queue task, timeout: %d seconds", this.timeout));
+                    LOG.debug(
+                            String.format(
+                                    "Attempting to block and queue task, timeout: %d seconds",
+                                    this.timeout));
                 }
 
                 if (!executorQueue.offer(r, this.timeout, TimeUnit.SECONDS)) {
                     throw new RejectedExecutionException(
-                            String.format("Timed-out enqueue of blocking queue, duration %d seconds", this.timeout));
+                            String.format(
+                                    "Timed-out enqueue of blocking queue, duration %d seconds",
+                                    this.timeout));
                 }
 
                 LOG.debug("BlockingHandler successfully queued task");

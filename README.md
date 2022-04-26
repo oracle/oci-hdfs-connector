@@ -26,7 +26,12 @@ See the “Questions or Feedback?” section [here](https://docs.cloud.oracle.co
 
 ## Version
 
-The first three numbers of HDFS connector version are Hadoop version that the connector was compiled and tested against.
+The first three numbers of HDFS connector version represent the Hadoop version that the connector was compiled and tested against. The next three numbers are for the platform, major and minor versions respectively.
+* Minor version is incremented when there are no breaking changes
+* Major version is incremented when there are breaking changes which might affect some users
+* Platform version is incremented when there are bigger important breaking changes which would affect many users
+
+For example, in HDFS connector version `3.3.1.x.y.z`, `3.3.1` is for the Hadoop version being used and `x.y.z` refers to the {platform}.{major}.{minor} version of the HDFS connector.
 
 ## Build
 

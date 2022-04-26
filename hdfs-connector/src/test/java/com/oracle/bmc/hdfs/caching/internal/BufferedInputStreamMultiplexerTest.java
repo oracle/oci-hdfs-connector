@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
+ * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
+ */
 package com.oracle.bmc.hdfs.caching.internal;
 
 import java.io.ByteArrayInputStream;
@@ -28,21 +33,24 @@ public class BufferedInputStreamMultiplexerTest {
 
     @Test
     public void testMemoryBufferReadPartial() throws IOException {
-        BufferedInputStreamMultiplexer.MemoryBuffer buf = new BufferedInputStreamMultiplexer.MemoryBuffer();
+        BufferedInputStreamMultiplexer.MemoryBuffer buf =
+                new BufferedInputStreamMultiplexer.MemoryBuffer();
 
         testBufferReadPartialHelper(buf);
     }
 
     @Test
     public void testMemoryBufferReadPartialAndClose() throws IOException {
-        BufferedInputStreamMultiplexer.MemoryBuffer buf = new BufferedInputStreamMultiplexer.MemoryBuffer();
+        BufferedInputStreamMultiplexer.MemoryBuffer buf =
+                new BufferedInputStreamMultiplexer.MemoryBuffer();
 
         testBufferReadPartialAndCloseHelper(buf);
     }
 
     @Test
     public void testMemoryBufferReadPartialAndClose_Large() throws IOException {
-        BufferedInputStreamMultiplexer.Buffer buf = new BufferedInputStreamMultiplexer.MemoryBuffer();
+        BufferedInputStreamMultiplexer.Buffer buf =
+                new BufferedInputStreamMultiplexer.MemoryBuffer();
 
         testBufferReadPartialAndClose_LargeHelper(buf);
     }
@@ -51,16 +59,19 @@ public class BufferedInputStreamMultiplexerTest {
 
     @Test
     public void testFileBuffer() throws Exception {
-        testBufferHelper(() -> {
-            File bufferFile = Files.createTempFile(this.getClass().getName() + "-", ".tmp").toFile();
-            return new BufferedInputStreamMultiplexer.FileBuffer(bufferFile);
-        });
+        testBufferHelper(
+                () -> {
+                    File bufferFile =
+                            Files.createTempFile(this.getClass().getName() + "-", ".tmp").toFile();
+                    return new BufferedInputStreamMultiplexer.FileBuffer(bufferFile);
+                });
     }
 
     @Test
     public void testFileBufferReadPartial() throws IOException {
         File bufferFile = Files.createTempFile(this.getClass().getName() + "-", ".tmp").toFile();
-        BufferedInputStreamMultiplexer.Buffer buf = new BufferedInputStreamMultiplexer.FileBuffer(bufferFile);
+        BufferedInputStreamMultiplexer.Buffer buf =
+                new BufferedInputStreamMultiplexer.FileBuffer(bufferFile);
 
         testBufferReadPartialHelper(buf);
     }
@@ -68,7 +79,8 @@ public class BufferedInputStreamMultiplexerTest {
     @Test
     public void testFileBufferReadPartialAndClose() throws IOException {
         File bufferFile = Files.createTempFile(this.getClass().getName() + "-", ".tmp").toFile();
-        BufferedInputStreamMultiplexer.Buffer buf = new BufferedInputStreamMultiplexer.FileBuffer(bufferFile);
+        BufferedInputStreamMultiplexer.Buffer buf =
+                new BufferedInputStreamMultiplexer.FileBuffer(bufferFile);
 
         testBufferReadPartialAndCloseHelper(buf);
     }
@@ -76,20 +88,24 @@ public class BufferedInputStreamMultiplexerTest {
     @Test
     public void testFileBufferReadPartialAndClose_Large() throws IOException {
         File bufferFile = Files.createTempFile(this.getClass().getName() + "-", ".tmp").toFile();
-        BufferedInputStreamMultiplexer.Buffer buf = new BufferedInputStreamMultiplexer.FileBuffer(bufferFile);
+        BufferedInputStreamMultiplexer.Buffer buf =
+                new BufferedInputStreamMultiplexer.FileBuffer(bufferFile);
 
         testBufferReadPartialAndClose_LargeHelper(buf);
     }
 
-    private void testBufferReadPartialAndClose_LargeHelper(BufferedInputStreamMultiplexer.Buffer buf) throws IOException {
+    private void testBufferReadPartialAndClose_LargeHelper(
+            BufferedInputStreamMultiplexer.Buffer buf) throws IOException {
         byte[] original = generateTestContent(TEST_LENGTH);
         int[] read = new int[] {0, 0, 0};
         Random r = new Random(12345);
-        BufferedInputStreamMultiplexer.MultiplexerInputStream[] isArray = new BufferedInputStreamMultiplexer.MultiplexerInputStream[3];
+        BufferedInputStreamMultiplexer.MultiplexerInputStream[] isArray =
+                new BufferedInputStreamMultiplexer.MultiplexerInputStream[3];
         ByteArrayOutputStream[] baosArray = new ByteArrayOutputStream[3];
 
         ByteArrayInputStream source = new ByteArrayInputStream(original);
-        BufferedInputStreamMultiplexer multiplexer = new BufferedInputStreamMultiplexer(source, buf);
+        BufferedInputStreamMultiplexer multiplexer =
+                new BufferedInputStreamMultiplexer(source, buf);
 
         isArray[0] = multiplexer.getInputStream();
         baosArray[0] = new ByteArrayOutputStream();
@@ -123,7 +139,7 @@ public class BufferedInputStreamMultiplexerTest {
         assertEquals(stream3BytesRead, isArray[2].getBytesRead());
 
         // make a few smaller reads
-        for(int i=0; i<1000; ++i) {
+        for (int i = 0; i < 1000; ++i) {
             int streamIndex = r.nextInt(3);
             BufferedInputStreamMultiplexer.MultiplexerInputStream is = isArray[streamIndex];
 
@@ -142,7 +158,7 @@ public class BufferedInputStreamMultiplexerTest {
         isArray[1].close();
 
         // make a few more smaller reads
-        for(int i=0; i<1000; ++i) {
+        for (int i = 0; i < 1000; ++i) {
             int streamIndex = r.nextInt(3);
             BufferedInputStreamMultiplexer.MultiplexerInputStream is = isArray[streamIndex];
 
@@ -165,7 +181,8 @@ public class BufferedInputStreamMultiplexerTest {
 
         read[1] += IOUtils.copy(isArray[1], baosArray[1]);
         assertSubArrayEquals(original, baosArray[1], baosArray[1].size());
-        assertEquals(read[1], baosArray[1].size()); // this one was closed, so it doesn't read everything
+        assertEquals(
+                read[1], baosArray[1].size()); // this one was closed, so it doesn't read everything
 
         IOUtils.copy(isArray[2], baosArray[2]);
         assertSubArrayEquals(original, baosArray[2], baosArray[2].size());
@@ -204,7 +221,7 @@ public class BufferedInputStreamMultiplexerTest {
         assertSubArrayEquals(original, baosArray[2]);
 
         // make a few smaller reads
-        for(int i=0; i<1000; ++i) {
+        for (int i = 0; i < 1000; ++i) {
             int streamIndex = r.nextInt(3);
             InputStream is = isArray[streamIndex];
 
@@ -222,7 +239,7 @@ public class BufferedInputStreamMultiplexerTest {
         isArray[1].close(); // turns out, ByteArrayInputStreams ignore close()
 
         // make a few more smaller reads
-        for(int i=0; i<1000; ++i) {
+        for (int i = 0; i < 1000; ++i) {
             int streamIndex = r.nextInt(3);
             if (streamIndex == 1) {
                 continue; // fake closed stream
@@ -247,7 +264,8 @@ public class BufferedInputStreamMultiplexerTest {
 
         // read[1] += IOUtils.copy(isArray[1], baosArray[1]); // fake closed stream\
         assertSubArrayEquals(original, baosArray[1], baosArray[1].size());
-        assertEquals(read[1], baosArray[1].size()); // this one was closed, so it doesn't read everything
+        assertEquals(
+                read[1], baosArray[1].size()); // this one was closed, so it doesn't read everything
 
         IOUtils.copy(isArray[2], baosArray[2]);
         assertSubArrayEquals(original, baosArray[2], baosArray[2].size());
@@ -256,16 +274,19 @@ public class BufferedInputStreamMultiplexerTest {
 
     // Helpers
 
-    private void testBufferHelper(Callable<BufferedInputStreamMultiplexer.Buffer> bufProvider) throws Exception {
+    private void testBufferHelper(Callable<BufferedInputStreamMultiplexer.Buffer> bufProvider)
+            throws Exception {
         BufferedInputStreamMultiplexer.Buffer buf = bufProvider.call();
         testBufferHelperSimple(buf);
         buf = bufProvider.call();
         testBufferHelperMix(buf);
     }
 
-    private void testBufferHelperSimple(BufferedInputStreamMultiplexer.Buffer buf) throws IOException {
+    private void testBufferHelperSimple(BufferedInputStreamMultiplexer.Buffer buf)
+            throws IOException {
         ByteArrayInputStream source = new ByteArrayInputStream(CONTENT.getBytes());
-        BufferedInputStreamMultiplexer multiplexer = new BufferedInputStreamMultiplexer(source, buf);
+        BufferedInputStreamMultiplexer multiplexer =
+                new BufferedInputStreamMultiplexer(source, buf);
 
         InputStream is1 = multiplexer.getInputStream();
         ByteArrayOutputStream baos1 = new ByteArrayOutputStream();
@@ -285,7 +306,8 @@ public class BufferedInputStreamMultiplexerTest {
 
     private void testBufferHelperMix(BufferedInputStreamMultiplexer.Buffer buf) throws IOException {
         ByteArrayInputStream source = new ByteArrayInputStream(CONTENT.getBytes());
-        BufferedInputStreamMultiplexer multiplexer = new BufferedInputStreamMultiplexer(source, buf);
+        BufferedInputStreamMultiplexer multiplexer =
+                new BufferedInputStreamMultiplexer(source, buf);
 
         int is1Read = 0;
         int is2Read = 0;
@@ -340,12 +362,13 @@ public class BufferedInputStreamMultiplexerTest {
             len = is.read(buffer, 0, toRead);
         }
         return copied;
-
     }
 
-    private void testBufferReadPartialAndCloseHelper(BufferedInputStreamMultiplexer.Buffer buf) throws IOException {
+    private void testBufferReadPartialAndCloseHelper(BufferedInputStreamMultiplexer.Buffer buf)
+            throws IOException {
         ByteArrayInputStream source = new ByteArrayInputStream(CONTENT.getBytes());
-        BufferedInputStreamMultiplexer multiplexer = new BufferedInputStreamMultiplexer(source, buf);
+        BufferedInputStreamMultiplexer multiplexer =
+                new BufferedInputStreamMultiplexer(source, buf);
 
         InputStream is1 = multiplexer.getInputStream();
         ByteArrayOutputStream baos1 = new ByteArrayOutputStream();
@@ -371,18 +394,26 @@ public class BufferedInputStreamMultiplexerTest {
 
         // read the rest
         IOUtils.copy(is1, baos1);
-        assertSubArrayEquals(CONTENT.getBytes(), baos1, CONTENT.getBytes().length); // is2 was closed, is1 reads full
+        assertSubArrayEquals(
+                CONTENT.getBytes(),
+                baos1,
+                CONTENT.getBytes().length); // is2 was closed, is1 reads full
 
         IOUtils.copy(is2, baos2);
         assertSubArrayEquals(CONTENT.getBytes(), baos2, 5);
 
         IOUtils.copy(is3, baos3);
-        assertSubArrayEquals(CONTENT.getBytes(), baos3, CONTENT.getBytes().length); // is2 was closed, is3 reads full
+        assertSubArrayEquals(
+                CONTENT.getBytes(),
+                baos3,
+                CONTENT.getBytes().length); // is2 was closed, is3 reads full
     }
 
-    private void testBufferReadPartialHelper(BufferedInputStreamMultiplexer.Buffer buf) throws IOException {
+    private void testBufferReadPartialHelper(BufferedInputStreamMultiplexer.Buffer buf)
+            throws IOException {
         ByteArrayInputStream source = new ByteArrayInputStream(CONTENT.getBytes());
-        BufferedInputStreamMultiplexer multiplexer = new BufferedInputStreamMultiplexer(source, buf);
+        BufferedInputStreamMultiplexer multiplexer =
+                new BufferedInputStreamMultiplexer(source, buf);
 
         InputStream is1 = multiplexer.getInputStream();
         ByteArrayOutputStream baos1 = new ByteArrayOutputStream();
@@ -420,7 +451,8 @@ public class BufferedInputStreamMultiplexerTest {
         assertSubArrayEquals(expectedFull, baos, baos.toByteArray().length);
     }
 
-    private static void assertSubArrayEquals(byte[] expectedFull, ByteArrayOutputStream baos, int length) {
+    private static void assertSubArrayEquals(
+            byte[] expectedFull, ByteArrayOutputStream baos, int length) {
         byte[] actual = baos.toByteArray();
         assertEquals(length, actual.length);
         byte[] expected = new byte[length];
@@ -436,5 +468,4 @@ public class BufferedInputStreamMultiplexerTest {
 
         return bytes;
     }
-
 }

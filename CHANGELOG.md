@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.1.0.3.3 - 2022-04-26
+### Fixed
+- Fixed ArrayIndexOutOfBoundsException in read-ahead mode [#69](https://github.com/oracle/oci-hdfs-connector/issues/69)
+
 ## 3.3.1.0.3.2 - 2022-01-25
 ### Added
 - Added support for caching `BmcFilesystem` instances. This feature can be enabled by setting `fs.oci.caching.filesystem.enabled` to `true. If enabled, the properties `fs.oci.caching.filesystem.maxsize.count` and `fs.oci.caching.filesystem.initialcapacity.count` control the size of the cache, while either `fs.oci.caching.filesystem.expireafteraccess.seconds` or `fs.oci.caching.filesystem.expireafterwrite.seconds` control the expiration. If a `BmcFilesystem` instance exists in the cache with the same URI and configuration, the instance will be re-used, leading to performance improvements at the cost of the cache's memory footprint.
