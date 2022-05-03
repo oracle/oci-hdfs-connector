@@ -93,7 +93,7 @@ public class BmcDataStoreFactory {
     }
 
     @VisibleForTesting
-    ObjectStorage createClient(final BmcPropertyAccessor propertyAccessor) {
+    public ObjectStorage createClient(final BmcPropertyAccessor propertyAccessor) {
         final String customObjectStoreClient =
                 propertyAccessor.asString().get(BmcProperties.OBJECT_STORE_CLIENT_CLASS);
         final ObjectStorage objectStorage =

@@ -166,7 +166,13 @@ public class BmcDataStore {
         final ExecutorService executorService;
         if (numThreadsForRenameDirectoryOperation == null
                 || numThreadsForRenameDirectoryOperation <= 1) {
-            executorService = Executors.newSingleThreadExecutor();
+            executorService = 
+                        Executors.newFixedThreadPool(
+                            1,
+                            new ThreadFactoryBuilder()
+                                    .setDaemon(true)
+                                    .setNameFormat("bmcs-hdfs-rename-%d")
+                                    .build());
         } else {
             executorService =
                     Executors.newFixedThreadPool(
