@@ -271,7 +271,7 @@ public class BmcFilesystem extends FileSystem {
         return delegate.getUri();
     }
 
-    BmcDataStore getDataStore() {
+    public BmcDataStore getDataStore() {
         return delegate.getDataStore();
     }
 

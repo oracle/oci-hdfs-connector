@@ -3,9 +3,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.1.0.3.4 - 2022-05-03
+### Fixed
+- Fixed non-daemon threads preventing JVM shutdown when `fs.oci.rename.operation.numthreads` was set to use a single thread for renaming.
+
 ## 3.3.1.0.3.3 - 2022-04-26
 ### Fixed
 - Fixed ArrayIndexOutOfBoundsException in read-ahead mode [#69](https://github.com/oracle/oci-hdfs-connector/issues/69)
+
+### Added
+- Added support for Resource Principals Authentication v2.2
+
+### Changed
+- Added relocation for shaded packages `org.objectweb`
 
 ## 3.3.1.0.3.2 - 2022-01-25
 ### Added
