@@ -12,7 +12,7 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.3.1.0.3.4</version>
+    <version>3.3.1.0.3.5</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -188,6 +188,10 @@
                   <pattern>org.objectweb.asm</pattern>
                   <shadedPattern>shaded.oracle.org.objectweb.asm</shadedPattern>
                 </relocation>
+                <relocation>
+                  <pattern>org.apache.parquet</pattern>
+                  <shadedPattern>shaded.oracle.org.apache.parquet</shadedPattern>
+                </relocation>
               </relocations>
               <filters>
                 <filter>
@@ -261,7 +265,7 @@
     <dependency>
       <groupId>com.oracle.oci.sdk</groupId>
       <artifactId>oci-hdfs-connector</artifactId>
-      <version>3.3.1.0.3.4</version>
+      <version>3.3.1.0.3.5</version>
       <!-- We don't want to bundle any hadoop packages -->
       <exclusions>
         <exclusion>

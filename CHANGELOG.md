@@ -3,6 +3,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.1.0.3.5 - 2022-05-31
+### Added
+- Added support for specifying custom read stream class. This feature can be enabled by setting the property `fs.oci.io.read.custom.stream` to the name of the custom read stream class.
+- Added support for specifying custom write stream class. his feature can be enabled by setting the property `fs.oci.io.write.custom.stream` to the name of the custom write stream class.
+- Added support for smart parquet add-on feature
+
 ## 3.3.1.0.3.4 - 2022-05-03
 ### Fixed
 - Fixed non-daemon threads preventing JVM shutdown when `fs.oci.rename.operation.numthreads` was set to use a single thread for renaming.

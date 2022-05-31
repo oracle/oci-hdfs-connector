@@ -395,6 +395,19 @@ public enum BmcProperties {
      */
     OBJECT_AUTO_CLOSE_INPUT_STREAM(OBJECT_AUTO_CLOSE_INPUT_STREAM_KEY, true),
 
+    /**
+     * (string, optional) The custom stream class for reading.
+     * Fully qualified class name of a custom implementation of {@link com.oracle.bmc.hdfs.store.AbstractBmcCustomFSInputStream}. See
+     * {@link BmcConstants#READ_STREAM_CLASS_KEY} for config key name.
+     */
+    READ_STREAM_CLASS(READ_STREAM_CLASS_KEY, null),
+
+    /**
+     * (string, optional) The custom stream class for writing.
+     * Fully qualified class name of a custom implementation of {@link com.oracle.bmc.hdfs.store.AbstractBmcCustomOutputStream}. See
+     * {@link BmcConstants#WRITE_STREAM_CLASS_KEY} for config key name.
+     */
+    WRITE_STREAM_CLASS(WRITE_STREAM_CLASS_KEY, null),
     // BmcFilesystem instance caching
     // These cannot be overridden per namespace and bucket.
 

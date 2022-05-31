@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheBuilderSpec;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
 import lombok.extern.slf4j.Slf4j;
@@ -50,6 +52,25 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
         this.ociReadAheadBlockSize = ociReadAheadBlockSize;
         LOG.info("ReadAhead block size is " + ociReadAheadBlockSize);
         this.parquetCache = parquetCache;
+    }
+
+    public BmcReadAheadFSInputStream(
+            final ObjectStorage objectStorage,
+            final FileStatus status,
+            final Supplier<GetObjectRequest.Builder> requestBuilder,
+            final Statistics statistics,
+            final int ociReadAheadBlockSize,
+            final String parquetCacheString) {
+        super(objectStorage, status, requestBuilder, statistics);
+        this.ociReadAheadBlockSize = ociReadAheadBlockSize;
+        LOG.info("ReadAhead block size is " + ociReadAheadBlockSize);
+        this.parquetCache = configureParquetCache(parquetCacheString);
+    }
+
+    private Cache<String, ParquetFooterInfo> configureParquetCache(String spec) {
+        return CacheBuilder.from(CacheBuilderSpec.parse(spec))
+                .removalListener(BmcReadAheadFSInputStream.getParquetCacheRemovalListener())
+               .build();
     }
 
     @Override

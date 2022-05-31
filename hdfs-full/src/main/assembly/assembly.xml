@@ -37,6 +37,16 @@
     </fileSet>
   </fileSets>
   <dependencySets>
+    <dependencySet>
+      <includes>
+        <!-- groupId:artifactId:type[:classifier]:version -->
+        <include>com.oracle.oci.sdk:oci-hdfs-addons-smartparquet</include>
+      </includes>
+      <outputDirectory>addons/smart-parquet</outputDirectory>
+      <unpack>true</unpack>
+      <useProjectArtifact>false</useProjectArtifact>
+      <useProjectAttachments>false</useProjectAttachments>
+    </dependencySet>
     <!-- BMC + BouncyCastle dependencies only -->
     <dependencySet>
       <includes>
