@@ -37,6 +37,10 @@ public final class BmcConstants {
 
     public static final String READ_AHEAD_BLOCK_SIZE_KEY = "fs.oci.io.read.ahead.blocksize";
 
+    public static final String READ_STREAM_CLASS_KEY = "fs.oci.io.read.custom.stream";
+
+    public static final String WRITE_STREAM_CLASS_KEY = "fs.oci.io.write.custom.stream";
+
     public static final String OBJECT_STORE_CLIENT_CLASS_KEY = "fs.oci.client.custom.client";
 
     public static final String OBJECT_STORE_AUTHENTICATOR_CLASS_KEY =

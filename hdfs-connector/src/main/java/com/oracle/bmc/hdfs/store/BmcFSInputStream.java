@@ -34,8 +34,8 @@ import lombok.extern.slf4j.Slf4j;
  * behavior.
  */
 @Slf4j
-@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
-abstract class BmcFSInputStream extends FSInputStream {
+@RequiredArgsConstructor(access = AccessLevel.PUBLIC)
+public abstract class BmcFSInputStream extends FSInputStream {
     private static final int EOF = -1;
 
     protected final ObjectStorage objectStorage;

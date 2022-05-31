@@ -9,6 +9,8 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -28,7 +30,6 @@ import java.util.regex.Pattern;
 
 import com.google.common.base.Function;
 import com.google.common.base.Supplier;
-import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheBuilderSpec;
 import com.google.common.cache.CacheLoader;
@@ -62,6 +63,7 @@ import com.oracle.bmc.objectstorage.transfer.UploadManager.UploadRequest;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem.Statistics;
@@ -100,7 +102,9 @@ public class BmcDataStore {
     private final LoadingCache<String, HeadPair> objectMetadataCache;
     private final boolean useReadAhead;
     private final int readAheadSizeInBytes;
-    private final Cache<String, BmcReadAheadFSInputStream.ParquetFooterInfo> parquetCache;
+    private final String parquetCacheString;
+    private final String customReadStreamClass;
+    private final String customWriteStreamClass;
 
     public BmcDataStore(
             final BmcPropertyAccessor propertyAccessor,
@@ -131,12 +135,12 @@ public class BmcDataStore {
         this.useInMemoryWriteBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_WRITE_BUFFER);
         this.useMultipartUploadWriteBuffer =
-                propertyAccessor
-                        .asBoolean()
-                        .get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
-        this.useReadAhead = propertyAccessor.asBoolean().get(BmcProperties.READ_AHEAD);
-        this.readAheadSizeInBytes =
-                propertyAccessor.asInteger().get(BmcProperties.READ_AHEAD_BLOCK_SIZE);
+                propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
+        this.useReadAhead =
+                propertyAccessor.asBoolean().get(BmcProperties.READ_AHEAD);
+        this.readAheadSizeInBytes = getReadAheadSizeInBytes(propertyAccessor);
+        this.customReadStreamClass = propertyAccessor.asString().get(BmcProperties.READ_STREAM_CLASS);
+        this.customWriteStreamClass = propertyAccessor.asString().get(BmcProperties.WRITE_STREAM_CLASS);
 
         if (this.useInMemoryWriteBuffer && this.useMultipartUploadWriteBuffer) {
             throw new IllegalArgumentException(
@@ -156,8 +160,12 @@ public class BmcDataStore {
         }
 
         this.objectMetadataCache = configureHeadObjectCache(propertyAccessor);
-        this.parquetCache = configureParquetCache(propertyAccessor);
+        this.parquetCacheString = configureParquetCacheString(propertyAccessor);
         this.parallelRenameExecutor = this.createParallelRenameExecutor(propertyAccessor);
+    }
+
+    public static int getReadAheadSizeInBytes(BmcPropertyAccessor propertyAccessor) {
+        return propertyAccessor.asInteger().get(BmcProperties.READ_AHEAD_BLOCK_SIZE);
     }
 
     private ExecutorService createParallelRenameExecutor(BmcPropertyAccessor propertyAccessor) {
@@ -295,6 +303,7 @@ public class BmcDataStore {
      * Logs the statistics for the getObject cache.
      * ScheduledExecutorService is set to log the statistics every minute (by default) with the initial delay of 30 seconds.
      * The interval can be changed by setting {@link BmcConstants#OBJECT_PAYLOAD_CACHING_RECORD_STATS_TIME_INTERVAL_IN_SECONDS_KEY} config key
+     *
      * @param cachingObjectStorage
      */
     private void logCacheStatistics(long period, CachingObjectStorage cachingObjectStorage) {
@@ -367,7 +376,7 @@ public class BmcDataStore {
                 .build(loader);
     }
 
-    private Cache<String, BmcReadAheadFSInputStream.ParquetFooterInfo> configureParquetCache(
+    public static String configureParquetCacheString(
             BmcPropertyAccessor propertyAccessor) {
         // this disables the cache by default
         String spec = "maximumSize=0";
@@ -383,9 +392,7 @@ public class BmcDataStore {
                     BmcProperties.OBJECT_PARQUET_CACHING_ENABLED.getPropertyName(),
                     spec);
         }
-        return CacheBuilder.from(CacheBuilderSpec.parse(spec))
-                .removalListener(BmcReadAheadFSInputStream.getParquetCacheRemovalListener())
-                .build();
+        return spec;
     }
 
     private UploadConfigurationBuilder createUploadConfiguration(
@@ -487,12 +494,9 @@ public class BmcDataStore {
      * Renames an object from one name to another. This is a multi-step operation that consists of finding all matching
      * objects, copying them to the destination, and then deleting the original objects.
      *
-     * @param source
-     *            The source to rename, assumed to exist.
-     * @param destination
-     *            The destination, may not exist, will be overwritten
-     * @throws IOException
-     *             if the operation cannot be completed.
+     * @param source      The source to rename, assumed to exist.
+     * @param destination The destination, may not exist, will be overwritten
+     * @throws IOException if the operation cannot be completed.
      */
     public void renameFile(final Path source, final Path destination) throws IOException {
         final String sourceObject = this.pathToObject(source);
@@ -515,12 +519,9 @@ public class BmcDataStore {
      * <p>
      * Note, source and destination should not be root TODO: destination could be?
      *
-     * @param sourceDirectoryPath
-     *            The source directory to rename, assumed to exist.
-     * @param destinationDirectoryPath
-     *            The destination directory.
-     * @throws IOException
-     *             if the operation cannot be completed.
+     * @param sourceDirectoryPath      The source directory to rename, assumed to exist.
+     * @param destinationDirectoryPath The destination directory.
+     * @throws IOException if the operation cannot be completed.
      */
     public void renameDirectory(final Path sourceDirectoryPath, final Path destinationDirectoryPath)
             throws IOException {
@@ -584,9 +585,12 @@ public class BmcDataStore {
 
     @RequiredArgsConstructor
     private static class RenameResponse {
-        @Getter private final String oldName;
-        @Getter private final String newName;
-        @Getter private final Future<String> renameOperationFuture;
+        @Getter
+        private final String oldName;
+        @Getter
+        private final String newName;
+        @Getter
+        private final Future<String> renameOperationFuture;
     }
 
     private void awaitRenameOperationTermination(List<RenameResponse> renameResponses)
@@ -628,9 +632,9 @@ public class BmcDataStore {
         try {
             final String newEntityTag =
                     new RenameOperation(
-                                    this.objectStorage,
-                                    this.requestBuilder.renameObject(
-                                            sourceObject, destinationObject))
+                            this.objectStorage,
+                            this.requestBuilder.renameObject(
+                                    sourceObject, destinationObject))
                             .call();
             this.statistics.incrementWriteOps(1); // 1 put
             LOG.debug("Newly renamed object has eTag {}", newEntityTag);
@@ -643,10 +647,8 @@ public class BmcDataStore {
     /**
      * Deletes the object at the given path.
      *
-     * @param path
-     *            Path of object to delete.
-     * @throws IOException
-     *             if the operation cannot be completed.
+     * @param path Path of object to delete.
+     * @throws IOException if the operation cannot be completed.
      */
     public void delete(final Path path) throws IOException {
         final String object = this.pathToObject(path);
@@ -667,10 +669,8 @@ public class BmcDataStore {
     /**
      * Deletes the directory at the given path.
      *
-     * @param path
-     *            Path of object to delete.
-     * @throws IOException
-     *             if the operation cannot be completed.
+     * @param path Path of object to delete.
+     * @throws IOException if the operation cannot be completed.
      */
     public void deleteDirectory(final Path path) throws IOException {
         if (path.isRoot()) {
@@ -696,10 +696,8 @@ public class BmcDataStore {
     /**
      * Creates a pseudo directory at the given path.
      *
-     * @param path
-     *            The path to create a directory object at.
-     * @throws IOException
-     *             if the operation cannot be completed.
+     * @param path The path to create a directory object at.
+     * @throws IOException if the operation cannot be completed.
      */
     public void createDirectory(final Path path) throws IOException {
         // nothing to do for the "root" directory
@@ -737,11 +735,9 @@ public class BmcDataStore {
     /**
      * Tests to see if the directory at the given path is considered empty or not.
      *
-     * @param path
-     *            The directory path.
+     * @param path The directory path.
      * @return true if the directory is empty, false if not.
-     * @throws IOException
-     *             if the operation could not be completed.
+     * @throws IOException if the operation could not be completed.
      */
     public boolean isEmptyDirectory(final Path path) throws IOException {
         final String key = this.pathToDirectory(path);
@@ -775,11 +771,9 @@ public class BmcDataStore {
     /**
      * Returns the status of each entry in the directory specified.
      *
-     * @param path
-     *            The directory path.
+     * @param path The directory path.
      * @return A list of file statuses, or empty if the directory was empty.
-     * @throws IOException
-     *             if the operation could not be completed
+     * @throws IOException if the operation could not be completed
      */
     public List<FileStatus> listDirectory(final Path path) throws IOException {
         final String key = this.pathToDirectory(path);
@@ -877,11 +871,9 @@ public class BmcDataStore {
     /**
      * Returns the {@link FileStatus} for the object at the given path.
      *
-     * @param path
-     *            The path to query.
+     * @param path The path to query.
      * @return The file status, null if there was no file at this location.
-     * @throws IOException
-     *             if the operation could not be completed.
+     * @throws IOException if the operation could not be completed.
      */
     public FileStatus getFileStatus(final Path path) throws IOException {
         // base case, root directory always exists, nothing to create
@@ -935,11 +927,9 @@ public class BmcDataStore {
      * the given key exists. This is necessary as its not immediately possible to know from the Path instances provided
      * if they were meant to be a file or a directory.
      *
-     * @param key
-     *            The object key.
+     * @param key The object key.
      * @return The metadata
-     * @throws IOException
-     *             if no object (or directory) could be found.
+     * @throws IOException if no object (or directory) could be found.
      */
     private HeadPair getObjectMetadata(final String key) throws IOException {
         try {
@@ -963,11 +953,9 @@ public class BmcDataStore {
      * the given key exists. This is necessary as its not immediately possible to know from the Path instances provided
      * if they were meant to be a file or a directory.
      *
-     * @param key
-     *            The object key.
+     * @param key The object key.
      * @return The metadata
-     * @throws IOException
-     *             if no object (or directory) could be found.
+     * @throws IOException if no object (or directory) could be found.
      */
     private HeadPair getObjectMetadataUncached(final String key) throws IOException {
         HeadObjectResponse response = null;
@@ -1011,7 +999,8 @@ public class BmcDataStore {
     }
 
     private static class ObjectMetadataNotFoundException extends RuntimeException {
-        @Getter private final String key;
+        @Getter
+        private final String key;
 
         public ObjectMetadataNotFoundException(String key) {
             super("Object metadata not found for key: " + key);
@@ -1022,14 +1011,10 @@ public class BmcDataStore {
     /**
      * Creates a new {@link FSInputStream} that can be used to read the object at the given path.
      *
-     * @param status
-     *            The file status for this file.
-     * @param path
-     *            The path to open.
-     * @param bufferSizeInBytes
-     *            The buffer size in bytes (may not be used).
-     * @param statistics
-     *            The {@link Statistics} instance to publish metrics into.
+     * @param status            The file status for this file.
+     * @param path              The path to open.
+     * @param bufferSizeInBytes The buffer size in bytes (may not be used).
+     * @param statistics        The {@link Statistics} instance to publish metrics into.
      * @return A new input stream to read from.
      */
     public FSInputStream openReadStream(
@@ -1041,6 +1026,11 @@ public class BmcDataStore {
         final Supplier<GetObjectRequest.Builder> requestBuilder =
                 new GetObjectRequestFunction(path);
 
+        if (!StringUtils.isBlank(this.customReadStreamClass)) {
+            FSInputStream readStreamInstance = createCustomReadStreamClass(this.customReadStreamClass, this.objectStorage,
+                    status, requestBuilder, this.statistics);
+            return readStreamInstance;
+        }
         if (this.useInMemoryReadBuffer) {
             return new BmcInMemoryFSInputStream(
                     this.objectStorage, status, requestBuilder, this.statistics);
@@ -1052,7 +1042,7 @@ public class BmcDataStore {
                     requestBuilder,
                     this.statistics,
                     this.readAheadSizeInBytes,
-                    this.parquetCache);
+                    this.parquetCacheString);
         } else {
             return new BmcDirectFSInputStream(
                     this.objectStorage, status, requestBuilder, this.statistics);
@@ -1062,12 +1052,9 @@ public class BmcDataStore {
     /**
      * Creates a new {@link OutputStream} that can be written to in order to create a new file.
      *
-     * @param path
-     *            The path for the new file.
-     * @param bufferSizeInBytes
-     *            The buffer size in bytes (may not be used).
-     * @param progress
-     *            {@link Progressable} instance to report progress updates to.
+     * @param path              The path for the new file.
+     * @param bufferSizeInBytes The buffer size in bytes (may not be used).
+     * @param progress          {@link Progressable} instance to report progress updates to.
      * @return A new output stream to write to.
      */
     public OutputStream openWriteStream(
@@ -1079,6 +1066,11 @@ public class BmcDataStore {
         final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn =
                 new UploadDetailsFunction(this.pathToObject(path), allowOverwrite, progress);
 
+        if (!StringUtils.isBlank(this.customWriteStreamClass)) {
+            LOG.debug("Using custom write stream class: {}", customWriteStreamClass);
+            OutputStream writeStreamInstance = createCustomWriteStreamClass(this.customWriteStreamClass, this.propertyAccessor, this.uploadManager, bufferSizeInBytes, requestBuilderFn);
+            return writeStreamInstance;
+        }
         // takes precedence
         if (this.useMultipartUploadWriteBuffer) {
             final String objectName = this.pathToObject(path);
@@ -1199,4 +1191,66 @@ public class BmcDataStore {
         private final HeadObjectResponse response;
         private final String objectKey;
     }
+
+    private <T> T createCustomReadStreamClass(final String className,
+                                              final ObjectStorage objectStorage,
+                                              final FileStatus status,
+                                              final Supplier<GetObjectRequest.Builder> requestBuilder,
+                                              final Statistics statistics) {
+        try {
+            final Class<?> customClass = Class.forName(className);
+            final Constructor<?> customClassConstructor =
+                    customClass.getConstructor(BmcPropertyAccessor.class,
+                            ObjectStorage.class,
+                            FileStatus.class,
+                            Supplier.class,
+                            Statistics.class);
+            try {
+                return (T) customClassConstructor.newInstance(this.propertyAccessor, objectStorage, status, requestBuilder, statistics);
+            } catch (InstantiationException
+                    | IllegalAccessException
+                    | IllegalArgumentException
+                    | InvocationTargetException e) {
+                throw new IllegalStateException("Unable to create new custom client instance", e);
+            }
+        } catch (final ClassNotFoundException e) {
+            throw new IllegalStateException(
+                    "Configured to create custom class '" + className + "', but none exists");
+        } catch (final NoSuchMethodException e) {
+            throw new IllegalStateException(
+                    "Custom client class does not have the required constructor", e);
+        } catch (final SecurityException e) {
+            throw new IllegalStateException("Unable to create new custom client instance", e);
+        }
+    }
+
+    private <T> T createCustomWriteStreamClass(final String className,
+                                                      final BmcPropertyAccessor propertyAccessor,
+                                                      final UploadManager uploadManager,
+                                                      final int bufferSizeInBytes,
+                                                      final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn) {
+
+        try {
+            final Class<?> customClass = Class.forName(className);
+            final Constructor<?> customClassConstructor =
+                    customClass.getConstructor(BmcPropertyAccessor.class, UploadManager.class, int.class, BiFunction.class);
+            try {
+                return (T) customClassConstructor.newInstance(propertyAccessor, uploadManager, bufferSizeInBytes, requestBuilderFn);
+            } catch (InstantiationException
+                    | IllegalAccessException
+                    | IllegalArgumentException
+                    | InvocationTargetException e) {
+                throw new IllegalStateException("Unable to create new custom client instance", e);
+            }
+        } catch (final ClassNotFoundException e) {
+            throw new IllegalStateException(
+                    "Configured to create custom class '" + className + "', but none exists");
+        } catch (final NoSuchMethodException e) {
+            throw new IllegalStateException(
+                    "Custom client class does not have the required constructor", e);
+        } catch (final SecurityException e) {
+            throw new IllegalStateException("Unable to create new custom client instance", e);
+        }
+    }
+
 }
