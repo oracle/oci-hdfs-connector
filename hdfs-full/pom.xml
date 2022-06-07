@@ -12,7 +12,7 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.3.1.0.3.5</version>
+    <version>3.3.1.0.3.6</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -25,6 +25,32 @@
       <id>ziponly</id>
       <build>
         <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-dependency-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>get-smart-parquet-add-on-ziponly</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>unpack</goal>
+                </goals>
+                <configuration>
+                  <artifactItems>
+                    <artifactItem>
+                      <groupId>com.oracle.oci.sdk</groupId>
+                      <artifactId>oci-hdfs-addons-smartparquet</artifactId>
+                      <type>zip</type>
+                      <classifier>release</classifier>
+                      <includes>lib/oci-hdfs-addons-smartparquet-${project.version}.jar</includes>
+                      <excludes>**/*-javadoc.jar,**/*-sources.jar</excludes>
+                      <outputDirectory>${project.build.directory}/addons</outputDirectory>
+                    </artifactItem>
+                  </artifactItems>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
           <plugin>
             <artifactId>maven-resources-plugin</artifactId>
             <version>2.6</version>
@@ -111,6 +137,25 @@
           </plugin>
         </plugins>
       </build>
+      <dependencies>
+        <dependency>
+          <groupId>com.oracle.oci.sdk</groupId>
+          <artifactId>oci-hdfs-addons-smartparquet</artifactId>
+          <type>zip</type>
+          <classifier>release</classifier>
+          <version>3.3.1.0.3.6</version>
+          <exclusions>
+            <exclusion>
+              <groupId>org.apache.hadoop</groupId>
+              <artifactId>hadoop-common</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>org.apache.hadoop</groupId>
+              <artifactId>hadoop-hdfs</artifactId>
+            </exclusion>
+          </exclusions>
+        </dependency>
+      </dependencies>
     </profile>
   </profiles>
   <build>
@@ -204,6 +249,11 @@
                     <exclude>META-INF/versions/11/**</exclude>
                     <exclude>**/pom.xml</exclude>
                     <exclude>**/pom.properties</exclude>
+                    <!-- The oci-hdfs-addons-smartparquet zip contains other directories like apidocs, lib, and third-party/lib.
+                         We don't want those in the jar. -->
+                    <exclude>apidocs/**</exclude>
+                    <exclude>lib/oci-hdfs-*.jar</exclude>
+                    <exclude>third-party/lib/**</exclude>
                   </excludes>
                 </filter>
               </filters>
@@ -265,7 +315,7 @@
     <dependency>
       <groupId>com.oracle.oci.sdk</groupId>
       <artifactId>oci-hdfs-connector</artifactId>
-      <version>3.3.1.0.3.5</version>
+      <version>3.3.1.0.3.6</version>
       <!-- We don't want to bundle any hadoop packages -->
       <exclusions>
         <exclusion>

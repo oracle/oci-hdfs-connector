@@ -12,7 +12,7 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.3.1.0.3.5</version>
+    <version>3.3.1.0.3.6</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -121,6 +121,28 @@
 
   <build>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>3.0.0</version>
+        <executions>
+          <execution>
+            <id>enforce-no-snapshots</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <requireReleaseDeps>
+                  <message>No snapshots allowed! If necessary, you can locally run Maven using the `-Denforcer.fail=false` argument.</message>
+                  <!-- Ignore this enforcer rule if the version is a SNAPSHOT version. -->
+                  <onlyWhenRelease>true</onlyWhenRelease>
+                </requireReleaseDeps>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.8.1</version>

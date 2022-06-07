@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.1.0.3.6 - 2022-06-07
+### Fixed
+- Fixed oci-hdfs jar file to not contain class files from `hadoop-common` and `hadoop-hdfs`
+
 ## 3.3.1.0.3.5 - 2022-05-31
 ### Added
 - Added support for specifying custom read stream class. This feature can be enabled by setting the property `fs.oci.io.read.custom.stream` to the name of the custom read stream class.

@@ -5,7 +5,7 @@
     <parent>
         <artifactId>oci-hdfs-addons</artifactId>
         <groupId>com.oracle.oci.sdk</groupId>
-        <version>3.3.1.0.3.5</version>
+        <version>3.3.1.0.3.6</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -38,6 +38,51 @@
             <properties>
                 <excludedGroups></excludedGroups>
             </properties>
+        </profile>
+        <profile>
+            <id>ziponly</id>
+            <properties>
+                <source.jar.for.zip>${project.build.directory}/${project.artifactId}-${project.version}.jar</source.jar.for.zip>
+            </properties>
+            <build>
+                <plugins>
+                    <!-- Explicitly generate the sources jar in the package phase so that it will be included in the bundle -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- Assemble only during the 'ziponly' profile as we need to assemble the unsigned jar -->
+                    <!-- Assemble the single jar, dependencies, docs, examples into a zip archive -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-assembly-plugin</artifactId>
+                        <configuration>
+                            <appendAssemblyId>true</appendAssemblyId>
+                            <attach>true</attach>
+                            <descriptors>
+                                <descriptor>src/main/assembly/assembly.xml</descriptor>
+                            </descriptors>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <phase>pre-integration-test</phase>
+                                <goals>
+                                    <goal>single</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 
@@ -97,7 +142,7 @@
         <dependency>
             <groupId>com.oracle.oci.sdk</groupId>
             <artifactId>oci-hdfs-connector</artifactId>
-            <version>3.3.1.0.3.5</version>
+            <version>3.3.1.0.3.6</version>
         </dependency>
         <dependency>
             <groupId>org.apache.hadoop</groupId>
@@ -199,7 +244,7 @@
         <dependency>
             <groupId>com.oracle.oci.sdk</groupId>
             <artifactId>oci-hdfs-connector</artifactId>
-            <version>3.3.1.0.3.5</version>
+            <version>3.3.1.0.3.6</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
