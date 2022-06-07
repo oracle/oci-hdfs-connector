@@ -11,7 +11,7 @@
 
   <groupId>com.oracle.oci.sdk</groupId>
   <artifactId>oci-hdfs</artifactId>
-  <version>3.3.1.0.3.5</version>
+  <version>3.3.1.0.3.6</version>
   <packaging>pom</packaging>
 
   <name>Oracle Cloud Infrastructure HDFS Connector for Storage Service</name>
@@ -53,7 +53,9 @@
   </distributionManagement>
 
   <properties>
-    <oci.java.sdk.version>2.12.1-SNAPSHOT</oci.java.sdk.version>
+    <!-- This should not be a snapshot version. If you want to test locally with a snapshot, you
+         can run Maven with the `-Denforcer.fail=false` argument. -->
+    <oci.java.sdk.version>2.13.0</oci.java.sdk.version>
     <hadoop.version>3.3.1</hadoop.version>
     <!--
       Deal with CVE-2021-28165:
