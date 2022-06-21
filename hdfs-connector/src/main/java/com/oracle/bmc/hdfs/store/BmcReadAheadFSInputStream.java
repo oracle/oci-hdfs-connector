@@ -92,6 +92,7 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
         if (atEndOfBuffer()) {
             clearBuffer();
         }
+        this.statistics.incrementBytesRead(1);
         return result;
     }
 
@@ -130,6 +131,7 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
             }
             clearBuffer();
         }
+        this.statistics.incrementBytesRead(n);
         return n;
     }
 
