@@ -8,6 +8,7 @@ package com.oracle.bmc.hdfs;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -20,6 +21,7 @@ import java.util.regex.Pattern;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.oracle.bmc.hdfs.store.BmcPropertyAccessor;
+import lombok.SneakyThrows;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -30,6 +32,9 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.ParentNotDirectoryException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.security.Credentials;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Progressable;
 
 import com.google.common.cache.CacheBuilder;
@@ -386,6 +391,8 @@ class BmcFilesystemImpl extends FileSystem {
         }
         LOG.info("Initialized filesystem for namespace {} and bucket {}", namespace, bucket);
 
+        fetchSignedUserAliasFromIDBS();
+
         // only scheme and authority define this filesystem
         this.uri = URI.create(scheme + "://" + uriParser.getAuthority());
 
@@ -401,6 +408,24 @@ class BmcFilesystemImpl extends FileSystem {
                 "Setting working directory to {}, and initialized uri to {}",
                 this.workingDirectory,
                 this.uri);
+    }
+
+    @SneakyThrows
+    private void fetchSignedUserAliasFromIDBS() {
+        // check if UGI has the alias already
+        LOG.info("########## Checking if UGI has MOCK-SIGNED-USER-ALIAS already");
+        Text key = new Text("SIGNED_USER_ALIAS");
+        Credentials credentials = UserGroupInformation.getCurrentUser().getCredentials();
+        byte[] secretValueBytes = credentials.getSecretKey(key);
+        if (secretValueBytes == null || secretValueBytes.length == 0) {
+            //fetch and add to UGI
+            LOG.info("########### Not found, adding MOCK-SIGNED-USER-ALIAS to UGI");
+            credentials.addSecretKey(key, "MOCK-SIGNED-USER-ALIAS".getBytes(StandardCharsets.UTF_8));
+            UserGroupInformation.getCurrentUser().addCredentials(credentials);
+            LOG.info("########### Added MOCK-SIGNED-USER-ALIAS to UGI");
+        } else {
+            LOG.info("########## UGI has MOCK-SIGNED-USER-ALIAS already. No action required.");
+        }
     }
 
     /**
