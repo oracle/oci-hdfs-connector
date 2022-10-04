@@ -7,6 +7,9 @@ package com.oracle.bmc.hdfs;
 
 import static org.junit.Assert.*;
 import org.junit.Test;
+import java.io.IOException;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.permission.FsPermission;
 
 import java.net.URI;
 
@@ -30,5 +33,28 @@ public class BmcFilesystemTest {
         assertEquals("bucket_1_2_3", uriParser.getBucket());
         assertEquals("name_space_1", uriParser.getNamespace());
         assertEquals("bucket_1_2_3@name_space_1:3002", uriParser.getAuthority());
+    }
+
+    @Test
+    public void testNullDelegate() throws IOException {
+        final BmcFilesystem fileSystem = new BmcFilesystem();
+        Path path = new Path("~/");
+
+        assertNull(fileSystem.getDelegate());
+        assertFalse(fileSystem.delete(path, true));
+        assertNull(fileSystem.getFileStatus(path));
+        assertNull(fileSystem.listStatus(path));
+        assertFalse(fileSystem.mkdirs(path, new FsPermission((short) 1)));
+        assertNull(fileSystem.open(path, 1));
+        assertFalse(fileSystem.rename(path, path));
+        assertEquals(0, fileSystem.getDefaultBlockSize());
+        assertEquals(BmcConstants.DEFAULT_PORT, fileSystem.getDefaultPort());
+        assertNull(fileSystem.getCanonicalServiceName());
+        assertNull(fileSystem.getWorkingDirectory());
+        assertNull(fileSystem.getUri());
+        assertNull(fileSystem.getDataStore());
+        assertNull(fileSystem.getConf());
+        fileSystem.setWorkingDirectory(path);
+        fileSystem.close();
     }
 }

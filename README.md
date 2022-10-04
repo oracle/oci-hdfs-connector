@@ -18,6 +18,8 @@ Examples can be found [here](https://github.com/oracle/oci-hdfs-connector/blob/m
 
 Full documentation, including prerequisites and installation and configuration instructions, can be found [here](https://docs.cloud.oracle.com/Content/API/SDKDocs/hdfsconnector.htm).
 
+HDFS Connector provides support for delegation token configurator that injects a delegation token on every request. This can be done by setting the delegation token file path in an environment variable `OCI_DELEGATION_TOKEN_FILE` or by setting the Hadoop property `fs.oci.delegation.token.filepath`
+
 API reference can be found [here](https://docs.cloud.oracle.com/tools/hdfs/latest/).
 
 ## Help

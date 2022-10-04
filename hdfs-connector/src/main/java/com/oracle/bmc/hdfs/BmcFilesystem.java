@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -160,12 +161,18 @@ public class BmcFilesystem extends FileSystem {
 
     public BmcFilesystem() {}
 
+    @VisibleForTesting
+    protected BmcFilesystemImpl getDelegate() {
+        return this.delegate;
+    }
+
     public void initialize(URI uri, final Configuration configuration) throws IOException {
         if (delegate != null) {
             return;
         }
         setupFilesystemCache(configuration);
         delegate = fsCache.getUnchecked(new FSKey(uri, configuration));
+        delegate.addOwner(this);
     }
 
     @Override
@@ -210,74 +217,81 @@ public class BmcFilesystem extends FileSystem {
 
     @Override
     public boolean delete(final Path path, final boolean recursive) throws IOException {
-        return delegate.delete(path, recursive);
+        return delegate == null ? false : delegate.delete(path, recursive);
     }
 
     @Override
     public FileStatus getFileStatus(final Path path) throws IOException {
-        return delegate.getFileStatus(path);
+        return delegate == null ? null : delegate.getFileStatus(path);
     }
 
     @Override
     public FileStatus[] listStatus(final Path path) throws IOException {
-        return delegate.listStatus(path);
+        return delegate == null ? null : delegate.listStatus(path);
     }
 
     @Override
     public boolean mkdirs(final Path path, final FsPermission permission) throws IOException {
-        return delegate.mkdirs(path, permission);
+        return delegate == null ? false : delegate.mkdirs(path, permission);
     }
 
     @Override
     public FSDataInputStream open(final Path path, final int bufferSize) throws IOException {
-        return delegate.open(path, bufferSize);
+        return delegate == null ? null : delegate.open(path, bufferSize);
     }
 
     @Override
     public boolean rename(final Path source, final Path destination) throws IOException {
-        return delegate.rename(source, destination);
+        return delegate == null ? false : delegate.rename(source, destination);
     }
 
     @Override
     public long getDefaultBlockSize() {
-        return delegate.getDefaultBlockSize();
+        return delegate == null ? 0 : delegate.getDefaultBlockSize();
     }
 
     @Override
     public int getDefaultPort() {
-        return delegate.getDefaultPort();
+        return delegate == null ? BmcConstants.DEFAULT_PORT : delegate.getDefaultPort();
     }
 
     @Override
     public String getCanonicalServiceName() {
-        return delegate.getCanonicalServiceName();
+        return delegate == null ? null : delegate.getCanonicalServiceName();
+    }
+
+    // This will only close if all owners have been closed to avoid memory leaks. 
+    public void close() throws IOException {
+        if (delegate != null && delegate.isClosed()) {
+            super.close();
+        }
     }
 
     @Override
-    public void close() throws IOException {}
-
-    @Override
     public Path getWorkingDirectory() {
-        return delegate.getWorkingDirectory();
+        return delegate == null ? null : delegate.getWorkingDirectory();
     }
 
     @Override
     public void setWorkingDirectory(final Path workingDirectory) {
+        if (delegate == null) {
+            return;
+        }
         delegate.setWorkingDirectory(workingDirectory);
     }
 
     @Override
     public URI getUri() {
-        return delegate.getUri();
+        return delegate == null ? null : delegate.getUri();
     }
 
     public BmcDataStore getDataStore() {
-        return delegate.getDataStore();
+        return delegate == null ? null : delegate.getDataStore();
     }
 
     @Override
     public Configuration getConf() {
-        return delegate.getConf();
+        return delegate == null ? null : delegate.getConf();
     }
 }
 
@@ -304,6 +318,11 @@ class BmcFilesystemImpl extends FileSystem {
 
     @Getter(onMethod = @__({@Override}))
     private URI uri;
+
+    @Getter private volatile boolean isClosed;
+
+    // This field keeps track of filesystems to be able to close them all
+    private final HashSet<BmcFilesystem> owners = new HashSet<>();
 
     private volatile boolean isInitialized;
 
@@ -828,5 +847,32 @@ class BmcFilesystemImpl extends FileSystem {
             return Integer.compare(
                     path2.toUri().toString().length(), path1.toUri().toString().length());
         }
+    }
+
+    /**
+    * Closing filesystem(s) needs to be synchronized to avoid race conditions with owners in multi-threaded environments.
+    */
+    @Override
+    public synchronized void close() throws IOException {
+        if (isClosed){
+            return;
+        }
+        try {
+            super.close();
+            isClosed = true;
+        } catch (Exception e) {
+            LOG.warn("Caught exception while closing filesystem", e);
+        } finally {
+            for (BmcFilesystem fs : owners) {
+                fs.close();
+            }
+        }
+    }
+
+    /**
+    * addOwner() needs to be synchronized to avoid race conditions with owners in multi-threaded environments.
+    */
+    public synchronized void addOwner(BmcFilesystem fs) {
+        owners.add(fs);
     }
 }

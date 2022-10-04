@@ -5,22 +5,30 @@
  */
 package com.oracle.bmc.hdfs.store;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.List;
 import java.util.Properties;
+import java.util.stream.Stream;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Supplier;
 import com.google.common.collect.Lists;
 import com.oracle.bmc.ClientConfiguration;
 import com.oracle.bmc.ClientRuntime;
+import com.oracle.bmc.ConfigFileReader;
 import com.oracle.bmc.Region;
 import com.oracle.bmc.auth.BasicAuthenticationDetailsProvider;
 import com.oracle.bmc.auth.SimpleAuthenticationDetailsProvider;
 import com.oracle.bmc.auth.SimplePrivateKeySupplier;
+import com.oracle.bmc.auth.internal.ConfigFileDelegationTokenUtils;
+import com.oracle.bmc.auth.internal.DelegationTokenConfigurator;
 import com.oracle.bmc.hdfs.BmcConstants;
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.waiter.ResettingExponentialBackoffStrategy;
@@ -30,11 +38,12 @@ import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.ObjectStorageClient;
 import com.oracle.bmc.retrier.RetryConfiguration;
 import com.oracle.bmc.util.StreamUtils;
+import com.oracle.bmc.util.internal.FileUtils;
 import com.oracle.bmc.waiter.ExponentialBackoffDelayStrategy;
 import com.oracle.bmc.waiter.MaxTimeTerminationStrategy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
+import com.oracle.bmc.util.internal.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem.Statistics;
 import org.glassfish.jersey.apache.connector.ApacheConnectionClosingStrategy;
@@ -57,6 +66,7 @@ import static javax.ws.rs.core.HttpHeaders.AUTHORIZATION;
 public class BmcDataStoreFactory {
     private static final String OCI_PROPERTIES_FILE_NAME = "oci.properties";
     private final Configuration configuration;
+    private final String OCI_DELEGATION_TOKEN_FILE = "OCI_DELEGATION_TOKEN_FILE";
 
     public static final com.oracle.bmc.Service SERVICE =
             com.oracle.bmc.Services.serviceBuilder()
@@ -248,7 +258,33 @@ public class BmcDataStoreFactory {
                             ApacheConnectorProperties.builder()
                                     .connectionClosingStrategy(apacheConnectionClosingStrategy)
                                     .connectionPoolConfig(apacheConnectionPoolConfig)
+                                    .connectionReuseStrategy(null)
+                                    .requestRetryHandler(null)
                                     .build()));
+        }
+
+        // To use DelegationTokenConfigurator, check for the OCI_DELEGATION_TOKEN_FILE key in the environment variable.
+        // If the it does not exist in environment variable, check if OCI_DELEGATION_TOKEN_FILEPATH is set as a property.
+        String delegationTokenFilePath =
+                System.getenv(OCI_DELEGATION_TOKEN_FILE) != null
+                        ? System.getenv(OCI_DELEGATION_TOKEN_FILE)
+                        : propertyAccessor
+                                .asString()
+                                .get(BmcProperties.OCI_DELEGATION_TOKEN_FILEPATH);
+        LOG.info("Delegation token file path: {}", delegationTokenFilePath);
+        if (delegationTokenFilePath != null) {
+            StringBuilder tokenBuilder = new StringBuilder();
+            try (Stream<String> stream =
+                    Files.lines(
+                            Paths.get(FileUtils.expandUserHome(delegationTokenFilePath)),
+                            StandardCharsets.UTF_8)) {
+                stream.forEach(s -> tokenBuilder.append(s));
+            } catch (IOException e) {
+                LOG.warn("Exception in reading or parsing delegation token file", e);
+            }
+            String delegationToken = tokenBuilder.toString();
+            objectStorageBuilder.additionalClientConfigurator(
+                    new DelegationTokenConfigurator(delegationToken));
         }
 
         if (!propertyAccessor.asBoolean().get(BmcProperties.OBJECT_AUTO_CLOSE_INPUT_STREAM)) {

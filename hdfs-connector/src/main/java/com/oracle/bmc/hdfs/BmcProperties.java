@@ -455,6 +455,11 @@ public enum BmcProperties {
     FILESYSTEM_CACHING_EXPIRE_AFTER_WRITE_SECONDS(
             FILESYSTEM_CACHING_EXPIRE_AFTER_WRITE_SECONDS_KEY,
             (int) TimeUnit.MINUTES.toSeconds(30)),
+
+    /**
+     * (String, optional) File path that has the delegation token. Default value is null
+     */
+    OCI_DELEGATION_TOKEN_FILEPATH(OCI_DELEGATION_TOKEN_FILEPATH_KEY, null),
     ;
 
     @Getter private final String propertyName;

@@ -5,7 +5,7 @@
  */
 package com.oracle.bmc.hdfs.store;
 
-import com.google.common.base.Supplier;
+import java.util.function.Supplier;
 import com.oracle.bmc.model.Range;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.requests.GetObjectRequest;

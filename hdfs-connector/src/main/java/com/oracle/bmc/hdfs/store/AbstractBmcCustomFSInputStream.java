@@ -1,6 +1,6 @@
 package com.oracle.bmc.hdfs.store;
 
-import com.google.common.base.Supplier;
+import java.util.function.Supplier;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.requests.GetObjectRequest;
 import org.apache.hadoop.fs.FileStatus;
@@ -15,10 +15,12 @@ public abstract class AbstractBmcCustomFSInputStream extends BmcFSInputStream {
 
     protected final BmcPropertyAccessor propertyAccessor;
 
-    public AbstractBmcCustomFSInputStream(BmcPropertyAccessor propertyAccessor,
-                                          ObjectStorage objectStorage, FileStatus status,
-                                          Supplier<GetObjectRequest.Builder> requestBuilder,
-                                          FileSystem.Statistics statistics) {
+    public AbstractBmcCustomFSInputStream(
+            BmcPropertyAccessor propertyAccessor,
+            ObjectStorage objectStorage,
+            FileStatus status,
+            Supplier<GetObjectRequest.Builder> requestBuilder,
+            FileSystem.Statistics statistics) {
         super(objectStorage, status, requestBuilder, statistics);
         this.propertyAccessor = propertyAccessor;
     }
