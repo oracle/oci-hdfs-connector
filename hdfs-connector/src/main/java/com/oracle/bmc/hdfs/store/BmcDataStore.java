@@ -29,7 +29,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 import com.google.common.base.Function;
-import com.google.common.base.Supplier;
+import java.util.function.Supplier;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheBuilderSpec;
 import com.google.common.cache.CacheLoader;
@@ -63,7 +63,7 @@ import com.oracle.bmc.objectstorage.transfer.UploadManager.UploadRequest;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
+import com.oracle.bmc.util.internal.StringUtils;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem.Statistics;
@@ -135,12 +135,15 @@ public class BmcDataStore {
         this.useInMemoryWriteBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_WRITE_BUFFER);
         this.useMultipartUploadWriteBuffer =
-                propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
-        this.useReadAhead =
-                propertyAccessor.asBoolean().get(BmcProperties.READ_AHEAD);
+                propertyAccessor
+                        .asBoolean()
+                        .get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
+        this.useReadAhead = propertyAccessor.asBoolean().get(BmcProperties.READ_AHEAD);
         this.readAheadSizeInBytes = getReadAheadSizeInBytes(propertyAccessor);
-        this.customReadStreamClass = propertyAccessor.asString().get(BmcProperties.READ_STREAM_CLASS);
-        this.customWriteStreamClass = propertyAccessor.asString().get(BmcProperties.WRITE_STREAM_CLASS);
+        this.customReadStreamClass =
+                propertyAccessor.asString().get(BmcProperties.READ_STREAM_CLASS);
+        this.customWriteStreamClass =
+                propertyAccessor.asString().get(BmcProperties.WRITE_STREAM_CLASS);
 
         if (this.useInMemoryWriteBuffer && this.useMultipartUploadWriteBuffer) {
             throw new IllegalArgumentException(
@@ -174,8 +177,8 @@ public class BmcDataStore {
         final ExecutorService executorService;
         if (numThreadsForRenameDirectoryOperation == null
                 || numThreadsForRenameDirectoryOperation <= 1) {
-            executorService = 
-                        Executors.newFixedThreadPool(
+            executorService =
+                    Executors.newFixedThreadPool(
                             1,
                             new ThreadFactoryBuilder()
                                     .setDaemon(true)
@@ -376,8 +379,7 @@ public class BmcDataStore {
                 .build(loader);
     }
 
-    public static String configureParquetCacheString(
-            BmcPropertyAccessor propertyAccessor) {
+    public static String configureParquetCacheString(BmcPropertyAccessor propertyAccessor) {
         // this disables the cache by default
         String spec = "maximumSize=0";
         if (propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PARQUET_CACHING_ENABLED)) {
@@ -585,12 +587,9 @@ public class BmcDataStore {
 
     @RequiredArgsConstructor
     private static class RenameResponse {
-        @Getter
-        private final String oldName;
-        @Getter
-        private final String newName;
-        @Getter
-        private final Future<String> renameOperationFuture;
+        @Getter private final String oldName;
+        @Getter private final String newName;
+        @Getter private final Future<String> renameOperationFuture;
     }
 
     private void awaitRenameOperationTermination(List<RenameResponse> renameResponses)
@@ -632,9 +631,9 @@ public class BmcDataStore {
         try {
             final String newEntityTag =
                     new RenameOperation(
-                            this.objectStorage,
-                            this.requestBuilder.renameObject(
-                                    sourceObject, destinationObject))
+                                    this.objectStorage,
+                                    this.requestBuilder.renameObject(
+                                            sourceObject, destinationObject))
                             .call();
             this.statistics.incrementWriteOps(1); // 1 put
             LOG.debug("Newly renamed object has eTag {}", newEntityTag);
@@ -999,8 +998,7 @@ public class BmcDataStore {
     }
 
     private static class ObjectMetadataNotFoundException extends RuntimeException {
-        @Getter
-        private final String key;
+        @Getter private final String key;
 
         public ObjectMetadataNotFoundException(String key) {
             super("Object metadata not found for key: " + key);
@@ -1027,8 +1025,13 @@ public class BmcDataStore {
                 new GetObjectRequestFunction(path);
 
         if (!StringUtils.isBlank(this.customReadStreamClass)) {
-            FSInputStream readStreamInstance = createCustomReadStreamClass(this.customReadStreamClass, this.objectStorage,
-                    status, requestBuilder, this.statistics);
+            FSInputStream readStreamInstance =
+                    createCustomReadStreamClass(
+                            this.customReadStreamClass,
+                            this.objectStorage,
+                            status,
+                            requestBuilder,
+                            this.statistics);
             return readStreamInstance;
         }
         if (this.useInMemoryReadBuffer) {
@@ -1053,22 +1056,38 @@ public class BmcDataStore {
      * Creates a new {@link OutputStream} that can be written to in order to create a new file.
      *
      * @param path              The path for the new file.
-     * @param bufferSizeInBytes The buffer size in bytes (may not be used).
+     * @param bufferSizeInBytes The buffer size in bytes can be configured by setting the config key {@link BmcConstants#MULTIPART_PART_SIZE_IN_MB_KEY}.
+     *                          Default value is 4096 bytes which comes from io.file.buffer.size configuration in hadoop
      * @param progress          {@link Progressable} instance to report progress updates to.
      * @return A new output stream to write to.
      */
     public OutputStream openWriteStream(
-            final Path path, final int bufferSizeInBytes, final Progressable progress) {
+            final Path path, int bufferSizeInBytes, final Progressable progress) {
         LOG.debug("Opening write stream to {}", path);
         final boolean allowOverwrite =
                 this.propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_ALLOW_OVERWRITE);
         LOG.debug("Allowing overwrites when using Multipart uploads");
+
+        // The value set for MULTIPART_PART_SIZE_IN_MB is in megabytes and needs to be converted to bytes
+        final Integer lengthPerUploadPart =
+                propertyAccessor.asInteger().get(BmcProperties.MULTIPART_PART_SIZE_IN_MB);
+        if (lengthPerUploadPart != null) {
+            bufferSizeInBytes = lengthPerUploadPart * 1024 * 1024;
+            LOG.debug("Buffer size in bytes: {}", bufferSizeInBytes);
+        }
+
         final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn =
                 new UploadDetailsFunction(this.pathToObject(path), allowOverwrite, progress);
 
         if (!StringUtils.isBlank(this.customWriteStreamClass)) {
             LOG.debug("Using custom write stream class: {}", customWriteStreamClass);
-            OutputStream writeStreamInstance = createCustomWriteStreamClass(this.customWriteStreamClass, this.propertyAccessor, this.uploadManager, bufferSizeInBytes, requestBuilderFn);
+            OutputStream writeStreamInstance =
+                    createCustomWriteStreamClass(
+                            this.customWriteStreamClass,
+                            this.propertyAccessor,
+                            this.uploadManager,
+                            bufferSizeInBytes,
+                            requestBuilderFn);
             return writeStreamInstance;
         }
         // takes precedence
@@ -1192,21 +1211,29 @@ public class BmcDataStore {
         private final String objectKey;
     }
 
-    private <T> T createCustomReadStreamClass(final String className,
-                                              final ObjectStorage objectStorage,
-                                              final FileStatus status,
-                                              final Supplier<GetObjectRequest.Builder> requestBuilder,
-                                              final Statistics statistics) {
+    private <T> T createCustomReadStreamClass(
+            final String className,
+            final ObjectStorage objectStorage,
+            final FileStatus status,
+            final Supplier<GetObjectRequest.Builder> requestBuilder,
+            final Statistics statistics) {
         try {
             final Class<?> customClass = Class.forName(className);
             final Constructor<?> customClassConstructor =
-                    customClass.getConstructor(BmcPropertyAccessor.class,
+                    customClass.getConstructor(
+                            BmcPropertyAccessor.class,
                             ObjectStorage.class,
                             FileStatus.class,
                             Supplier.class,
                             Statistics.class);
             try {
-                return (T) customClassConstructor.newInstance(this.propertyAccessor, objectStorage, status, requestBuilder, statistics);
+                return (T)
+                        customClassConstructor.newInstance(
+                                this.propertyAccessor,
+                                objectStorage,
+                                status,
+                                requestBuilder,
+                                statistics);
             } catch (InstantiationException
                     | IllegalAccessException
                     | IllegalArgumentException
@@ -1224,18 +1251,28 @@ public class BmcDataStore {
         }
     }
 
-    private <T> T createCustomWriteStreamClass(final String className,
-                                                      final BmcPropertyAccessor propertyAccessor,
-                                                      final UploadManager uploadManager,
-                                                      final int bufferSizeInBytes,
-                                                      final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn) {
+    private <T> T createCustomWriteStreamClass(
+            final String className,
+            final BmcPropertyAccessor propertyAccessor,
+            final UploadManager uploadManager,
+            final int bufferSizeInBytes,
+            final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn) {
 
         try {
             final Class<?> customClass = Class.forName(className);
             final Constructor<?> customClassConstructor =
-                    customClass.getConstructor(BmcPropertyAccessor.class, UploadManager.class, int.class, BiFunction.class);
+                    customClass.getConstructor(
+                            BmcPropertyAccessor.class,
+                            UploadManager.class,
+                            int.class,
+                            BiFunction.class);
             try {
-                return (T) customClassConstructor.newInstance(propertyAccessor, uploadManager, bufferSizeInBytes, requestBuilderFn);
+                return (T)
+                        customClassConstructor.newInstance(
+                                propertyAccessor,
+                                uploadManager,
+                                bufferSizeInBytes,
+                                requestBuilderFn);
             } catch (InstantiationException
                     | IllegalAccessException
                     | IllegalArgumentException
@@ -1252,5 +1289,4 @@ public class BmcDataStore {
             throw new IllegalStateException("Unable to create new custom client instance", e);
         }
     }
-
 }

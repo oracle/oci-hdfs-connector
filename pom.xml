@@ -11,7 +11,7 @@
 
   <groupId>com.oracle.oci.sdk</groupId>
   <artifactId>oci-hdfs</artifactId>
-  <version>3.3.1.0.3.6</version>
+  <version>3.3.4.0.0.0</version>
   <packaging>pom</packaging>
 
   <name>Oracle Cloud Infrastructure HDFS Connector for Storage Service</name>
@@ -55,8 +55,8 @@
   <properties>
     <!-- This should not be a snapshot version. If you want to test locally with a snapshot, you
          can run Maven with the `-Denforcer.fail=false` argument. -->
-    <oci.java.sdk.version>2.13.0</oci.java.sdk.version>
-    <hadoop.version>3.3.1</hadoop.version>
+    <oci.java.sdk.version>2.38.0</oci.java.sdk.version>
+    <hadoop.version>3.3.4</hadoop.version>
     <!--
       Deal with CVE-2021-28165:
       Use Jetty version 9.4.40 directly, since Jetty 9.4.20.v20190813 was removed from Hadoop 3.3.0.
@@ -336,6 +336,16 @@
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-compress</artifactId>
       <version>1.21</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-configuration2</artifactId>
+      <version>2.8.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.avro</groupId>
+      <artifactId>avro</artifactId>
+      <version>1.11.1</version>
     </dependency>
   </dependencies>
 

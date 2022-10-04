@@ -15,7 +15,7 @@ import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem.Statistics;
 
-import com.google.common.base.Supplier;
+import java.util.function.Supplier;
 import com.oracle.bmc.model.BmcException;
 import com.oracle.bmc.model.Range;
 import com.oracle.bmc.objectstorage.ObjectStorage;

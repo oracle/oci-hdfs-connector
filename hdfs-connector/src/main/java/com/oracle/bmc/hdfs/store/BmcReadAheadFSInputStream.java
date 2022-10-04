@@ -18,7 +18,7 @@ import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem.Statistics;
 
-import com.google.common.base.Supplier;
+import java.util.function.Supplier;
 import com.oracle.bmc.model.Range;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.requests.GetObjectRequest;
@@ -70,7 +70,7 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
     private Cache<String, ParquetFooterInfo> configureParquetCache(String spec) {
         return CacheBuilder.from(CacheBuilderSpec.parse(spec))
                 .removalListener(BmcReadAheadFSInputStream.getParquetCacheRemovalListener())
-               .build();
+                .build();
     }
 
     @Override
@@ -227,9 +227,7 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
                                     ParquetFooterInfo ret = new ParquetFooterInfo();
                                     try (final InputStream is = response.getInputStream()) {
                                         ret.footer = new byte[8];
-                                        if (is.read(ret.footer) != 8) {
-                                            throw new IOException("Not a parquet file");
-                                        }
+                                        readAllBytes(is, ret.footer);
                                     }
                                     ret.metadataLen =
                                             Byte.toUnsignedInt(ret.footer[3]) << 24

@@ -174,6 +174,9 @@ public final class BmcConstants {
     public static final String FILESYSTEM_CACHING_EXPIRE_AFTER_WRITE_SECONDS_KEY =
             "fs.oci.caching.filesystem.expireafterwrite.seconds";
 
+    public static final String OCI_DELEGATION_TOKEN_FILEPATH_KEY =
+            "fs.oci.delegation.token.filepath";
+
     /**
      * This class contains constants with deprecated values. The HDFS connector will first try the current values
      * in {@link com.oracle.bmc.hdfs.BmcConstants}.

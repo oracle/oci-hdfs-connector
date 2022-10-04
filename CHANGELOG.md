@@ -3,6 +3,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.4.0.0.0 - 2022-10-04
+### Added
+- Added support for delegation token to HDFS connector. This feature can be enabled by setting the property `fs.oci.delegation.token.filepath` to the path of file having the delegation token.
+- 
+### Changed
+- Updated to Hadoop version 3.3.4
+- Updated to OCI Java SDK version 2.38.0
+
+### Fixed
+- Fixed multipart upload to use the correct upload size
+- Fixed BmcFilesystem cache to correctly manage the items
+- Fixed NullPointerException when default filesystem is oci
+- Fixed IOException in ReadAheadFileInputStream to read all bytes in a parquet file
+- Fixed OCI HDFS connector in read-ahead mode doesn't emit bytesRead input metric [#77](https://github.com/oracle/oci-hdfs-connector/issues/77)
+- Fixed HDFS connector issue for not being able to use smart parquet add-on
+
 ## 3.3.1.0.3.6 - 2022-06-07
 ### Fixed
 - Fixed oci-hdfs jar file to not contain class files from `hadoop-common` and `hadoop-hdfs`

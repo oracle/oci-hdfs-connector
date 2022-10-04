@@ -15,11 +15,10 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheBuilderSpec;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
-import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.store.AbstractBmcCustomFSInputStream;
 import com.oracle.bmc.hdfs.store.BmcDataStore;
-import com.oracle.bmc.hdfs.store.BmcFSInputStream;
 import com.oracle.bmc.hdfs.store.BmcPropertyAccessor;
+import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileStatus;
@@ -30,7 +29,6 @@ import org.apache.parquet.format.ColumnChunk;
 import org.apache.parquet.format.FileMetaData;
 import org.apache.parquet.format.RowGroup;
 
-import com.google.common.base.Supplier;
 import com.oracle.bmc.model.Range;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.requests.GetObjectRequest;
@@ -83,6 +81,7 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
         }
         filePos++;
         dataCurOffset++;
+        this.statistics.incrementBytesRead(1L);
         int ret = wrappedStream.read();
         if (dataCurOffset == dataMax) {
             dataPos = -1;
@@ -111,6 +110,7 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
         int n = wrappedStream.read(buffer, offset, len);
         dataCurOffset += n;
         filePos += n;
+        this.statistics.incrementBytesRead(n);
         if (dataCurOffset == dataMax) {
             if (n != length) {
                 LOG.debug("{}: Short Read; exhausted buffer", this);
@@ -244,9 +244,7 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
                     ParquetFooterInfo ret = new ParquetFooterInfo();
                     try (final InputStream is = response.getInputStream()) {
                         ret.footer = new byte[8];
-                        if (is.read(ret.footer) != 8) {
-                            throw new IOException("Not a parquet file");
-                        }
+                        readAllBytes(is, ret.footer);
                     }
                     ret.metadataLen =
                             Byte.toUnsignedInt(ret.footer[3]) << 24
