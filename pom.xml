@@ -11,7 +11,7 @@
 
   <groupId>com.oracle.oci.sdk</groupId>
   <artifactId>oci-hdfs</artifactId>
-  <version>3.3.4.0.0.0</version>
+  <version>3.3.4.0.1.0</version>
   <packaging>pom</packaging>
 
   <name>Oracle Cloud Infrastructure HDFS Connector for Storage Service</name>
@@ -55,7 +55,7 @@
   <properties>
     <!-- This should not be a snapshot version. If you want to test locally with a snapshot, you
          can run Maven with the `-Denforcer.fail=false` argument. -->
-    <oci.java.sdk.version>2.38.0</oci.java.sdk.version>
+    <oci.java.sdk.version>2.47.0</oci.java.sdk.version>
     <hadoop.version>3.3.4</hadoop.version>
     <!--
       Deal with CVE-2021-28165:
@@ -346,6 +346,12 @@
       <groupId>org.apache.avro</groupId>
       <artifactId>avro</artifactId>
       <version>1.11.1</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-databind</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
   </dependencies>
 
