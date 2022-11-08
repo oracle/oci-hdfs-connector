@@ -3,10 +3,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.4.0.1.0 - 2022-11-08
+### Changed
+- Updated OCI Java SDK version to `2.47.0`
+- Updated `com.fasterxml.woodstox:woodstox-core` from version `6.2.3` to `6.4.0`
+- Updated `com.fasterxml.jackson.core:jackson-databind` from version `2.12.6.1` to `2.13.4.2`
+
 ## 3.3.4.0.0.0 - 2022-10-04
 ### Added
 - Added support for delegation token to HDFS connector. This feature can be enabled by setting the property `fs.oci.delegation.token.filepath` to the path of file having the delegation token.
-- 
+
 ### Changed
 - Updated to Hadoop version 3.3.4
 - Updated to OCI Java SDK version 2.38.0

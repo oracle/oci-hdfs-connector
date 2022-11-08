@@ -5,7 +5,7 @@
     <parent>
         <artifactId>oci-hdfs-addons</artifactId>
         <groupId>com.oracle.oci.sdk</groupId>
-        <version>3.3.4.0.0.0</version>
+        <version>3.3.4.0.1.0</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -142,7 +142,7 @@
         <dependency>
             <groupId>com.oracle.oci.sdk</groupId>
             <artifactId>oci-hdfs-connector</artifactId>
-            <version>3.3.4.0.0.0</version>
+            <version>3.3.4.0.1.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.hadoop</groupId>
@@ -244,7 +244,7 @@
         <dependency>
             <groupId>com.oracle.oci.sdk</groupId>
             <artifactId>oci-hdfs-connector</artifactId>
-            <version>3.3.4.0.0.0</version>
+            <version>3.3.4.0.1.0</version>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
@@ -372,6 +372,11 @@
                 </exclusion>
                 <!-- End Deal with CVE-2021-31684 and CVE-2021-27568 -->
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.13.4.2</version>
         </dependency>
     </dependencies>
 
