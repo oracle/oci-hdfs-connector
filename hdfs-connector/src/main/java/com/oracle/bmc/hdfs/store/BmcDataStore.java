@@ -851,7 +851,7 @@ public class BmcDataStore {
                 this.isDirectory(summary),
                 BLOCK_REPLICATION,
                 this.blockSizeInBytes,
-                summary.getTimeModified() == null ? summary.getTimeCreated().getTime() : summary.getTimeModified().getTime(),
+                summary.getTimeModified().getTime(),
                 this.objectToPath(parentPath, summary.getName()));
     }
 
