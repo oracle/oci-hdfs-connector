@@ -132,10 +132,10 @@ public enum BmcProperties {
     MULTIPART_MIN_PART_SIZE_IN_MB(MULTIPART_MIN_PART_SIZE_IN_MB_KEY, null),
     /**
      * (int, optional) The part size, in mebibytes that each part should be uploaded as. Note, any value less than or
-     * equal to 0 is interpreted as using the default Java SDK value. See
+     * equal to 0 is interpreted as using the default Java SDK value of 128MiB. See
      * {@link BmcConstants#MULTIPART_PART_SIZE_IN_MB_KEY} for config key name.
      */
-    MULTIPART_PART_SIZE_IN_MB(MULTIPART_PART_SIZE_IN_MB_KEY, null),
+    MULTIPART_PART_SIZE_IN_MB(MULTIPART_PART_SIZE_IN_MB_KEY, 128),
     /**
      * (string, optional) The HTTP proxy URI if using a proxy to connect to Object Storage Service.  If configured,
      * then an ObjectStorageClient will be configured to use the ApacheConnector provider add-on in order to configure

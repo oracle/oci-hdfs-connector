@@ -35,7 +35,7 @@ import org.apache.hadoop.util.StopWatch;
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 class RequestBuilder {
     // TODO: these fields should ideally come from the SDK.
-    private static final String SIZE_AND_TIME_FILDS = "size,timeCreated";
+    private static final String SIZE_AND_TIME_FILDS = "size,timeCreated,timeModified";
 
     private final String namespace;
     private final String bucket;
