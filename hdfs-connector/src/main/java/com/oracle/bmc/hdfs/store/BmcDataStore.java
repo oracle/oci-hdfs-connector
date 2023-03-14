@@ -851,7 +851,7 @@ public class BmcDataStore {
                 this.isDirectory(summary),
                 BLOCK_REPLICATION,
                 this.blockSizeInBytes,
-                summary.getTimeCreated().getTime(),
+                summary.getTimeModified().getTime(),
                 this.objectToPath(parentPath, summary.getName()));
     }
 
@@ -1057,7 +1057,7 @@ public class BmcDataStore {
      *
      * @param path              The path for the new file.
      * @param bufferSizeInBytes The buffer size in bytes can be configured by setting the config key {@link BmcConstants#MULTIPART_PART_SIZE_IN_MB_KEY}.
-     *                          Default value is 4096 bytes which comes from io.file.buffer.size configuration in hadoop
+     *                          Default value is 128MiB which comes from OCI Java SDK {@link com.oracle.bmc.objectstorage.transfer.UploadConfiguration}
      * @param progress          {@link Progressable} instance to report progress updates to.
      * @return A new output stream to write to.
      */
@@ -1072,7 +1072,7 @@ public class BmcDataStore {
         final Integer lengthPerUploadPart =
                 propertyAccessor.asInteger().get(BmcProperties.MULTIPART_PART_SIZE_IN_MB);
         if (lengthPerUploadPart != null) {
-            bufferSizeInBytes = lengthPerUploadPart * 1024 * 1024;
+            bufferSizeInBytes = lengthPerUploadPart * MiB;
             LOG.debug("Buffer size in bytes: {}", bufferSizeInBytes);
         }
 

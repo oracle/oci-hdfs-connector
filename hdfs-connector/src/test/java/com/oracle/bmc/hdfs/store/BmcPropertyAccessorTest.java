@@ -82,6 +82,7 @@ public class BmcPropertyAccessorTest {
         this.configuration.setInt(
                 BmcProperties.READ_TIMEOUT_MILLIS.getPropertyName() + PROPERTY_OVERRIDE_SUFFIX, 50);
         assertThat(propertyAccessor.asInteger().get(BmcProperties.READ_TIMEOUT_MILLIS), is(50));
+        assertThat(propertyAccessor.asInteger().get(BmcProperties.MULTIPART_PART_SIZE_IN_MB), is(128));
     }
 
     @Test

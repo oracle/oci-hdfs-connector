@@ -3,6 +3,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.4.0.1.1 - 2023-03-14
+### Changed
+- Updated `io.netty:netty-codec` from version `4.1.77.Final` to `4.1.86.Final`
+
+### Fixed
+- Fixed the `createFileStatus` to use the `timeModified` instead of `timeCreated`. This bug caused the `LocatedFileStatus` to have wrong `modification_time` when objects are overwritten in OCI Object Storage.
+- Fixed the multipart upload default configuration to use the correct upload size of 128 MiB
+
 ## 3.3.4.0.1.0 - 2022-11-08
 ### Changed
 - Updated OCI Java SDK version to `2.47.0`
