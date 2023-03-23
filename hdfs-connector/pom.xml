@@ -564,7 +564,7 @@
     <dependency>
       <groupId>net.minidev</groupId>
       <artifactId>json-smart</artifactId>
-      <version>2.4.7</version>
+      <version>2.4.9</version>
     </dependency>
     <!-- End Deal with CVE-2021-31684 and CVE-2021-27568 -->
     <dependency>
