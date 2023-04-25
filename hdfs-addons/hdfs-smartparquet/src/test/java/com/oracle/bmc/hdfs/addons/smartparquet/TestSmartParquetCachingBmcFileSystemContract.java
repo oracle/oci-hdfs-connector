@@ -1,3 +1,8 @@
+/**
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.  All rights reserved.
+ * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
+ * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
+ */
 package com.oracle.bmc.hdfs.addons.smartparquet;
 
 import com.oracle.bmc.hdfs.IntegrationTestCategory;
@@ -16,7 +21,8 @@ public class TestSmartParquetCachingBmcFileSystemContract extends TestBmcFileSys
     @BeforeClass
     public static void setUpStatic() throws Exception {
         final Configuration configuration = new Configuration();
-        final BmcSmartParquetCachingContract contract = new BmcSmartParquetCachingContract(configuration);
+        final BmcSmartParquetCachingContract contract =
+                new BmcSmartParquetCachingContract(configuration);
         contract.init();
         INITIAL_WORKING_DIRECTORY = contract.getTestFileSystem().getWorkingDirectory();
     }
@@ -25,7 +31,8 @@ public class TestSmartParquetCachingBmcFileSystemContract extends TestBmcFileSys
     @Override
     public void setUp() throws Exception {
         final Configuration configuration = new Configuration();
-        final BmcSmartParquetCachingContract contract = new BmcSmartParquetCachingContract(configuration);
+        final BmcSmartParquetCachingContract contract =
+                new BmcSmartParquetCachingContract(configuration);
         contract.init();
         super.fs = contract.getTestFileSystem();
 

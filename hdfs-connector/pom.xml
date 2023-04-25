@@ -1,6 +1,6 @@
 <!--
 
-    Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+    Copyright (c) 2016, 2023, Oracle and/or its affiliates.  All rights reserved.
     This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
     or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
 
@@ -12,7 +12,7 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.3.4.0.1.1</version>
+    <version>3.3.4.1.0.0</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -327,13 +327,28 @@
     <!-- Direct dependencies -->
     <dependency>
       <groupId>com.oracle.oci.sdk</groupId>
-      <artifactId>oci-java-sdk-objectstorage</artifactId>
+      <artifactId>oci-java-sdk-objectstorage-extensions</artifactId>
+      <version>${oci.java.sdk.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.oracle.oci.sdk</groupId>
+      <artifactId>oci-java-sdk-objectstorage-generated</artifactId>
+      <version>${oci.java.sdk.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.oracle.oci.sdk</groupId>
+      <artifactId>oci-java-sdk-common</artifactId>
       <version>${oci.java.sdk.version}</version>
     </dependency>
     <!-- Required for HTTP proxy support -->
     <dependency>
       <groupId>com.oracle.oci.sdk</groupId>
-      <artifactId>oci-java-sdk-addons-apache</artifactId>
+      <artifactId>oci-java-sdk-addons-apache-configurator-jersey</artifactId>
+      <version>${oci.java.sdk.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.oracle.oci.sdk</groupId>
+      <artifactId>oci-java-sdk-common-httpclient-jersey</artifactId>
       <version>${oci.java.sdk.version}</version>
     </dependency>
     <dependency>
@@ -564,7 +579,7 @@
     <dependency>
       <groupId>net.minidev</groupId>
       <artifactId>json-smart</artifactId>
-      <version>2.4.7</version>
+      <version>2.4.9</version>
     </dependency>
     <!-- End Deal with CVE-2021-31684 and CVE-2021-27568 -->
     <dependency>

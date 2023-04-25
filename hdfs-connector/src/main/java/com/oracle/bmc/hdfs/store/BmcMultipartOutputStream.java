@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -8,7 +8,7 @@ package com.oracle.bmc.hdfs.store;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
-import com.oracle.bmc.io.DuplicatableInputStream;
+import com.oracle.bmc.http.client.io.DuplicatableInputStream;
 import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
 import com.oracle.bmc.objectstorage.model.StorageTier;
 import com.oracle.bmc.objectstorage.requests.PutObjectRequest;
@@ -28,6 +28,7 @@ import java.security.DigestOutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 public class BmcMultipartOutputStream extends BmcOutputStream {
@@ -35,9 +36,12 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
     private final MultipartUploadRequest request;
     private ByteBufferOutputStream bbos;
     private MultipartObjectAssembler assembler;
+    private AtomicInteger nextPartNumber;
+    private Phaser partUploadPhaser;
     private volatile boolean closed = false;
     private MultipartManifest manifest;
     private ExecutorService executor;
+    private ExecutorService parallelMd5executor;
     private boolean shutdownExecutor;
     private final BmcPropertyAccessor propertyAccessor;
 
@@ -136,7 +140,8 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
     public BmcMultipartOutputStream(
             final BmcPropertyAccessor propertyAccessor,
             final MultipartUploadRequest request,
-            final int bufferSizeInBytes) {
+            final int bufferSizeInBytes,
+            final ExecutorService parallelMd5executor) {
         super(null, null);
 
         // delay creation until called in createOutputBufferStream
@@ -144,6 +149,7 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         this.bufferSizeInBytes = bufferSizeInBytes;
         this.request = request;
         this.shutdownExecutor = false;
+        this.parallelMd5executor = parallelMd5executor;
     }
 
     /**
@@ -185,6 +191,8 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
                             "Committing multipart upload id=%s, this awaits all transfers.",
                             manifest.getUploadId()));
 
+            // wait for all parts to be uploaded
+            partUploadPhaser.arriveAndAwaitAdvance();
             // this will block until all transfers are complete
             CommitMultipartUploadResponse r = this.assembler.commit();
 
@@ -234,16 +242,21 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         }
 
         byte[] bytesToWrite = this.bbos.toByteArray();
+        this.bbos.clear();
         int writeLength = bytesToWrite.length;
+        int partNumber = nextPartNumber.getAndIncrement();
 
-        try (InputStream is =
-                new WrappedFixedLengthByteArrayInputStream(bytesToWrite, 0, writeLength)) {
-            this.assembler.addPart(is, writeLength, computeMd5(bytesToWrite, writeLength));
-        } catch (final IOException ioe) {
-            LOG.error("Failed to create InputStream from byte array.");
-        } finally {
-            this.bbos.clear();
-        }
+        partUploadPhaser.register();
+        parallelMd5executor.submit(() -> {
+            try (InputStream is =
+                         new WrappedFixedLengthByteArrayInputStream(bytesToWrite, 0, writeLength)) {
+                this.assembler.setPart(is, writeLength, computeMd5(bytesToWrite, writeLength), partNumber);
+            } catch (final IOException ioe) {
+                LOG.error("Failed to create InputStream from byte array.");
+            } finally {
+                partUploadPhaser.arriveAndDeregister();
+            }
+        });
     }
 
     /**
@@ -306,6 +319,8 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
                         .retryConfiguration(this.request.getRetryConfiguration())
                         .service(this.request.getObjectStorage())
                         .build();
+        this.nextPartNumber = new AtomicInteger(1);
+        this.partUploadPhaser = new Phaser(1);
         this.bbos = new ByteBufferOutputStream(this.bufferSizeInBytes);
         // TODO: do we need these params?
         this.manifest = this.assembler.newRequest(null, null, null, null);

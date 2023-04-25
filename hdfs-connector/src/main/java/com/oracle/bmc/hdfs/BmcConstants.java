@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -70,6 +70,8 @@ public final class BmcConstants {
     public static final String MULTIPART_NUM_UPLOAD_THREADS_KEY =
             "fs.oci.client.multipart.numthreads";
 
+    public static final String MD5_NUM_THREADS_KEY =
+            "fs.oci.client.md5.numthreads";
     public static final String MULTIPART_MIN_SIZE_OF_OBJECT_IN_MB_KEY =
             "fs.oci.client.multipart.minobjectsize.mb";
 
@@ -157,6 +159,8 @@ public final class BmcConstants {
 
     public static final String OBJECT_AUTO_CLOSE_INPUT_STREAM_KEY =
             "fs.oci.object.autoclose.inputstream";
+
+    public static final String REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED_KEY = "fs.oci.realmspecific.endpoint.template.enabled";
 
     // BmcFilesystem instance caching
 

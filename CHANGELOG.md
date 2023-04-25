@@ -3,6 +3,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.4.1.0.0 - 2023-04-25
+### Added
+- Added support for OCI Java SDK 3.x
+- Added support for parameterized and realm-specific endpoint templates
+- Added support for calculating part MD5s on a separate executor in BmcMultipartOutputStream
+
+### Changed
+- Updated OCI Java SDK version to `3.12.1`
+- Updated `json-smart` from `2.4.7` to `2.4.9`
+
+### Fixed
+- Fixed race when concurrently creating objects with BmcMultipartOutputStream
+- Fixed the destination dir containing `$` character for renameDir
+
 ## 3.3.4.0.1.1 - 2023-03-14
 ### Changed
 - Updated `io.netty:netty-codec` from version `4.1.77.Final` to `4.1.86.Final`

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -260,7 +260,7 @@ public class BmcFilesystem extends FileSystem {
         return delegate == null ? null : delegate.getCanonicalServiceName();
     }
 
-    // This will only close if all owners have been closed to avoid memory leaks. 
+    // This will only close if all owners have been closed to avoid memory leaks.
     public void close() throws IOException {
         if (delegate != null && delegate.isClosed()) {
             super.close();
@@ -850,11 +850,11 @@ class BmcFilesystemImpl extends FileSystem {
     }
 
     /**
-    * Closing filesystem(s) needs to be synchronized to avoid race conditions with owners in multi-threaded environments.
-    */
+     * Closing filesystem(s) needs to be synchronized to avoid race conditions with owners in multi-threaded environments.
+     */
     @Override
     public synchronized void close() throws IOException {
-        if (isClosed){
+        if (isClosed) {
             return;
         }
         try {
@@ -870,8 +870,8 @@ class BmcFilesystemImpl extends FileSystem {
     }
 
     /**
-    * addOwner() needs to be synchronized to avoid race conditions with owners in multi-threaded environments.
-    */
+     * addOwner() needs to be synchronized to avoid race conditions with owners in multi-threaded environments.
+     */
     public synchronized void addOwner(BmcFilesystem fs) {
         owners.add(fs);
     }

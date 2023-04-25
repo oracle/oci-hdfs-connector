@@ -1,11 +1,14 @@
 /**
- * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
 package com.oracle.bmc.hdfs.store;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.oracle.bmc.hdfs.BmcProperties;
+import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
+import com.oracle.bmc.hdfs.util.DirectExecutorService;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
 import com.oracle.bmc.objectstorage.model.MultipartUpload;
@@ -23,6 +26,10 @@ import org.mockito.runners.MockitoJUnitRunner;
 
 import java.io.IOException;
 import java.util.Random;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.*;
@@ -46,6 +53,7 @@ public class BmcMultipartOutputStreamTest {
     public void setUp() {
         // Setup mockIntegerAccessor
         when(mockIntegerAccessor.get(eq(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS))).thenReturn(1);
+        when(mockIntegerAccessor.get(eq(BmcProperties.MD5_NUM_THREADS))).thenReturn(1);
         when(mockBooleanAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED)))
                 .thenReturn(true);
         when(
@@ -78,7 +86,7 @@ public class BmcMultipartOutputStreamTest {
                         .allowOverwrite(true)
                         .build();
         BmcMultipartOutputStream bmos =
-                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE);
+                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService());
 
         String uploadId = "TestRequest";
         MultipartUpload upload =
@@ -133,7 +141,7 @@ public class BmcMultipartOutputStreamTest {
                         .allowOverwrite(true)
                         .build();
         BmcMultipartOutputStream bmos =
-                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE);
+                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService());
 
         String uploadId = "TestRequest";
         MultipartUpload upload =
@@ -210,7 +218,7 @@ public class BmcMultipartOutputStreamTest {
 
         Exception exception = null;
         try (BmcMultipartOutputStream bmos =
-                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE)) {
+                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService())) {
             for (int parts = 0; parts < 1; ++parts) {
                 bmos.write(generateRandomBytes(1024));
             }
@@ -257,5 +265,33 @@ public class BmcMultipartOutputStreamTest {
         byte[] result = new byte[num];
         randomGenerator.nextBytes(result);
         return result;
+    }
+
+    private ExecutorService createExecutorService() {
+        final int taskTimeout =
+                mockPropAccessor
+                        .asInteger()
+                        .get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS);
+        final int numThreadsForParallelMd5Operation =
+                mockPropAccessor.asInteger().get(BmcProperties.MD5_NUM_THREADS);
+        final BlockingRejectionHandler rejectedExecutionHandler =
+                new BlockingRejectionHandler(taskTimeout);
+        final ExecutorService executorService;
+        if (numThreadsForParallelMd5Operation <= 1) {
+            executorService = new DirectExecutorService();
+        } else {
+            executorService = new ThreadPoolExecutor(
+                    numThreadsForParallelMd5Operation,
+                    numThreadsForParallelMd5Operation,
+                    0L,
+                    TimeUnit.MILLISECONDS,
+                    new LinkedBlockingQueue<Runnable>(numThreadsForParallelMd5Operation),
+                    new ThreadFactoryBuilder()
+                            .setDaemon(true)
+                            .setNameFormat("bmcs-hdfs-multipart-md5-%d")
+                            .build(),
+                    rejectedExecutionHandler);
+        }
+        return executorService;
     }
 }

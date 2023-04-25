@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -11,7 +11,6 @@ import com.oracle.bmc.auth.AbstractFederationClientAuthenticationDetailsProvider
 import com.oracle.bmc.auth.AuthenticationDetailsProvider;
 import com.oracle.bmc.auth.BasicAuthenticationDetailsProvider;
 import com.oracle.bmc.hdfs.BmcProperties;
-import com.oracle.bmc.http.ApacheConfigurator;
 import com.oracle.bmc.http.ClientConfigurator;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.ObjectStorageClient;
@@ -88,6 +87,8 @@ public class BmcDataStoreFactoryTest {
                 .thenReturn("WARNING");
         when(mockBooleanAccessor.get(eq(BmcProperties.JERSEY_CLIENT_LOGGING_ENABLED)))
                 .thenReturn(false);
+        when(mockBooleanAccessor.get(eq(BmcProperties.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED)))
+                .thenReturn(false);
 
         when(mockPropAccessor.asString()).thenReturn(mockStringAccessor);
         when(mockPropAccessor.asBoolean()).thenReturn(mockBooleanAccessor);
@@ -142,7 +143,7 @@ public class BmcDataStoreFactoryTest {
         final ClientConfigurator actualClientConfigurator = configuratorCaptor.getValue();
         assertTrue(
                 "ClientConfigurator should be of type ApacheConfigurator",
-                actualClientConfigurator instanceof ApacheConfigurator);
+                actualClientConfigurator instanceof ClientConfiguratorWithProxy);
         verify(mockObjectStorageClientBuilder).build(isA(BasicAuthenticationDetailsProvider.class));
     }
 
@@ -183,14 +184,27 @@ public class BmcDataStoreFactoryTest {
         setUpStubForCreateAuthenticator();
         setUpObjectStorageClientBuilder();
         whenNew(ObjectStorageClient.class).withAnyArguments().thenReturn(mockObjectStorageClient);
-        mockStatic(AbstractFederationClientAuthenticationDetailsProviderBuilder.class);
-        BDDMockito.given(
-                        AbstractFederationClientAuthenticationDetailsProviderBuilder.simpleRetry(
-                                any(), anyString(), anyString()))
+        mockStatic(BmcDataStoreFactory.class);
+        BDDMockito.given(BmcDataStoreFactory.simpleRetry(any(), anyString(), anyString()))
                 .willReturn("phx");
         mockStatic(Region.class);
         BDDMockito.given(Region.formatDefaultRegionEndpoint(any(), anyString()))
                 .willReturn("some_endpoint");
+
+        final ObjectStorage client = factoryUnderTest.createClient(mockPropAccessor);
+
+        assertEquals("ObjectStorage should be equal", mockObjectStorageClient, client);
+        verifyNew(ObjectStorageClient.class);
+    }
+
+    @Test
+    public void createClient_withRealmSpecificEndpointTemplate_shouldUseObjectStorageClientConstructor() throws Exception {
+        when(mockPropAccessor.asString().get(eq(BmcProperties.HOST_NAME))).thenReturn(null);
+        when(mockPropAccessor.asBoolean().get(eq(BmcProperties.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED))).thenReturn(true);
+        when(mockPropAccessor.asString().get(eq(BmcProperties.REGION_CODE_OR_ID))).thenReturn("phx");
+        setUpStubForCreateAuthenticator();
+        setUpObjectStorageClientBuilder();
+        whenNew(ObjectStorageClient.class).withAnyArguments().thenReturn(mockObjectStorageClient);
 
         final ObjectStorage client = factoryUnderTest.createClient(mockPropAccessor);
 

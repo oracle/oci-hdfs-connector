@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -26,6 +26,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.google.common.base.Function;
@@ -44,6 +45,7 @@ import com.oracle.bmc.hdfs.caching.CachingObjectStorage;
 import com.oracle.bmc.hdfs.caching.ConsistencyPolicy;
 import com.oracle.bmc.hdfs.util.BiFunction;
 import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
+import com.oracle.bmc.hdfs.util.DirectExecutorService;
 import com.oracle.bmc.model.BmcException;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
@@ -87,17 +89,19 @@ public class BmcDataStore {
 
     private final ObjectStorage objectStorage;
     private final Statistics statistics;
+    private final String bucket;
+    private final String namespace;
 
     private final BmcPropertyAccessor propertyAccessor;
     private final UploadManager uploadManager;
     private final ExecutorService parallelUploadExecutor;
     private final ExecutorService parallelRenameExecutor;
+    private final ExecutorService parallelMd5executor;
     private final RequestBuilder requestBuilder;
     private final long blockSizeInBytes;
     private final boolean useInMemoryReadBuffer;
     private final boolean useInMemoryWriteBuffer;
     private final boolean useMultipartUploadWriteBuffer;
-    private final CreateMultipartUploadRequest.Builder multipartUploadRequestBuilder;
 
     private final LoadingCache<String, HeadPair> objectMetadataCache;
     private final boolean useReadAhead;
@@ -115,6 +119,8 @@ public class BmcDataStore {
         this.propertyAccessor = propertyAccessor;
         this.objectStorage = configureObjectStorage(objectStorage, propertyAccessor);
         this.statistics = statistics;
+        this.bucket = bucket;
+        this.namespace = namespace;
 
         final UploadConfigurationBuilder uploadConfigurationBuilder =
                 createUploadConfiguration(propertyAccessor);
@@ -128,8 +134,6 @@ public class BmcDataStore {
                         uploadConfiguration);
         this.requestBuilder = new RequestBuilder(namespace, bucket);
         this.blockSizeInBytes = propertyAccessor.asLong().get(BmcProperties.BLOCK_SIZE_IN_MB) * MiB;
-        this.multipartUploadRequestBuilder =
-                CreateMultipartUploadRequest.builder().bucketName(bucket).namespaceName(namespace);
         this.useInMemoryReadBuffer =
                 propertyAccessor.asBoolean().get(BmcProperties.IN_MEMORY_READ_BUFFER);
         this.useInMemoryWriteBuffer =
@@ -165,6 +169,7 @@ public class BmcDataStore {
         this.objectMetadataCache = configureHeadObjectCache(propertyAccessor);
         this.parquetCacheString = configureParquetCacheString(propertyAccessor);
         this.parallelRenameExecutor = this.createParallelRenameExecutor(propertyAccessor);
+        this.parallelMd5executor = this.createParallelMd5Executor(propertyAccessor);
     }
 
     public static int getReadAheadSizeInBytes(BmcPropertyAccessor propertyAccessor) {
@@ -192,6 +197,35 @@ public class BmcDataStore {
                                     .setDaemon(true)
                                     .setNameFormat("bmcs-hdfs-rename-%d")
                                     .build());
+        }
+        return executorService;
+    }
+
+    private ExecutorService createParallelMd5Executor(BmcPropertyAccessor propertyAccessor) {
+        final Integer numThreadsForParallelMd5Operation =
+                propertyAccessor.asInteger().get(BmcProperties.MD5_NUM_THREADS);
+        final int taskTimeout =
+                propertyAccessor
+                        .asInteger()
+                        .get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS);
+        final BlockingRejectionHandler rejectedExecutionHandler =
+                new BlockingRejectionHandler(taskTimeout);
+        final ExecutorService executorService;
+        if (numThreadsForParallelMd5Operation == null
+                || numThreadsForParallelMd5Operation <= 1) {
+            executorService = new DirectExecutorService();
+        } else {
+            executorService = new ThreadPoolExecutor(
+                    numThreadsForParallelMd5Operation,
+                    numThreadsForParallelMd5Operation,
+                    0L,
+                    TimeUnit.MILLISECONDS,
+                    new LinkedBlockingQueue<Runnable>(numThreadsForParallelMd5Operation),
+                    new ThreadFactoryBuilder()
+                            .setDaemon(true)
+                            .setNameFormat("bmcs-hdfs-multipart-md5-%d")
+                            .build(),
+                    rejectedExecutionHandler);
         }
         return executorService;
     }
@@ -570,10 +604,11 @@ public class BmcDataStore {
             final String destinationDirectory)
             throws IOException {
         List<RenameResponse> renameResponses = new ArrayList<>();
+
         for (final String objectToRename : objectsToRename) {
             final String newObjectName =
                     objectToRename.replaceFirst(
-                            Pattern.quote(sourceDirectory), destinationDirectory);
+                            Pattern.quote(sourceDirectory), Matcher.quoteReplacement(destinationDirectory));
             Future<String> futureResponse =
                     this.parallelRenameExecutor.submit(
                             new RenameOperation(
@@ -1095,17 +1130,21 @@ public class BmcDataStore {
             final String objectName = this.pathToObject(path);
             final CreateMultipartUploadDetails details =
                     CreateMultipartUploadDetails.builder().object(objectName).build();
-            this.multipartUploadRequestBuilder.createMultipartUploadDetails(details);
+            final CreateMultipartUploadRequest createMultipartUploadRequest =
+                    CreateMultipartUploadRequest.builder()
+                            .bucketName(this.bucket)
+                            .namespaceName(this.namespace)
+                            .createMultipartUploadDetails(details)
+                            .buildWithoutInvocationCallback();
             final MultipartUploadRequest multipartUploadRequest =
                     MultipartUploadRequest.builder()
                             .objectStorage(this.objectStorage)
-                            .multipartUploadRequest(
-                                    this.multipartUploadRequestBuilder
-                                            .buildWithoutInvocationCallback())
+                            .multipartUploadRequest(createMultipartUploadRequest)
                             .allowOverwrite(allowOverwrite)
                             .build();
             return new BmcMultipartOutputStream(
-                    this.propertyAccessor, multipartUploadRequest, bufferSizeInBytes);
+                    this.propertyAccessor, multipartUploadRequest, bufferSizeInBytes,
+                    this.parallelMd5executor);
         } else if (this.useInMemoryWriteBuffer) {
             return new BmcInMemoryOutputStream(
                     this.uploadManager, bufferSizeInBytes, requestBuilderFn);
