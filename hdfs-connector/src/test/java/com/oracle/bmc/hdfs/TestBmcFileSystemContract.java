@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -17,6 +17,7 @@ import org.apache.hadoop.fs.FileSystemContractBaseTest;
 import org.apache.hadoop.fs.Path;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import static org.junit.Assert.assertEquals;
@@ -225,5 +226,34 @@ public class TestBmcFileSystemContract extends FileSystemContractBaseTest {
                 .openWriteStream(
                         new Path("/existingobjects/subdirOnly/subdir/singleFile.txt"), 1024, null)
                 .close();
+    }
+
+    @Test
+    public void testSpecialCharsInRenameDirectory() throws Exception {
+
+        Path homeDirPath = super.fs.getHomeDirectory();
+        String homeDir = homeDirPath.toString();
+
+        String specialCharsDirPath = homeDirPath + "/specialChars";
+        Path specialCharsDir = new Path(specialCharsDirPath);
+
+        if (!super.fs.exists(specialCharsDir)) {
+            boolean dirCreated = super.fs.mkdirs(specialCharsDir);
+            assertEquals(dirCreated, true);
+        }
+
+        try {
+            char[] specialChars = {'$', '\\', '^', '.', '*'};
+            BmcDataStore dataStore = ((BmcFilesystem) super.fs).getDataStore();
+
+            for (char c : specialChars) {
+                Path sourceDir = new Path(specialCharsDirPath + "/source/" + c + "test/");
+                Path destDir = new Path(specialCharsDirPath + "/dest/" + c + "test/");
+                super.fs.mkdirs(sourceDir);
+                dataStore.renameDirectory(sourceDir, destDir);
+            }
+        } finally {
+            super.fs.delete(specialCharsDir, true);
+        }
     }
 }

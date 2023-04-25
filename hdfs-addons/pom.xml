@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    Copyright (c) 2016, 2023, Oracle and/or its affiliates.  All rights reserved.
+    This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
+    or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
+
+-->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
         <artifactId>oci-hdfs</artifactId>
         <groupId>com.oracle.oci.sdk</groupId>
-        <version>3.3.4.0.1.1</version>
+        <version>3.3.4.1.0.0</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 

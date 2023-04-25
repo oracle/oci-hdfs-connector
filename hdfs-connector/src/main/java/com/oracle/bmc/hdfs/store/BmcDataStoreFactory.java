@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -9,53 +9,70 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Duration;
-import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.stream.Stream;
+import java.util.Optional;
+import java.util.function.Supplier;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Supplier;
-import com.google.common.collect.Lists;
 import com.oracle.bmc.ClientConfiguration;
 import com.oracle.bmc.ClientRuntime;
-import com.oracle.bmc.ConfigFileReader;
 import com.oracle.bmc.Region;
 import com.oracle.bmc.auth.BasicAuthenticationDetailsProvider;
 import com.oracle.bmc.auth.SimpleAuthenticationDetailsProvider;
 import com.oracle.bmc.auth.SimplePrivateKeySupplier;
-import com.oracle.bmc.auth.internal.ConfigFileDelegationTokenUtils;
 import com.oracle.bmc.auth.internal.DelegationTokenConfigurator;
 import com.oracle.bmc.hdfs.BmcConstants;
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.waiter.ResettingExponentialBackoffStrategy;
-import com.oracle.bmc.http.*;
-import com.oracle.bmc.http.internal.ResponseHelper;
+import com.oracle.bmc.http.ClientConfigurator;
+import com.oracle.bmc.http.client.Options;
+import com.oracle.bmc.http.client.ProxyConfiguration;
+import com.oracle.bmc.http.client.StandardClientProperties;
+import com.oracle.bmc.http.client.jersey.apacheconfigurator.ApacheConnectionPoolConfig;
+import com.oracle.bmc.http.client.jersey.ApacheClientProperties;
+import com.oracle.bmc.http.client.jersey.JerseyClientProperties;
+import com.oracle.bmc.http.client.jersey.JerseyClientProperty;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.ObjectStorageClient;
 import com.oracle.bmc.retrier.RetryConfiguration;
 import com.oracle.bmc.util.StreamUtils;
 import com.oracle.bmc.util.internal.FileUtils;
 import com.oracle.bmc.waiter.ExponentialBackoffDelayStrategy;
+import com.oracle.bmc.waiter.ExponentialBackoffDelayStrategyWithJitter;
+import com.oracle.bmc.waiter.WaiterConfiguration;
 import com.oracle.bmc.waiter.MaxTimeTerminationStrategy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import com.oracle.bmc.util.internal.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem.Statistics;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.glassfish.jersey.apache.connector.ApacheConnectionClosingStrategy;
 import org.glassfish.jersey.logging.LoggingFeature;
 
+import javax.ws.rs.client.Client;
+import javax.ws.rs.client.ClientBuilder;
+import javax.ws.rs.client.WebTarget;
 import javax.ws.rs.core.MediaType;
 
 import static com.oracle.bmc.Region.enableInstanceMetadataService;
 import static com.oracle.bmc.auth.AbstractFederationClientAuthenticationDetailsProviderBuilder.AUTHORIZATION_HEADER_VALUE;
 import static com.oracle.bmc.auth.AbstractFederationClientAuthenticationDetailsProviderBuilder.METADATA_SERVICE_BASE_URL;
-import static com.oracle.bmc.auth.AbstractFederationClientAuthenticationDetailsProviderBuilder.simpleRetry;
 import static javax.ws.rs.core.HttpHeaders.AUTHORIZATION;
+import static org.glassfish.jersey.logging.LoggingFeature.LOGGING_FEATURE_LOGGER_LEVEL_CLIENT;
+import static org.glassfish.jersey.logging.LoggingFeature.LOGGING_FEATURE_VERBOSITY_CLIENT;
 
 /**
  * Factory class to create a {@link BmcDataStore}. This factory allows for the usage of custom classes to
@@ -67,13 +84,6 @@ public class BmcDataStoreFactory {
     private static final String OCI_PROPERTIES_FILE_NAME = "oci.properties";
     private final Configuration configuration;
     private final String OCI_DELEGATION_TOKEN_FILE = "OCI_DELEGATION_TOKEN_FILE";
-
-    public static final com.oracle.bmc.Service SERVICE =
-            com.oracle.bmc.Services.serviceBuilder()
-                    .serviceName("OBJECTSTORAGE")
-                    .serviceEndpointPrefix("objectstorage")
-                    .serviceEndpointTemplate("https://objectstorage.{region}.{secondLevelDomain}")
-                    .build();
 
     /**
      * Creates a new {@link BmcDataStore} for the given namespace and bucket.
@@ -111,30 +121,57 @@ public class BmcDataStoreFactory {
                         ? (ObjectStorage) this.createClass(customObjectStoreClient)
                         : buildClient(propertyAccessor);
 
-        final String endpoint = getEndpoint(propertyAccessor.asString());
+        final String endpoint = getEndpoint(propertyAccessor);
         LOG.info("Using endpoint {}", endpoint);
         objectStorage.setEndpoint(endpoint);
 
         return objectStorage;
     }
 
-    private String getEndpoint(final BmcPropertyAccessor.Accessor<String> propertyAccessor) {
-        if (propertyAccessor.get(BmcProperties.HOST_NAME) != null) {
+    private String getEndpoint(final BmcPropertyAccessor propertyAccessor) {
+        if (propertyAccessor.asString().get(BmcProperties.HOST_NAME) != null) {
             LOG.info("Getting endpoint using {}", BmcConstants.HOST_NAME_KEY);
-            return propertyAccessor.get(BmcProperties.HOST_NAME);
+            return propertyAccessor.asString().get(BmcProperties.HOST_NAME);
         }
 
-        if (propertyAccessor.get(BmcProperties.REGION_CODE_OR_ID) != null) {
+        if (propertyAccessor.asBoolean().get(BmcProperties.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED)) {
+            LOG.info("Getting realm-specific endpoint template as {} flag is enabled", BmcConstants.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED_KEY);
+            String regionCodeOrId = propertyAccessor.asString().get(BmcProperties.REGION_CODE_OR_ID);
+            if (regionCodeOrId != null) {
+                LOG.info("Region code or id set to {} using {}", regionCodeOrId, BmcConstants.REGION_CODE_OR_ID_KEY);
+                Region region =
+                        Region.fromRegionCodeOrId(regionCodeOrId);
+                Map<String, String> realmSpecificEndpointTemplateMap = ObjectStorageClient.SERVICE.getServiceEndpointTemplateForRealmMap();
+                if (realmSpecificEndpointTemplateMap != null && !realmSpecificEndpointTemplateMap.isEmpty()) {
+                    String realmId = region.getRealm().getRealmId();
+                    String realmSpecificEndpointTemplate = realmSpecificEndpointTemplateMap.get(realmId.toLowerCase(Locale.ROOT));
+                    if (StringUtils.isNotBlank(realmSpecificEndpointTemplate)) {
+                        LOG.info("Using realm-specific endpoint template {}", realmSpecificEndpointTemplate);
+                        return realmSpecificEndpointTemplate.replace("{region}", region.getRegionId());
+                    } else {
+                        LOG.info("{} property was enabled but realm-specific endpoint template is not defined for {} realm",
+                                BmcConstants.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED_KEY, realmId);
+                    }
+                } else {
+                    LOG.info("Not using realm-specific endpoint template, because no realm-specific endpoint template map was set, or the map was empty");
+                }
+            } else {
+                throw new IllegalArgumentException(
+                        "Property `" + BmcConstants.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED_KEY + "` was enabled without setting the property `" + BmcConstants.REGION_CODE_OR_ID_KEY + "`. Please set the region code or id using `" + BmcConstants.REGION_CODE_OR_ID_KEY + "` property to enable use of realm-specific endpoint template");
+            }
+        }
+
+        if (propertyAccessor.asString().get(BmcProperties.REGION_CODE_OR_ID) != null) {
             LOG.info("Getting endpoint using {}", BmcConstants.REGION_CODE_OR_ID_KEY);
             Region region =
                     Region.fromRegionCodeOrId(
-                            propertyAccessor.get(BmcProperties.REGION_CODE_OR_ID));
-            com.google.common.base.Optional<String> endpoint = region.getEndpoint(SERVICE);
+                            propertyAccessor.asString().get(BmcProperties.REGION_CODE_OR_ID));
+            Optional<String> endpoint = region.getEndpoint(ObjectStorageClient.SERVICE);
             if (endpoint.isPresent()) {
                 return endpoint.get();
             } else {
                 throw new IllegalArgumentException(
-                        "Endpoint for " + SERVICE + " is not known in region " + region);
+                        "Endpoint for " + ObjectStorageClient.SERVICE + " is not known in region " + region);
             }
         }
 
@@ -154,9 +191,54 @@ public class BmcDataStoreFactory {
                         },
                         METADATA_SERVICE_BASE_URL,
                         "region");
-        String endpoint = Region.formatDefaultRegionEndpoint(SERVICE, regionCode);
+        String endpoint = Region.formatDefaultRegionEndpoint(ObjectStorageClient.SERVICE, regionCode);
         LOG.info("Endpoint using Instance Metadata Service is {}", endpoint);
         return endpoint;
+    }
+
+    public static <T> T simpleRetry(
+            Function<WebTarget, T> retryOperation,
+            final String metadataServiceUrl,
+            final String endpoint) {
+        final Client CLIENT = ClientBuilder.newClient();
+
+        ExponentialBackoffDelayStrategyWithJitter strategy =
+                new ExponentialBackoffDelayStrategyWithJitter(TimeUnit.SECONDS.toMillis(100));
+        WaiterConfiguration.WaitContext context =
+                new WaiterConfiguration.WaitContext(System.currentTimeMillis());
+
+        final int MAX_RETRIES = 8;
+        RuntimeException lastException = null;
+        for (int retry = 0; retry < MAX_RETRIES; retry++) {
+            try {
+                WebTarget base = CLIENT.target(metadataServiceUrl + "instance/");
+                return retryOperation.apply(base);
+            } catch (RuntimeException e) {
+                LOG.warn(
+                        "Attempt {} - Rest call to get "
+                                + endpoint
+                                + " from metadata service failed ",
+                        (retry + 1),
+                        e);
+                lastException = e;
+                try {
+                    long waitTime = strategy.nextDelay(context);
+                    Thread.sleep(waitTime);
+                    context.incrementAttempts();
+                    LOG.info("Exiting retry {} with wait time: {} millis", (retry + 1), waitTime);
+                } catch (InterruptedException interruptedException) {
+                    LOG.debug(
+                            "Thread interrupted while waiting to make next call to get "
+                                    + endpoint
+                                    + " from instance metadata service",
+                            interruptedException);
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+        CLIENT.close();
+        throw lastException;
     }
 
     private ObjectStorage buildClient(final BmcPropertyAccessor propertyAccessor) {
@@ -212,14 +294,21 @@ public class BmcDataStoreFactory {
 
         if (propertyAccessor.asBoolean().get(BmcProperties.JERSEY_CLIENT_LOGGING_ENABLED)) {
             objectStorageBuilder.additionalClientConfigurator(
-                    new JerseyLoggingClientConfigurator(
-                            LoggingFeature.Verbosity.valueOf(
-                                    propertyAccessor
-                                            .asString()
-                                            .get(BmcProperties.JERSEY_CLIENT_LOGGING_VERBOSITY)),
-                            propertyAccessor
-                                    .asString()
-                                    .get(BmcProperties.JERSEY_CLIENT_LOGGING_LEVEL)));
+                    builder -> {
+                        builder.property(
+                                JerseyClientProperty.create(LOGGING_FEATURE_VERBOSITY_CLIENT),
+                                LoggingFeature.Verbosity.valueOf(
+                                        propertyAccessor
+                                                .asString()
+                                                .get(
+                                                        BmcProperties
+                                                                .JERSEY_CLIENT_LOGGING_VERBOSITY)));
+                        builder.property(
+                                JerseyClientProperty.create(LOGGING_FEATURE_LOGGER_LEVEL_CLIENT),
+                                propertyAccessor
+                                        .asString()
+                                        .get(BmcProperties.JERSEY_CLIENT_LOGGING_LEVEL));
+                    });
         }
 
         final Integer apacheMaxConnectionPoolSize =
@@ -230,7 +319,10 @@ public class BmcDataStoreFactory {
                 .asBoolean()
                 .get(BmcProperties.JERSEY_CLIENT_DEFAULT_CONNECTOR_ENABLED)) {
             objectStorageBuilder.clientConfigurator(
-                    new JerseyDefaultConnectorConfigurator.NonBuffering());
+                    builder -> {
+                        builder.property(JerseyClientProperties.USE_APACHE_CONNECTOR, false);
+                        builder.property(StandardClientProperties.BUFFER_REQUEST, false);
+                    });
         }
         // Note : Connection pooling is only supported for Apache Clients (hence, this is in else if)
         // If Jersey default connector is enabled, disregard this property
@@ -247,20 +339,24 @@ public class BmcDataStoreFactory {
                 apacheConnectionClosingStrategy =
                         new ApacheConnectionClosingStrategy.ImmediateClosingStrategy();
             }
-            ApacheConnectionPoolConfig apacheConnectionPoolConfig =
-                    ApacheConnectionPoolConfig.newDefault()
-                            .builder()
-                            .totalOpenConnections(apacheMaxConnectionPoolSize)
-                            .defaultMaxConnectionsPerRoute(apacheMaxConnectionPoolSize)
-                            .build();
+            PoolingHttpClientConnectionManager poolConnectionManager =
+                    new PoolingHttpClientConnectionManager();
+            poolConnectionManager.setMaxTotal(apacheMaxConnectionPoolSize);
+            poolConnectionManager.setDefaultMaxPerRoute(apacheMaxConnectionPoolSize);
+
+            ApacheConnectionClosingStrategy finalApacheConnectionClosingStrategy =
+                    apacheConnectionClosingStrategy;
             objectStorageBuilder.clientConfigurator(
-                    new ApacheConfigurator.NonBuffering(
-                            ApacheConnectorProperties.builder()
-                                    .connectionClosingStrategy(apacheConnectionClosingStrategy)
-                                    .connectionPoolConfig(apacheConnectionPoolConfig)
-                                    .connectionReuseStrategy(null)
-                                    .requestRetryHandler(null)
-                                    .build()));
+                    builder -> {
+                        builder.property(StandardClientProperties.BUFFER_REQUEST, false);
+                        builder.property(
+                                ApacheClientProperties.CONNECTION_MANAGER, poolConnectionManager);
+                        builder.property(
+                                ApacheClientProperties.CONNECTION_CLOSING_STRATEGY,
+                                finalApacheConnectionClosingStrategy);
+                        builder.property(ApacheClientProperties.REUSE_STRATEGY, null);
+                        builder.property(ApacheClientProperties.RETRY_HANDLER, null);
+                    });
         }
 
         // To use DelegationTokenConfigurator, check for the OCI_DELEGATION_TOKEN_FILE key in the environment variable.
@@ -288,7 +384,7 @@ public class BmcDataStoreFactory {
         }
 
         if (!propertyAccessor.asBoolean().get(BmcProperties.OBJECT_AUTO_CLOSE_INPUT_STREAM)) {
-            ResponseHelper.shouldAutoCloseResponseInputStream(false);
+            Options.shouldAutoCloseResponseInputStream(false);
         }
         // If a proxy is not defined, use the existing ObjectStorageClient that leverages the DefaultConnectorProvider.
         // Else, build an ObjectStorageClient that leverages the ApacheConnector to configure a proxy.
@@ -304,39 +400,33 @@ public class BmcDataStoreFactory {
             final BmcPropertyAccessor propertyAccessor,
             final String httpProxyUri) {
         LOG.info("Setting HTTP Proxy URI to {}", httpProxyUri);
-        final ClientConfigDecorator poolConfigDecorator =
-                newApacheConnectionPoolingClientConfigDecorator(clientConfig);
-        final ClientConfigDecorator proxyConfigDecorator =
-                newApacheProxyConfigDecorator(httpProxyUri, propertyAccessor);
-        final List<ClientConfigDecorator> clientConfigDecorators =
-                Lists.newArrayList(poolConfigDecorator, proxyConfigDecorator);
+        final ApacheConnectionPoolConfig poolConfig =
+                buildApacheConnectionPoolingClientConfig(clientConfig);
+        final ProxyConfiguration proxyConfig =
+                buildApacheProxyConfig(httpProxyUri, propertyAccessor);
 
-        final ClientConfigurator clientConfigurator =
-                new ApacheConfigurator(clientConfigDecorators);
+        com.oracle.bmc.http.client.jersey.apacheconfigurator.ApacheConnectorProperties
+                apacheConnectorProperties =
+                        com.oracle.bmc.http.client.jersey.apacheconfigurator
+                                .ApacheConnectorProperties.builder()
+                                .connectionPoolConfig(poolConfig)
+                                .build();
+
+        final ClientConfigurator clientConnectorPropertiesConfigurator =
+                new ClientConfiguratorWithProxy(
+                        apacheConnectorProperties, proxyConfig, propertyAccessor);
 
         ObjectStorageClient.Builder objectStorageBuilder =
                 ObjectStorageClient.builder()
                         .configuration(clientConfig)
-                        .clientConfigurator(clientConfigurator);
-
-        if (propertyAccessor.asBoolean().get(BmcProperties.JERSEY_CLIENT_LOGGING_ENABLED)) {
-            objectStorageBuilder.additionalClientConfigurator(
-                    new JerseyLoggingClientConfigurator(
-                            LoggingFeature.Verbosity.valueOf(
-                                    propertyAccessor
-                                            .asString()
-                                            .get(BmcProperties.JERSEY_CLIENT_LOGGING_VERBOSITY)),
-                            propertyAccessor
-                                    .asString()
-                                    .get(BmcProperties.JERSEY_CLIENT_LOGGING_LEVEL)));
-        }
+                        .clientConfigurator(clientConnectorPropertiesConfigurator);
 
         return objectStorageBuilder.build(authDetailsProvider);
     }
 
     // A pool config is required as the default pool config for Hadoop versions > 2.8.x keeps connections alive
     // indefinitely causing the job to remain stuck in a RUNNING state.
-    private ClientConfigDecorator newApacheConnectionPoolingClientConfigDecorator(
+    private ApacheConnectionPoolConfig buildApacheConnectionPoolingClientConfig(
             final ClientConfiguration clientConfig) {
         final int maxConns = clientConfig.getMaxAsyncThreads();
         final ApacheConnectionPoolConfig poolConfig =
@@ -347,20 +437,29 @@ public class BmcDataStoreFactory {
                         .totalOpenConnections(maxConns)
                         .ttlInMillis(clientConfig.getConnectionTimeoutMillis())
                         .build();
-        return new ApacheConnectionPoolingClientConfigDecorator(poolConfig);
+        return poolConfig;
     }
 
-    private ClientConfigDecorator newApacheProxyConfigDecorator(
+    private ProxyConfiguration buildApacheProxyConfig(
             final String httpProxyUri, final BmcPropertyAccessor propertyAccessor) {
-        final ApacheProxyConfig proxyConfig =
-                ApacheProxyConfig.builder()
-                        .uri(httpProxyUri)
+        URI uri = URI.create(httpProxyUri);
+        final ProxyConfiguration proxyConfig =
+                ProxyConfiguration.builder()
+                        .proxy(
+                                new Proxy(
+                                        uri.getScheme().equalsIgnoreCase("http")
+                                                ? Proxy.Type.HTTP
+                                                : Proxy.Type.SOCKS,
+                                        new InetSocketAddress(uri.getHost(), uri.getPort())))
                         .username(
                                 propertyAccessor.asString().get(BmcProperties.HTTP_PROXY_USERNAME))
                         .password(
-                                propertyAccessor.asString().get(BmcProperties.HTTP_PROXY_PASSWORD))
+                                propertyAccessor
+                                        .asString()
+                                        .get(BmcProperties.HTTP_PROXY_PASSWORD)
+                                        .toCharArray())
                         .build();
-        return new ApacheProxyConfigDecorator(proxyConfig);
+        return proxyConfig;
     }
 
     // set the connector version onto the SDK.

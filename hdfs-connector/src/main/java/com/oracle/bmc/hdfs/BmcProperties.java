@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -116,6 +116,12 @@ public enum BmcProperties {
      * per request). See {@link BmcConstants#MULTIPART_NUM_UPLOAD_THREADS_KEY} for config key name.
      */
     MULTIPART_NUM_UPLOAD_THREADS(MULTIPART_NUM_UPLOAD_THREADS_KEY, null),
+    /**
+     * (int, optional) The number of threads to use for parallel MD5 calculation. Note, any value less than or equal to
+     * 0 is interpreted as using a default value.A value of 1 means do not use parallel calculation (each hash will be
+     * calculated serially in a single thread). See {@link BmcConstants#MD5_NUM_THREADS_KEY} for config key name.
+     */
+    MD5_NUM_THREADS(MD5_NUM_THREADS_KEY, null),
     /**
      * (int, optional) The minimum size, in mebibytes, an object must be before its eligible for multi-part uploads.
      * Note, any value less than or equal to 0 is interpreted as using the default Java SDK value. See
@@ -394,6 +400,14 @@ public enum BmcProperties {
      * (boolean, optional) Flag to enable/disable auto-close of object streams on full read. The default is true.
      */
     OBJECT_AUTO_CLOSE_INPUT_STREAM(OBJECT_AUTO_CLOSE_INPUT_STREAM_KEY, true),
+
+    /**
+     * (boolean, optional) Flag to enable/disable the use of realm-specific endpoint templates, if defined. Default is false. See {@link BmcConstants#REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED_KEY} for config key name
+     * If enabled, requires {@link BmcProperties#REGION_CODE_OR_ID} to be set.
+     * Note, this field will be overridden by "fs.oci.client.hostname property" if set.
+     */
+    REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED(REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED_KEY, false),
+
 
     /**
      * (string, optional) The custom stream class for reading.

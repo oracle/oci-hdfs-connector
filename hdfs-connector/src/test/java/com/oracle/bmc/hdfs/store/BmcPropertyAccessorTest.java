@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, 2022, Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2016, 2023, Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
@@ -82,7 +82,8 @@ public class BmcPropertyAccessorTest {
         this.configuration.setInt(
                 BmcProperties.READ_TIMEOUT_MILLIS.getPropertyName() + PROPERTY_OVERRIDE_SUFFIX, 50);
         assertThat(propertyAccessor.asInteger().get(BmcProperties.READ_TIMEOUT_MILLIS), is(50));
-        assertThat(propertyAccessor.asInteger().get(BmcProperties.MULTIPART_PART_SIZE_IN_MB), is(128));
+        assertThat(
+                propertyAccessor.asInteger().get(BmcProperties.MULTIPART_PART_SIZE_IN_MB), is(128));
     }
 
     @Test
@@ -110,6 +111,9 @@ public class BmcPropertyAccessorTest {
                         .asBoolean()
                         .get(BmcProperties.OBJECT_PAYLOAD_CACHING_RECORD_STATS_ENABLED),
                 is(true));
+        assertThat(propertyAccessor.asBoolean().get(BmcProperties.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED), is(false));
+        this.configuration.setBoolean(BmcProperties.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED.getPropertyName(), true);
+        assertThat(propertyAccessor.asBoolean().get(BmcProperties.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED), is(true));
     }
 
     @Test
