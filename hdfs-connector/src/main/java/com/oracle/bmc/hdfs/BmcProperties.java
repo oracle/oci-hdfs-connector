@@ -236,6 +236,19 @@ public enum BmcProperties {
     READ_AHEAD_BLOCK_SIZE(READ_AHEAD_BLOCK_SIZE_KEY, 6 * 1024 * 1024),
 
     /**
+     * (int, optional) Number of blocks to read if READ_AHEAD is enabled.
+     * See {@link BmcConstants#READ_AHEAD_BLOCK_COUNT_KEY} for config key name. Default is 1.
+     */
+    READ_AHEAD_BLOCK_COUNT(READ_AHEAD_BLOCK_COUNT_KEY, 1),
+
+    /**
+     * (int, optional) The number of threads to use for parallel GET operations when reading ahead.
+     * See {@link BmcConstants#NUM_READ_AHEAD_THREADS_KEY} for config key name. Note, any value
+     * smaller than 0 is interpreted as using the default value. Default is 16.
+     */
+    NUM_READ_AHEAD_THREADS(NUM_READ_AHEAD_THREADS_KEY, 16),
+
+    /**
      * (boolean, optional) Flag to enable parquet caching. See
      * {@link BmcConstants#OBJECT_PARQUET_CACHING_ENABLED_KEY} for config key name. Default is false.
      *
@@ -474,6 +487,14 @@ public enum BmcProperties {
      * (String, optional) File path that has the delegation token. Default value is null
      */
     OCI_DELEGATION_TOKEN_FILEPATH(OCI_DELEGATION_TOKEN_FILEPATH_KEY, null),
+
+    /**
+     * (int, optional) Whenever listFiles with recursive being true is invoked on a dir, a listing API is called
+     * on OSS that gets all the files in a flat manner. This property determines what is the max number of files
+     * to be listed in one call to OSS Service (essentially the page size of the OSS listing API).
+     * See {@link BmcConstants#RECURSIVE_DIR_LISTING_FETCH_SIZE_KEY} for config key name.
+     */
+    RECURSIVE_DIR_LISTING_FETCH_SIZE(RECURSIVE_DIR_LISTING_FETCH_SIZE_KEY, 1000)
     ;
 
     @Getter private final String propertyName;

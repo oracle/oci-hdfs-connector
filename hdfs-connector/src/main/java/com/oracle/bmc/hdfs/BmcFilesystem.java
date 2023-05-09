@@ -13,7 +13,9 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -21,15 +23,20 @@ import java.util.regex.Pattern;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.oracle.bmc.hdfs.store.BmcPropertyAccessor;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.BlockLocation;
+import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.ParentNotDirectoryException;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.util.Progressable;
 
@@ -221,6 +228,11 @@ public class BmcFilesystem extends FileSystem {
     }
 
     @Override
+    public ContentSummary getContentSummary(final Path path) throws IOException {
+        return delegate == null ? null : delegate.getContentSummary(path);
+    }
+
+    @Override
     public FileStatus getFileStatus(final Path path) throws IOException {
         return delegate == null ? null : delegate.getFileStatus(path);
     }
@@ -292,6 +304,16 @@ public class BmcFilesystem extends FileSystem {
     @Override
     public Configuration getConf() {
         return delegate == null ? null : delegate.getConf();
+    }
+
+    @Override
+    public RemoteIterator<LocatedFileStatus> listFiles(final Path f,
+                final boolean recursive) throws FileNotFoundException, IOException {
+        if (recursive) {
+            return delegate == null ? null : delegate.listFiles(f, true);
+        } else {
+            return super.listFiles(f, false);
+        }
     }
 }
 
@@ -552,68 +574,68 @@ class BmcFilesystemImpl extends FileSystem {
             return true;
         }
 
-        // else, it must be a directory
-
-        final boolean isEmptyDirectory = this.dataStore.isEmptyDirectory(path);
-        // handle empty directories first
-        if (isEmptyDirectory) {
-            // removing empty root directory means nothing, can return true or
-            // false per spec
-            if (status.getPath().isRoot()) {
-                LOG.info("Empty root directory, nothing to delete");
-                return true;
-            }
-            LOG.info("Deleting empty directory");
-            // else remove the placeholder file
-            this.dataStore.deleteDirectory(path);
-            return true;
-        }
-
-        // everything else is a non-empty directory
-
-        // non-empty and !recursive, cannot continue
         if (!recursive) {
-            throw new IOException(
-                    "Attempting to delete a directory that is not empty, and recursive delete not specified: "
-                            + path);
-        }
-
-        final List<FileStatus> directories = new ArrayList<>();
-        directories.add(status);
-
-        final List<Path> directoriesToDelete = new ArrayList<>();
-
-        LOG.debug("Recursively deleting directory");
-        // breadth-first recursive delete everything except for directory placeholders.
-        // leave those until the end to try to maintain some sort of directory
-        // structure if sub files fail to delete
-        while (!directories.isEmpty()) {
-            final FileStatus directory = directories.remove(0);
-            final Path directoryPath = this.ensureAbsolutePath(directory.getPath());
-            final List<FileStatus> entries = this.dataStore.listDirectory(directoryPath);
-            for (final FileStatus entry : entries) {
-                if (entry.isDirectory()) {
-                    directories.add(entry);
+            // Try to find if it's an empty dir. If yes, delete the empty dir.
+            // Find one candidate file or dir inside the given Path to determine emptiness of the dir.
+            RemoteIterator<LocatedFileStatus> iter = listFilesAndZeroByteDirs(path);
+            boolean empty = true;
+            while (iter.hasNext()) {
+                LocatedFileStatus lfs = iter.next();
+                if (lfs.isDirectory()) {
+                    Path nPath = ensureAbsolutePath(lfs.getPath());
+                    // Do not consider the Path itself in empty determination.
+                    if (!nPath.equals(path)) {
+                        empty = false;
+                        break;
+                    }
                 } else {
-                    this.dataStore.delete(this.ensureAbsolutePath(entry.getPath()));
+                    empty = false;
+                    break;
                 }
             }
-            // track this to delete later
-            directoriesToDelete.add(directoryPath);
+
+            if (!empty) {
+                throw new IOException(
+                        "Attempting to delete a directory that is not empty, and recursive delete not specified: "
+                                + path);
+            } else {
+                // If the path is root, it won't be deleted by this deleteDirectory method.
+                // Delete the empty dir since it's empty.
+                dataStore.deleteDirectory(path);
+                return true;
+            }
         }
 
-        // now that all objects under this directory have been deleted, delete
-        // all of the individual directory objects we found
+        List<Path> zeroByteDirsToDelete = new ArrayList<>();
+        RemoteIterator<LocatedFileStatus> iter = listFilesAndZeroByteDirs(path);
+        while (iter.hasNext()) {
+            LocatedFileStatus lfs = iter.next();
+            Path absPath = ensureAbsolutePath(lfs.getPath());
 
-        // sort by length, effectively to delete child directories before parent directories. doing this
-        // in case a delete fails midway, then we done our best not to create unreachable directories
-        Collections.sort(directoriesToDelete, PATH_LENGTH_COMPARATOR);
+            if (lfs.isDirectory()) {
+                // This path is traversed only for zero byte dir markers.
+                // Store the zero byte dir paths to a list and only delete once all the file paths
+                // are done with deletion. This is to preserve the directory structure in case the process
+                // of this delete is interrupted somehow.
+                zeroByteDirsToDelete.add(absPath);
+            } else {
+                dataStore.delete(absPath);
+            }
+        }
 
-        for (final Path directoryToDelete : directoriesToDelete) {
-            this.dataStore.deleteDirectory(directoryToDelete);
+        // Delete the longest paths first to retain structure in case of interruptions.
+        Collections.sort(zeroByteDirsToDelete, PATH_LENGTH_COMPARATOR);
+        for (Path dir : zeroByteDirsToDelete) {
+            dataStore.deleteDirectory(dir);
         }
 
         return true;
+    }
+
+    @Override
+    public ContentSummary getContentSummary(Path path) throws IOException {
+        final Path absolutePath = this.ensureAbsolutePath(path);
+        return this.dataStore.getContentSummary(absolutePath);
     }
 
     @Override
@@ -874,5 +896,96 @@ class BmcFilesystemImpl extends FileSystem {
      */
     public synchronized void addOwner(BmcFilesystem fs) {
         owners.add(fs);
+    }
+
+    private RemoteIterator<LocatedFileStatus> listFilesAndZeroByteDirs(Path path) throws IOException {
+        return new FlatListingRemoteIterator(path, true);
+    }
+
+    @Override
+    public RemoteIterator<LocatedFileStatus> listFiles(final Path f,
+                   final boolean recursive) throws FileNotFoundException, IOException {
+
+        if (!recursive) {
+            return super.listFiles(f, false);
+        }
+
+        return new FlatListingRemoteIterator(f, false);
+    }
+
+    /**
+     * This class provides an implementation of remote iterator that does a non-recursive, flat listing
+     * using OSS API. Given a path, the listing is done without prefix so that all zero byte dirs and objects
+     * inside the given prefix are listed. includeZeroByteDirs is an option to the constructor.
+     * For flat listing of just files, the includeZeroByteDirs should be false.
+     * In the recursive delete implementation the includeZeroByteDirs is supplied as true so that we can
+     * cleanup even the zero byte marker directories.
+     */
+    class FlatListingRemoteIterator implements RemoteIterator<LocatedFileStatus> {
+        private List<LocatedFileStatus> resultList = new LinkedList<>();
+        private boolean fetchComplete = false;
+        private String nextEleCursor = null;
+        private Path path;
+        private boolean includeZeroByteDirs;
+
+        public FlatListingRemoteIterator(Path path, boolean includeZeroByteDirs) {
+            this.path = path;
+            this.includeZeroByteDirs = includeZeroByteDirs;
+        }
+
+        public boolean hasNext() throws IOException {
+
+            if (resultList.size() > 0) {
+                return true;
+            }
+
+            if (fetchComplete) {
+                return false;
+            } else {
+                while (true) {
+                    BmcDataStore ds = BmcFilesystemImpl.this.getDataStore();
+                    Pair<List<FileStatus>, String> resultPair = ds.flatListDirectoryRecursive(path, nextEleCursor);
+
+                    List<FileStatus> fsResultList = resultPair.getLeft();
+
+                    if (fsResultList.size() > 0) {
+                        for (FileStatus result : fsResultList) {
+
+                            if (result.isFile()) {
+                                BlockLocation[] locs =
+                                        BmcFilesystemImpl.this.getFileBlockLocations(result, 0L, result.getLen());
+                                resultList.add(new LocatedFileStatus(result, locs));
+                            } else if (includeZeroByteDirs) {
+                                resultList.add(new LocatedFileStatus(result, null));
+                            }
+                        }
+                        nextEleCursor = resultPair.getRight();
+                        if (nextEleCursor == null) {
+                            fetchComplete = true;
+                        }
+                    } else {
+                        fetchComplete = true;
+                        return false;
+                    }
+
+                    if (resultList.size() > 0) {
+                        return true;
+                    } else if (fetchComplete && resultList.size() == 0) {
+                        // This check is needed because sometimes the resultList can be empty
+                        // due to it having only directories. So we still need to continue with
+                        // the next token if the fetch has not been completed yet.
+                        return false;
+                    }
+                }
+            }
+        }
+
+        public LocatedFileStatus next() throws IOException {
+            if (hasNext()) {
+                return resultList.remove(0);
+            } else {
+                throw new NoSuchElementException("No more elements exist.");
+            }
+        }
     }
 }

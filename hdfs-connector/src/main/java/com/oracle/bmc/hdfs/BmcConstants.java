@@ -39,6 +39,10 @@ public final class BmcConstants {
 
     public static final String READ_STREAM_CLASS_KEY = "fs.oci.io.read.custom.stream";
 
+    public static final String READ_AHEAD_BLOCK_COUNT_KEY = "fs.oci.io.read.ahead.blockcount";
+
+    public static final String NUM_READ_AHEAD_THREADS_KEY = "fs.oci.io.read.ahead.numthreads";
+
     public static final String WRITE_STREAM_CLASS_KEY = "fs.oci.io.write.custom.stream";
 
     public static final String OBJECT_STORE_CLIENT_CLASS_KEY = "fs.oci.client.custom.client";
@@ -180,6 +184,8 @@ public final class BmcConstants {
 
     public static final String OCI_DELEGATION_TOKEN_FILEPATH_KEY =
             "fs.oci.delegation.token.filepath";
+
+    public static final String RECURSIVE_DIR_LISTING_FETCH_SIZE_KEY = "fs.oci.dir.recursive.list.fetch.size";
 
     /**
      * This class contains constants with deprecated values. The HDFS connector will first try the current values
