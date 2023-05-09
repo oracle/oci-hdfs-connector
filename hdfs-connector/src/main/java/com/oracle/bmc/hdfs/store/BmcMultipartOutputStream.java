@@ -163,23 +163,43 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         if (this.closed) {
             LOG.debug("Output stream already closed");
             return;
-        } else if (this.manifest == null) {
-            LOG.debug("Nothing written to stream, creating empty object");
-            PutObjectRequest putEmptyFileRequest =
-                    PutObjectRequest.builder()
-                            .putObjectBody(new ByteArrayInputStream(new byte[0]))
-                            .namespaceName(request.getMultipartUploadRequest().getNamespaceName())
-                            .bucketName(request.getMultipartUploadRequest().getBucketName())
-                            .objectName(
-                                    request.getMultipartUploadRequest()
-                                            .getCreateMultipartUploadDetails()
-                                            .getObject())
-                            .buildWithoutInvocationCallback();
-            request.getObjectStorage().putObject(putEmptyFileRequest);
-            return;
         }
         // only attempting once
         this.closed = true;
+
+        if (this.manifest == null) {
+            try {
+                LOG.debug("Not enough data for a full part, uploading as regular PUT");
+                byte[] bytesToWrite;
+                if (bbos == null) {
+                    bytesToWrite = new byte[0];
+                } else {
+                    bytesToWrite = bbos.toByteArray();
+                }
+                InputStream bbis = new ByteArrayInputStream(bytesToWrite);
+                String contentMD5 = computeMd5(bytesToWrite, bytesToWrite.length);
+
+                PutObjectRequest putFileRequest =
+                        PutObjectRequest.builder()
+                                .putObjectBody(bbis)
+                                .contentLength((long) bytesToWrite.length)
+                                .contentMD5(contentMD5)
+                                .namespaceName(request.getMultipartUploadRequest().getNamespaceName())
+                                .bucketName(request.getMultipartUploadRequest().getBucketName())
+                                .objectName(
+                                        request.getMultipartUploadRequest()
+                                                .getCreateMultipartUploadDetails()
+                                                .getObject())
+                                .buildWithoutInvocationCallback();
+                request.getObjectStorage().putObject(putFileRequest);
+                return;
+            } finally {
+                if (this.bbos != null) {
+                    this.bbos.close();
+                    this.bbos = null;
+                }
+            }
+        }
 
         try {
             // upload any remaining data
@@ -240,6 +260,9 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         if (this.bbos.isEmpty()) {
             return;
         }
+        if (this.assembler == null) {
+            this.createMultipartManifest();
+        }
 
         byte[] bytesToWrite = this.bbos.toByteArray();
         this.bbos.clear();
@@ -295,6 +318,11 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
      */
     @Override
     protected OutputStream createOutputBufferStream() {
+        this.bbos = new ByteBufferOutputStream(this.bufferSizeInBytes);
+        return this.bbos;
+    }
+
+    private void createMultipartManifest() {
         // this is delayed creation of our objects based on OCI semantics
         initializeExecutorService();
         // perhaps enhance this to name certain things with defaults
@@ -321,10 +349,9 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
                         .build();
         this.nextPartNumber = new AtomicInteger(1);
         this.partUploadPhaser = new Phaser(1);
-        this.bbos = new ByteBufferOutputStream(this.bufferSizeInBytes);
+
         // TODO: do we need these params?
         this.manifest = this.assembler.newRequest(null, null, null, null);
-        return this.bbos;
     }
 
     @Override

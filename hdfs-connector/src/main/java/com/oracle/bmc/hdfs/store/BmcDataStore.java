@@ -49,6 +49,7 @@ import com.oracle.bmc.hdfs.util.DirectExecutorService;
 import com.oracle.bmc.model.BmcException;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
+import com.oracle.bmc.objectstorage.model.ListObjects;
 import com.oracle.bmc.objectstorage.model.ObjectSummary;
 import com.oracle.bmc.objectstorage.requests.CreateMultipartUploadRequest;
 import com.oracle.bmc.objectstorage.requests.GetObjectRequest;
@@ -66,6 +67,9 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import com.oracle.bmc.util.internal.StringUtils;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
+import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem.Statistics;
@@ -97,6 +101,7 @@ public class BmcDataStore {
     private final ExecutorService parallelUploadExecutor;
     private final ExecutorService parallelRenameExecutor;
     private final ExecutorService parallelMd5executor;
+    private final ExecutorService parallelDownloadExecutor;
     private final RequestBuilder requestBuilder;
     private final long blockSizeInBytes;
     private final boolean useInMemoryReadBuffer;
@@ -106,9 +111,12 @@ public class BmcDataStore {
     private final LoadingCache<String, HeadPair> objectMetadataCache;
     private final boolean useReadAhead;
     private final int readAheadSizeInBytes;
+    private final int readAheadBlockCount;
     private final String parquetCacheString;
     private final String customReadStreamClass;
     private final String customWriteStreamClass;
+
+    private int recursiveDirListingFetchSize;
 
     public BmcDataStore(
             final BmcPropertyAccessor propertyAccessor,
@@ -122,6 +130,7 @@ public class BmcDataStore {
         this.bucket = bucket;
         this.namespace = namespace;
 
+        this.parallelDownloadExecutor = this.createParallelDownloadExecutor(propertyAccessor);
         final UploadConfigurationBuilder uploadConfigurationBuilder =
                 createUploadConfiguration(propertyAccessor);
         this.parallelUploadExecutor =
@@ -144,6 +153,8 @@ public class BmcDataStore {
                         .get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
         this.useReadAhead = propertyAccessor.asBoolean().get(BmcProperties.READ_AHEAD);
         this.readAheadSizeInBytes = getReadAheadSizeInBytes(propertyAccessor);
+        this.readAheadBlockCount =
+                propertyAccessor.asInteger().get(BmcProperties.READ_AHEAD_BLOCK_COUNT);
         this.customReadStreamClass =
                 propertyAccessor.asString().get(BmcProperties.READ_STREAM_CLASS);
         this.customWriteStreamClass =
@@ -170,10 +181,37 @@ public class BmcDataStore {
         this.parquetCacheString = configureParquetCacheString(propertyAccessor);
         this.parallelRenameExecutor = this.createParallelRenameExecutor(propertyAccessor);
         this.parallelMd5executor = this.createParallelMd5Executor(propertyAccessor);
+        this.recursiveDirListingFetchSize =
+                propertyAccessor.asInteger().get(BmcProperties.RECURSIVE_DIR_LISTING_FETCH_SIZE);
     }
 
     public static int getReadAheadSizeInBytes(BmcPropertyAccessor propertyAccessor) {
         return propertyAccessor.asInteger().get(BmcProperties.READ_AHEAD_BLOCK_SIZE);
+    }
+
+    private ExecutorService createParallelDownloadExecutor(final BmcPropertyAccessor propertyAccessor) {
+        final Integer numThreadsForReadaheadOperations =
+                propertyAccessor.asInteger().get(BmcProperties.NUM_READ_AHEAD_THREADS);
+        final ExecutorService executorService;
+        if (numThreadsForReadaheadOperations == null
+                || numThreadsForReadaheadOperations <= 1) {
+            executorService =
+                    Executors.newFixedThreadPool(
+                            1,
+                            new ThreadFactoryBuilder()
+                                    .setDaemon(true)
+                                    .setNameFormat("bmcs-hdfs-readahead-%d")
+                                    .build());
+        } else {
+            executorService =
+                    Executors.newFixedThreadPool(
+                            numThreadsForReadaheadOperations,
+                            new ThreadFactoryBuilder()
+                                    .setDaemon(true)
+                                    .setNameFormat("bmcs-hdfs-readahead-%d")
+                                    .build());
+        }
+        return executorService;
     }
 
     private ExecutorService createParallelRenameExecutor(BmcPropertyAccessor propertyAccessor) {
@@ -857,6 +895,41 @@ public class BmcDataStore {
         return entries;
     }
 
+    /**
+     * A method to list all files/dirs in a given directory in a flat manner. This is done without using any
+     * delimiters in the OSS list objects API.
+     * @param path The path to the directory for which the listing needs to be done.
+     * @param nextToken This is the token string in order to continue with a next page of results. It should be
+     *                  passed null in the first call to start fresh.
+     * @return A pair containing list of FileStatus objects and a possible token to the next page.
+     * @throws IOException
+     */
+    public Pair<List<FileStatus>, String> flatListDirectoryRecursive(final Path path,
+                                                                     String nextToken) throws IOException {
+        ArrayList<FileStatus> entries = new ArrayList<>();
+        String key = this.pathToDirectory(path);
+        String freshToken = null;
+
+        try {
+
+            ListObjectsRequest request = this.requestBuilder.listObjects(
+                    key, nextToken, null, recursiveDirListingFetchSize);
+            ListObjectsResponse response = this.objectStorage.listObjects(request);
+
+            List<ObjectSummary> summaries = response.getListObjects().getObjects();
+
+            freshToken = response.getListObjects().getNextStartWith();
+            for (ObjectSummary summary : summaries) {
+                entries.add(createFileStatus(path, summary));
+            }
+
+        } catch (final BmcException e) {
+            LOG.debug("Failed to list objects for {}", key, e);
+            throw new IOException("Failed to list path for "+key, e);
+        }
+        return new ImmutablePair<>(entries, freshToken);
+    }
+
     private static String calculateNextToken(String token, List<String> prefixes) {
         if (token == null) {
             return null;
@@ -900,6 +973,98 @@ public class BmcDataStore {
                 this.blockSizeInBytes,
                 LAST_MODIFICATION_TIME,
                 this.objectToPath(parentPath, prefix));
+    }
+
+    public ContentSummary getContentSummary(final Path path) throws IOException {
+        final String objKey = this.pathToObject(path);
+        LOG.debug("Getting content summary for path {}, object {}", path, objKey);
+
+        try {
+            HeadObjectResponse response = this.objectStorage.headObject(this.requestBuilder.headObject(objKey));
+            this.statistics.incrementReadOps(1);
+            return new ContentSummary.Builder()
+                    .length(response.getContentLength())
+                    .fileCount(1)
+                    .directoryCount(0)
+                    .spaceConsumed(response.getContentLength())
+                    .build();
+        } catch (final BmcException e) {
+            if (e.getStatusCode() != 404) {
+                throw new IOException("Unable to get content summary for " + path, e);
+            }
+        }
+
+        final String key = this.pathToDirectory(path);
+        long sumLength = 0;
+        long sumFileCount = 0;
+        long sumDirectoryCount = 0;
+
+        try {
+            ListObjectsRequest request = null;
+            ListObjectsResponse response = null;
+            String nextToken = null;
+            String lastDirectoryVisited = null;
+
+            do {
+                LOG.debug("Listing objects with next token {}", nextToken);
+                request = this.requestBuilder.listObjects(key, nextToken, null, 1000);
+                response = this.objectStorage.listObjects(request);
+                nextToken = response.getListObjects().getNextStartWith();
+
+                this.statistics.incrementReadOps(1);
+
+                final List<ObjectSummary> summaries = response.getListObjects().getObjects();
+                for (final ObjectSummary summary : summaries) {
+                    String objectName = summary.getName();
+                    // We need to count any implicit directories for which the marker object is
+                    // missing. Start by finding the first ancestor of objectName that is not
+                    // also an ancestor of lastDirectoryVisited.
+                    int parentLength = key.length();
+                    if (lastDirectoryVisited != null) {
+                        while (parentLength < lastDirectoryVisited.length()
+                                && parentLength < objectName.length()
+                                && lastDirectoryVisited.charAt(parentLength) == objectName.charAt(parentLength)) {
+                            parentLength++;
+                        }
+                        parentLength = objectName.indexOf('/', parentLength);
+                        if (parentLength != -1) {
+                            // Include the terminating '/'
+                            parentLength += 1;
+                        }
+                    }
+                    // Count the missing parent directories
+                    while (parentLength != -1 && parentLength < objectName.length()) {
+                        sumDirectoryCount++;
+                        lastDirectoryVisited = objectName.substring(0, parentLength);
+
+                        parentLength = objectName.indexOf('/', parentLength);
+                        if (parentLength != -1) {
+                            // Include the terminating '/'
+                            parentLength += 1;
+                        }
+                    }
+
+                    // Count the object returned by the listing
+                    if (this.isDirectory(summary)) {
+                        sumDirectoryCount++;
+                        lastDirectoryVisited = summary.getName();
+                    } else {
+                        sumFileCount++;
+                        sumLength += summary.getSize();
+                    }
+                }
+            } while (nextToken != null);
+        } catch (final BmcException e) {
+            LOG.debug("Failed to list objects for {}", key, e);
+            throw new IOException("Unable to determine if path is a directory", e);
+        }
+
+        return new ContentSummary.Builder()
+                .length(sumLength)
+                .fileCount(sumFileCount)
+                .directoryCount(sumDirectoryCount)
+                .spaceConsumed(sumLength)
+                .build();
     }
 
     /**
@@ -1074,6 +1239,16 @@ public class BmcDataStore {
                     this.objectStorage, status, requestBuilder, this.statistics);
         }
         if (this.useReadAhead) {
+            if (this.readAheadBlockCount > 1) {
+                return new BmcParallelReadAheadFSInputStream(
+                        this.objectStorage,
+                        status,
+                        requestBuilder,
+                        this.statistics,
+                        this.parallelDownloadExecutor,
+                        this.readAheadSizeInBytes,
+                        this.readAheadBlockCount);
+            }
             return new BmcReadAheadFSInputStream(
                     this.objectStorage,
                     status,

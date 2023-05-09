@@ -16,6 +16,7 @@ import com.oracle.bmc.objectstorage.model.StorageTier;
 import com.oracle.bmc.objectstorage.requests.*;
 import com.oracle.bmc.objectstorage.responses.CommitMultipartUploadResponse;
 import com.oracle.bmc.objectstorage.responses.CreateMultipartUploadResponse;
+import com.oracle.bmc.objectstorage.responses.PutObjectResponse;
 import com.oracle.bmc.objectstorage.responses.UploadPartResponse;
 import org.junit.Before;
 import org.junit.Test;
@@ -259,6 +260,43 @@ public class BmcMultipartOutputStreamTest {
         assert (exception != null);
         Mockito.verify(objectStorage, never())
                 .createMultipartUpload(any(CreateMultipartUploadRequest.class));
+    }
+
+    @Test
+    public void emptyFileWrite() throws IOException {
+        String bucket = "test-bucket";
+        String namespace = "testing";
+        String objectName = "test-object.txt";
+
+        CreateMultipartUploadDetails details =
+                CreateMultipartUploadDetails.builder().object(objectName).build();
+        CreateMultipartUploadRequest multipartUploadRequest =
+                CreateMultipartUploadRequest.builder()
+                        .bucketName(bucket)
+                        .namespaceName(namespace)
+                        .createMultipartUploadDetails(details)
+                        .build();
+        MultipartUploadRequest uploadRequest =
+                MultipartUploadRequest.builder()
+                        .objectStorage(objectStorage)
+                        .multipartUploadRequest(multipartUploadRequest)
+                        .allowOverwrite(true)
+                        .build();
+
+        PutObjectResponse putResponse = PutObjectResponse.builder().build();
+        Mockito.when(objectStorage.putObject(any(PutObjectRequest.class))).thenReturn(putResponse);
+        ExecutorService md5Executor = createExecutorService();
+
+        try (BmcMultipartOutputStream bmos =
+                     new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, md5Executor)) {
+            bmos.write(new byte[0]);
+            bmos.flush();
+        } finally {
+            md5Executor.shutdown();
+        }
+
+        Mockito.verify(objectStorage, times(1)).putObject(any(PutObjectRequest.class));
+        Mockito.verify(objectStorage, never()).createMultipartUpload(any(CreateMultipartUploadRequest.class));
     }
 
     private static byte[] generateRandomBytes(int num) {

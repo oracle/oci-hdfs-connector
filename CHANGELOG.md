@@ -3,6 +3,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.4.1.1.0 - 2023-05-09
+### Added
+- Added support for parallel ranged GET requests in read-ahead mode
+
+### Changed
+- Optimized recursive calls for list files and delete path
+- Optimized implementation for `FileSystem.getContentSummary` 
+- Replaced multipart request with PutObject for small object writes in `BmcMultipartOutputStream`
+
 ## 3.3.4.1.0.0 - 2023-04-25
 ### Added
 - Added support for OCI Java SDK 3.x
