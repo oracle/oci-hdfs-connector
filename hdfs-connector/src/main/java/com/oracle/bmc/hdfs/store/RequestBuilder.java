@@ -121,6 +121,7 @@ class RequestBuilder {
                         RenameObjectDetails.builder()
                                 .sourceName(sourceName)
                                 .newName(newName)
+                                .newObjIfNoneMatchETag(getIfNoneMatchHeader(false))
                                 .build())
                 .opcClientRequestId(createClientRequestId("renameObject"))
                 .build();
@@ -167,6 +168,10 @@ class RequestBuilder {
         final String uuid = UUID.randomUUID().toString();
         LOG.debug("Using request ID {} for {}", uuid, operation);
         return uuid;
+    }
+
+    private static String getIfNoneMatchHeader(boolean allowOverwrite) {
+        return allowOverwrite ? null : "*";
     }
 
     @Slf4j

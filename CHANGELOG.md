@@ -3,6 +3,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.4.1.2.0 - 2023-06-22
+### Added
+- Added support for namespace-prefixed domains in the Object Storage service
+
+### Changed
+- Updated OCI Java SDK version to `3.17.1`
+- Updated `guava` version from `30.1-jre` to `32.0.1-jre`
+- Replaced LinkedBlockingQueue with SynchronousQueue to hand off tasks to the executor
+- Added relocation for shaded package `javax.servlet`
+
+### Fixed
+- Fixed the issue that caused object loss when performing a renaming operation, in case the target already existed
+
 ## 3.3.4.1.1.0 - 2023-05-09
 ### Added
 - Added support for parallel ranged GET requests in read-ahead mode

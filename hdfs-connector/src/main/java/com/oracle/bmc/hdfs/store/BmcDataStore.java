@@ -23,6 +23,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -71,6 +72,7 @@ import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.FSInputStream;
+import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem.Statistics;
 import org.apache.hadoop.fs.Path;
@@ -83,6 +85,8 @@ import org.apache.hadoop.util.Progressable;
  */
 @Slf4j
 public class BmcDataStore {
+    private static final int ERROR_CODE_FILE_EXISTS = 412;
+
     private static final int MiB = 1024 * 1024;
 
     // http://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-hdfs/HdfsDesign.html#Data_Replication
@@ -258,7 +262,7 @@ public class BmcDataStore {
                     numThreadsForParallelMd5Operation,
                     0L,
                     TimeUnit.MILLISECONDS,
-                    new LinkedBlockingQueue<Runnable>(numThreadsForParallelMd5Operation),
+                    new SynchronousQueue<>(),
                     new ThreadFactoryBuilder()
                             .setDaemon(true)
                             .setNameFormat("bmcs-hdfs-multipart-md5-%d")
@@ -686,6 +690,18 @@ public class BmcDataStore {
                 LOG.debug("Thread interrupted while waiting for rename completion", e);
                 Thread.currentThread().interrupt();
             } catch (ExecutionException e) {
+                if (e.getCause() instanceof BmcException) {
+                    BmcException bmcException = (BmcException) e.getCause();
+                    if (bmcException.getStatusCode() == ERROR_CODE_FILE_EXISTS) {
+                        LOG.debug(
+                                "Failed to rename {} to {}",
+                                renameResponse.getOldName(),
+                                renameResponse.getNewName(),
+                                e);
+                        throw new FileAlreadyExistsException(
+                                "Cannot rename file, destination file already exists : " + renameResponse.getNewName());
+                    }
+                }
                 LOG.debug("Execution exception while waiting for rename completion", e);
             } catch (Exception e) {
                 LOG.debug(
@@ -704,12 +720,19 @@ public class BmcDataStore {
         try {
             final String newEntityTag =
                     new RenameOperation(
-                                    this.objectStorage,
-                                    this.requestBuilder.renameObject(
-                                            sourceObject, destinationObject))
+                            this.objectStorage,
+                            this.requestBuilder.renameObject(
+                                    sourceObject, destinationObject))
                             .call();
             this.statistics.incrementWriteOps(1); // 1 put
             LOG.debug("Newly renamed object has eTag {}", newEntityTag);
+        } catch (final BmcException e) {
+            LOG.debug("Failed to rename {} to {}", sourceObject, destinationObject, e);
+            if (e.getStatusCode() == ERROR_CODE_FILE_EXISTS) {
+                throw new FileAlreadyExistsException(
+                        "Cannot rename file, destination file already exists : " + destinationObject);
+            }
+            throw new IOException("Unable to perform rename", e);
         } catch (final Exception e) {
             LOG.debug("Failed to rename {} to {}", sourceObject, destinationObject, e);
             throw new IOException("Unable to perform rename", e);

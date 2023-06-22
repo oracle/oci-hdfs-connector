@@ -12,7 +12,7 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.3.4.1.1.0</version>
+    <version>3.3.4.1.2.0</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -550,7 +550,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>30.1-jre</version>
+      <version>32.0.1-jre</version>
     </dependency>
     <!--
       Deal with CVE-2021-28165:
