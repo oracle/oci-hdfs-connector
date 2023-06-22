@@ -768,8 +768,8 @@ class BmcFilesystemImpl extends FileSystem {
             }
         }
 
-        final FileStatus destinationStatus = this.getNullableFileStatus(absoluteDestination);
-        final Path destinationPathToUse;
+        FileStatus destinationStatus = this.getNullableFileStatus(absoluteDestination);
+        Path destinationPathToUse = absoluteDestination;
         if (destinationStatus == null) {
             final FileStatus destinationParentStatus =
                     this.getNullableFileStatus(absoluteDestination.getParent());
@@ -779,17 +779,11 @@ class BmcFilesystemImpl extends FileSystem {
                 LOG.debug("Destination parent directory does not exist, or is a file");
                 return false;
             }
-
-            // destination at this point must be a filename, so this is a move + rename operation
-            destinationPathToUse = absoluteDestination;
-        } else if (destinationStatus.isFile()) {
-            // spec says to throw FileAlreadyExistsException or IOException, but most cloud providers
-            // return false instead, staying consistent here too
-            LOG.debug("Destination exists and is a file");
-            return false;
-        } else {
-            // destination is a directory, copy file name of source
+        } else if (destinationStatus.isDirectory()) {
+            // destination is a directory, need down one level.
+            // copy file/dir name of source, we have to check if the source name does exist in this directory
             destinationPathToUse = new Path(absoluteDestination, absoluteSource.getName());
+            destinationStatus = this.getNullableFileStatus(destinationPathToUse);
         }
 
         // test again now that it's resolved
@@ -813,14 +807,27 @@ class BmcFilesystemImpl extends FileSystem {
             return false;
         }
 
-        if (sourceStatus.isFile()) {
-            // file rename
-            LOG.debug("Renaming file {} to {}", absoluteSource, destinationPathToUse);
-            this.dataStore.renameFile(absoluteSource, destinationPathToUse);
-        } else {
-            // directory rename
-            LOG.debug("Renaming directory {} to {}", absoluteSource, destinationPathToUse);
-            this.dataStore.renameDirectory(absoluteSource, destinationPathToUse);
+
+        // destination should not exist, no matter it is a file or directory
+        if (destinationStatus != null ) {
+            // spec says to throw FileAlreadyExistsException or IOException, but most cloud providers
+            // return false instead, staying consistent here too
+            LOG.debug("Destination {} {} already exists", (destinationStatus.isFile() ? "file" : "directory"), destinationPathToUse.toString() );
+            return false;
+        }
+
+        try {
+            if (sourceStatus.isFile()) {
+                // file rename
+                LOG.debug("Renaming file {} to {}", absoluteSource, destinationPathToUse);
+                this.dataStore.renameFile(absoluteSource, destinationPathToUse);
+            } else {
+                // directory rename
+                LOG.debug("Renaming directory {} to {}", absoluteSource, destinationPathToUse);
+                this.dataStore.renameDirectory(absoluteSource, destinationPathToUse);
+            }
+        } catch (final FileAlreadyExistsException e) {
+            return false;
         }
 
         return true;

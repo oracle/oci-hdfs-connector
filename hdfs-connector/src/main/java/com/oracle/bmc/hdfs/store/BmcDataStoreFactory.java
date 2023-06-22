@@ -84,6 +84,7 @@ public class BmcDataStoreFactory {
     private static final String OCI_PROPERTIES_FILE_NAME = "oci.properties";
     private final Configuration configuration;
     private final String OCI_DELEGATION_TOKEN_FILE = "OCI_DELEGATION_TOKEN_FILE";
+    private String namespaceName;
 
     /**
      * Creates a new {@link BmcDataStore} for the given namespace and bucket.
@@ -98,6 +99,7 @@ public class BmcDataStoreFactory {
      */
     public BmcDataStore createDataStore(
             final String namespace, final String bucket, final Statistics statistics) {
+        namespaceName = namespace;
         this.setConnectorVersion();
         // override matches the same order as the filesystem name, ie, "oci://bucket@namespace"
         // so overriding property foobar is done by specifying foobar.bucket.namespace
@@ -134,30 +136,53 @@ public class BmcDataStoreFactory {
             return propertyAccessor.asString().get(BmcProperties.HOST_NAME);
         }
 
-        if (propertyAccessor.asBoolean().get(BmcProperties.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED)) {
-            LOG.info("Getting realm-specific endpoint template as {} flag is enabled", BmcConstants.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED_KEY);
-            String regionCodeOrId = propertyAccessor.asString().get(BmcProperties.REGION_CODE_OR_ID);
+        if (propertyAccessor
+                .asBoolean()
+                .get(BmcProperties.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED)) {
+            LOG.info(
+                    "Getting realm-specific endpoint template as {} flag is enabled",
+                    BmcConstants.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED_KEY);
+            String regionCodeOrId =
+                    propertyAccessor.asString().get(BmcProperties.REGION_CODE_OR_ID);
             if (regionCodeOrId != null) {
-                LOG.info("Region code or id set to {} using {}", regionCodeOrId, BmcConstants.REGION_CODE_OR_ID_KEY);
-                Region region =
-                        Region.fromRegionCodeOrId(regionCodeOrId);
-                Map<String, String> realmSpecificEndpointTemplateMap = ObjectStorageClient.SERVICE.getServiceEndpointTemplateForRealmMap();
-                if (realmSpecificEndpointTemplateMap != null && !realmSpecificEndpointTemplateMap.isEmpty()) {
+                LOG.info(
+                        "Region code or id set to {} using {}",
+                        regionCodeOrId,
+                        BmcConstants.REGION_CODE_OR_ID_KEY);
+                Region region = Region.fromRegionCodeOrId(regionCodeOrId);
+                Map<String, String> realmSpecificEndpointTemplateMap =
+                        ObjectStorageClient.SERVICE.getServiceEndpointTemplateForRealmMap();
+                if (realmSpecificEndpointTemplateMap != null
+                        && !realmSpecificEndpointTemplateMap.isEmpty()) {
                     String realmId = region.getRealm().getRealmId();
-                    String realmSpecificEndpointTemplate = realmSpecificEndpointTemplateMap.get(realmId.toLowerCase(Locale.ROOT));
+                    String realmSpecificEndpointTemplate =
+                            realmSpecificEndpointTemplateMap.get(realmId.toLowerCase(Locale.ROOT));
                     if (StringUtils.isNotBlank(realmSpecificEndpointTemplate)) {
-                        LOG.info("Using realm-specific endpoint template {}", realmSpecificEndpointTemplate);
-                        return realmSpecificEndpointTemplate.replace("{region}", region.getRegionId());
+                        LOG.info(
+                                "Using realm-specific endpoint template {}",
+                                realmSpecificEndpointTemplate);
+                        return realmSpecificEndpointTemplate
+                                .replace("{region}", region.getRegionId())
+                                .replace("{namespaceName+Dot}", namespaceName + ".");
                     } else {
-                        LOG.info("{} property was enabled but realm-specific endpoint template is not defined for {} realm",
-                                BmcConstants.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED_KEY, realmId);
+                        LOG.info(
+                                "{} property was enabled but realm-specific endpoint template is not defined for {} realm",
+                                BmcConstants.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED_KEY,
+                                realmId);
                     }
                 } else {
-                    LOG.info("Not using realm-specific endpoint template, because no realm-specific endpoint template map was set, or the map was empty");
+                    LOG.info(
+                            "Not using realm-specific endpoint template, because no realm-specific endpoint template map was set, or the map was empty");
                 }
             } else {
                 throw new IllegalArgumentException(
-                        "Property `" + BmcConstants.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED_KEY + "` was enabled without setting the property `" + BmcConstants.REGION_CODE_OR_ID_KEY + "`. Please set the region code or id using `" + BmcConstants.REGION_CODE_OR_ID_KEY + "` property to enable use of realm-specific endpoint template");
+                        "Property `"
+                                + BmcConstants.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED_KEY
+                                + "` was enabled without setting the property `"
+                                + BmcConstants.REGION_CODE_OR_ID_KEY
+                                + "`. Please set the region code or id using `"
+                                + BmcConstants.REGION_CODE_OR_ID_KEY
+                                + "` property to enable use of realm-specific endpoint template");
             }
         }
 
@@ -171,7 +196,10 @@ public class BmcDataStoreFactory {
                 return endpoint.get();
             } else {
                 throw new IllegalArgumentException(
-                        "Endpoint for " + ObjectStorageClient.SERVICE + " is not known in region " + region);
+                        "Endpoint for "
+                                + ObjectStorageClient.SERVICE
+                                + " is not known in region "
+                                + region);
             }
         }
 
@@ -191,7 +219,8 @@ public class BmcDataStoreFactory {
                         },
                         METADATA_SERVICE_BASE_URL,
                         "region");
-        String endpoint = Region.formatDefaultRegionEndpoint(ObjectStorageClient.SERVICE, regionCode);
+        String endpoint =
+                Region.formatDefaultRegionEndpoint(ObjectStorageClient.SERVICE, regionCode);
         LOG.info("Endpoint using Instance Metadata Service is {}", endpoint);
         return endpoint;
     }

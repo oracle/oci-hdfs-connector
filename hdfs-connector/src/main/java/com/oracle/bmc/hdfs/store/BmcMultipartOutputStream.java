@@ -301,7 +301,7 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
                             numThreadsForParallelUpload,
                             0L,
                             TimeUnit.MILLISECONDS,
-                            new LinkedBlockingQueue<Runnable>(numThreadsForParallelUpload),
+                            new SynchronousQueue<>(),
                             new ThreadFactoryBuilder()
                                     .setDaemon(true)
                                     .setNameFormat("bmcs-hdfs-multipart-upload-%d")
