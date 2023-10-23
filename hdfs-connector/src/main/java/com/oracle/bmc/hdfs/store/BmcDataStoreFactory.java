@@ -21,6 +21,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -87,6 +89,16 @@ public class BmcDataStoreFactory {
     private String namespaceName;
 
     /**
+     * Region codes or ID can be specified in the URI authority section following the namespace,
+     * using the following format: oci://bucket@namespace.region/dir/file.
+     * The region can either be a region ID (e.g., us-ashburn-1) or an airport code (e.g., IAD).
+     * The precedence order for specifying the region is as follows: Region code/ID in the URI takes
+     * the highest precedence, followed by the fs.oci.client.hostname property, and finally,
+     * the fs.oci.client.regionCodeOrId property.
+     */
+    private String regionCodeOrId;
+
+    /**
      * Creates a new {@link BmcDataStore} for the given namespace and bucket.
      *
      * @param namespace
@@ -106,10 +118,25 @@ public class BmcDataStoreFactory {
         final String propertyOverrideSuffix = "." + bucket + "." + namespace;
         final BmcPropertyAccessor propertyAccessor =
                 new BmcPropertyAccessor(this.configuration, propertyOverrideSuffix);
+        if (propertyAccessor
+                    .asBoolean()
+                    .get(BmcProperties.MULTIREGION_ENABLED)) {
+            LOG.info("Multi-region support enabled, parsing region code or id");
+            Pattern pattern =
+                    Pattern.compile("([^:\\/]+)\\.([a-zA-Z0-9-]{3,})");
+
+            Matcher matcher = pattern.matcher(namespace);
+            // Try parse namespace and region code/id
+            if (matcher.find()) {
+                namespaceName = matcher.group(1).trim();
+                regionCodeOrId = matcher.group(2).trim();
+                LOG.info("Multi-region support enabled, namespace {}, region {}", namespaceName, regionCodeOrId);
+            }
+        }
         return new BmcDataStore(
                 propertyAccessor,
                 this.createClient(propertyAccessor),
-                namespace,
+                namespaceName,
                 bucket,
                 statistics);
     }
@@ -131,76 +158,73 @@ public class BmcDataStoreFactory {
     }
 
     private String getEndpoint(final BmcPropertyAccessor propertyAccessor) {
-        if (propertyAccessor.asString().get(BmcProperties.HOST_NAME) != null) {
-            LOG.info("Getting endpoint using {}", BmcConstants.HOST_NAME_KEY);
-            return propertyAccessor.asString().get(BmcProperties.HOST_NAME);
+        if (regionCodeOrId == null) {
+            if (propertyAccessor.asString().get(BmcProperties.HOST_NAME) != null) {
+                LOG.info("Getting endpoint using {}", BmcConstants.HOST_NAME_KEY);
+                return propertyAccessor.asString().get(BmcProperties.HOST_NAME);
+            }
+            regionCodeOrId =  propertyAccessor.asString().get(BmcProperties.REGION_CODE_OR_ID);
         }
 
         if (propertyAccessor
-                .asBoolean()
-                .get(BmcProperties.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED)) {
+                    .asBoolean()
+                    .get(BmcProperties.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED)) {
             LOG.info(
                     "Getting realm-specific endpoint template as {} flag is enabled",
                     BmcConstants.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED_KEY);
-            String regionCodeOrId =
-                    propertyAccessor.asString().get(BmcProperties.REGION_CODE_OR_ID);
-            if (regionCodeOrId != null) {
-                LOG.info(
-                        "Region code or id set to {} using {}",
-                        regionCodeOrId,
-                        BmcConstants.REGION_CODE_OR_ID_KEY);
-                Region region = Region.fromRegionCodeOrId(regionCodeOrId);
-                Map<String, String> realmSpecificEndpointTemplateMap =
-                        ObjectStorageClient.SERVICE.getServiceEndpointTemplateForRealmMap();
-                if (realmSpecificEndpointTemplateMap != null
-                        && !realmSpecificEndpointTemplateMap.isEmpty()) {
-                    String realmId = region.getRealm().getRealmId();
-                    String realmSpecificEndpointTemplate =
-                            realmSpecificEndpointTemplateMap.get(realmId.toLowerCase(Locale.ROOT));
-                    if (StringUtils.isNotBlank(realmSpecificEndpointTemplate)) {
-                        LOG.info(
-                                "Using realm-specific endpoint template {}",
-                                realmSpecificEndpointTemplate);
-                        return realmSpecificEndpointTemplate
-                                .replace("{region}", region.getRegionId())
-                                .replace("{namespaceName+Dot}", namespaceName + ".");
-                    } else {
-                        LOG.info(
-                                "{} property was enabled but realm-specific endpoint template is not defined for {} realm",
-                                BmcConstants.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED_KEY,
-                                realmId);
-                    }
-                } else {
-                    LOG.info(
-                            "Not using realm-specific endpoint template, because no realm-specific endpoint template map was set, or the map was empty");
-                }
-            } else {
+
+            if (regionCodeOrId == null)  {
                 throw new IllegalArgumentException(
                         "Property `"
                                 + BmcConstants.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED_KEY
                                 + "` was enabled without setting the property `"
                                 + BmcConstants.REGION_CODE_OR_ID_KEY
-                                + "`. Please set the region code or id using `"
+                                + "` or set the region code/id in authority. Please set the region code or id using `"
                                 + BmcConstants.REGION_CODE_OR_ID_KEY
-                                + "` property to enable use of realm-specific endpoint template");
+                                + "` property to enable use of realm-specific endpoint template or set it region code/id in URI");
+            }
+            LOG.info(
+                    "Region code or id set to {} using {}",
+                    regionCodeOrId,
+                    BmcConstants.REGION_CODE_OR_ID_KEY);
+            Region region = Region.fromRegionCodeOrId(regionCodeOrId);
+
+            Map<String, String> realmSpecificEndpointTemplateMap =
+                    ObjectStorageClient.SERVICE.getServiceEndpointTemplateForRealmMap();
+            if (realmSpecificEndpointTemplateMap != null
+                        && !realmSpecificEndpointTemplateMap.isEmpty()) {
+
+                String realmId = region.getRealm().getRealmId();
+                String realmSpecificEndpointTemplate =
+                        realmSpecificEndpointTemplateMap.get(realmId.toLowerCase(Locale.ROOT));
+                if (StringUtils.isNotBlank(realmSpecificEndpointTemplate)) {
+                    LOG.info(
+                            "Using realm-specific endpoint template {}",
+                            realmSpecificEndpointTemplate);
+                    return realmSpecificEndpointTemplate
+                                   .replace("{region}", region.getRegionId())
+                                   .replace("{namespaceName+Dot}", namespaceName + ".");
+                } else {
+                    LOG.info(
+                            "{} property was enabled but realm-specific endpoint template is not defined for {} realm",
+                            BmcConstants.REALM_SPECIFIC_ENDPOINT_TEMPLATES_ENABLED_KEY,
+                            realmId);
+                }
+            } else {
+                LOG.info(
+                        "Not using realm-specific endpoint template, because no realm-specific endpoint template map was set, or the map was empty");
             }
         }
 
-        if (propertyAccessor.asString().get(BmcProperties.REGION_CODE_OR_ID) != null) {
-            LOG.info("Getting endpoint using {}", BmcConstants.REGION_CODE_OR_ID_KEY);
-            Region region =
-                    Region.fromRegionCodeOrId(
-                            propertyAccessor.asString().get(BmcProperties.REGION_CODE_OR_ID));
+        if (regionCodeOrId != null) {
+            LOG.info("Getting endpoint using {}", regionCodeOrId);
+            Region region = Region.fromRegionCodeOrId(regionCodeOrId);
             Optional<String> endpoint = region.getEndpoint(ObjectStorageClient.SERVICE);
-            if (endpoint.isPresent()) {
-                return endpoint.get();
-            } else {
-                throw new IllegalArgumentException(
-                        "Endpoint for "
-                                + ObjectStorageClient.SERVICE
-                                + " is not known in region "
-                                + region);
-            }
+            return endpoint.orElseThrow(() -> new IllegalArgumentException(
+                    "Endpoint for "
+                            + ObjectStorageClient.SERVICE
+                            + " is not known in region "
+                            + region));
         }
 
         enableInstanceMetadataService();

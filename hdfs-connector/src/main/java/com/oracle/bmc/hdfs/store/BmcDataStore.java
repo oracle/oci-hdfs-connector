@@ -50,7 +50,6 @@ import com.oracle.bmc.hdfs.util.DirectExecutorService;
 import com.oracle.bmc.model.BmcException;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
-import com.oracle.bmc.objectstorage.model.ListObjects;
 import com.oracle.bmc.objectstorage.model.ObjectSummary;
 import com.oracle.bmc.objectstorage.requests.CreateMultipartUploadRequest;
 import com.oracle.bmc.objectstorage.requests.GetObjectRequest;
@@ -112,7 +111,7 @@ public class BmcDataStore {
     private final boolean useInMemoryWriteBuffer;
     private final boolean useMultipartUploadWriteBuffer;
 
-    private final LoadingCache<String, HeadPair> objectMetadataCache;
+    private final LoadingCache<String, FileStatusInfo> objectMetadataCache;
     private final boolean useReadAhead;
     private final int readAheadSizeInBytes;
     private final int readAheadBlockCount;
@@ -409,7 +408,7 @@ public class BmcDataStore {
         }
     }
 
-    private LoadingCache<String, HeadPair> configureHeadObjectCache(
+    private LoadingCache<String, FileStatusInfo> configureHeadObjectCache(
             BmcPropertyAccessor propertyAccessor) {
         boolean headObjectCachingEnabled =
                 propertyAccessor.asBoolean().get(BmcProperties.OBJECT_METADATA_CACHING_ENABLED);
@@ -418,12 +417,12 @@ public class BmcDataStore {
                         ? "Not in object metadata cache, getting actual metadata for key: '{}'"
                         : "Getting metadata for key: '{}'";
 
-        CacheLoader<String, HeadPair> loader =
-                new CacheLoader<String, HeadPair>() {
+        CacheLoader<String, FileStatusInfo> loader =
+                new CacheLoader<String, FileStatusInfo>() {
                     @Override
-                    public HeadPair load(String key) throws Exception {
+                    public FileStatusInfo load(String key) throws Exception {
                         LOG.info(loadMessage, key);
-                        return getObjectMetadataUncached(key);
+                        return getFileStatusUncached(key);
                     }
                 };
 
@@ -441,10 +440,10 @@ public class BmcDataStore {
 
         return CacheBuilder.from(cacheBuilderSpec)
                 .removalListener(
-                        new RemovalListener<String, HeadPair>() {
+                        new RemovalListener<String, FileStatusInfo>() {
                             @Override
                             public void onRemoval(
-                                    RemovalNotification<String, HeadPair> removalNotification) {
+                                    RemovalNotification<String, FileStatusInfo> removalNotification) {
                                 LOG.info(
                                         "Object metadata cache entry '{}' removed (cause '{}', was evicted '{}')",
                                         removalNotification.getKey(),
@@ -751,6 +750,8 @@ public class BmcDataStore {
 
         try {
             this.objectStorage.deleteObject(this.requestBuilder.deleteObject(object));
+            // Invalidate the cache after deleting the object to ensure data consistency when objectMetadataCache is enabled
+            this.objectMetadataCache.invalidate(object);
             this.statistics.incrementWriteOps(1);
         } catch (final BmcException e) {
             // deleting an object that doesn't actually exist, nothing to do.
@@ -778,6 +779,8 @@ public class BmcDataStore {
 
         try {
             this.objectStorage.deleteObject(this.requestBuilder.deleteObject(directory));
+            // Invalidate the cache after deleting the directory to ensure data consistency when objectMetadataCache is enabled
+            this.objectMetadataCache.invalidate(this.pathToObject(path));
             this.statistics.incrementWriteOps(1);
         } catch (final BmcException e) {
             // deleting an object that doesn't actually exist, nothing to do.
@@ -1113,49 +1116,14 @@ public class BmcDataStore {
         final String key = this.pathToObject(path);
         LOG.debug("Getting file status for path {}, object {}", path, key);
 
-        // will get metadata for either the actual object or the placeholder folder object
-        final HeadPair headData = this.getObjectMetadata(key);
-        if (headData != null) {
-            return new FileStatus(
-                    headData.response.getContentLength(),
-                    this.isDirectory(headData),
-                    BLOCK_REPLICATION,
-                    this.blockSizeInBytes,
-                    headData.response.getLastModified().getTime(),
-                    path);
-        }
-
-        // try last attempt to scan for files even though the placeholder folder doesn't exist
-        if (!this.isEmptyDirectory(path)) {
-            LOG.debug("No placeholder file, but found non-empty directory anyway");
-            return new FileStatus(
-                    0,
-                    true,
-                    BLOCK_REPLICATION,
-                    this.blockSizeInBytes,
-                    LAST_MODIFICATION_TIME,
-                    path);
-        }
-
-        // nothing left, return null
-        return null;
-    }
-
-    /**
-     * This method attempts to get the metadata for the given object key.
-     * <p>
-     * Note: Since "directories" in Object Store are just objects whose names have a trailing '/', this method will make
-     * two attempts to get the metadata, once for the actual key given, and once for the (key + '/') iff no object for
-     * the given key exists. This is necessary as its not immediately possible to know from the Path instances provided
-     * if they were meant to be a file or a directory.
-     *
-     * @param key The object key.
-     * @return The metadata
-     * @throws IOException if no object (or directory) could be found.
-     */
-    private HeadPair getObjectMetadata(final String key) throws IOException {
         try {
-            return objectMetadataCache.getUnchecked(key);
+            FileStatusInfo fileStatusInfo = objectMetadataCache.getUnchecked(key);
+            return new FileStatus(fileStatusInfo.contentLength,
+                    fileStatusInfo.isDirectory,
+                    BLOCK_REPLICATION,
+                    this.blockSizeInBytes,
+                    fileStatusInfo.modificationTime,
+                    path);
         } catch (UncheckedExecutionException ee) {
             if (ee.getCause() instanceof IOException) {
                 throw (IOException) ee.getCause();
@@ -1168,56 +1136,142 @@ public class BmcDataStore {
     }
 
     /**
-     * This method attempts to get the metadata for the given object key.
-     * <p>
-     * Note: Since "directories" in Object Store are just objects whose names have a trailing '/', this method will make
-     * two attempts to get the metadata, once for the actual key given, and once for the (key + '/') iff no object for
-     * the given key exists. This is necessary as its not immediately possible to know from the Path instances provided
-     * if they were meant to be a file or a directory.
+     * Retrieves the FileStatusInfo for a given key, bypassing the object metadata cache.
+     * If the key ends with "/", it's treated as a directory. If not, it's treated as a file.
+     * For a directory:
+     *     - Returns its status if exists, otherwise throws ObjectMetadataNotFoundException.
+     * For a file:
+     *     - Returns a new FileStatusInfo with metadata, or, if file doesn't exist, tries to retrieve it as a directory.
+     *     - If no file or directory found, throws an ObjectMetadataNotFoundException.
      *
-     * @param key The object key.
-     * @return The metadata
-     * @throws IOException if no object (or directory) could be found.
+     * @param key The object key to retrieve the FileStatusInfo for.
+     * @return The FileStatusInfo for the given key.
+     * @throws IOException if the operation could not be completed.
+     * @throws ObjectMetadataNotFoundException if neither the object metadata nor directory are found.
      */
-    private HeadPair getObjectMetadataUncached(final String key) throws IOException {
-        HeadObjectResponse response = null;
-        String keyUsed = key;
+    private FileStatusInfo getFileStatusUncached(final String key) throws IOException {
+        if (key.endsWith("/")) {
+            FileStatusInfo directoryStatus = getDirectoryStatus(key);
+            if (directoryStatus == null) {
+                throw new ObjectMetadataNotFoundException(key);
+            }
+            return directoryStatus;
+        }
+
         try {
-            response = this.objectStorage.headObject(this.requestBuilder.headObject(key));
-            this.statistics.incrementReadOps(1);
+            HeadObjectResponse response = this.objectStorage.headObject(this.requestBuilder.headObject(key));
+            return new FileStatusInfo(response.getContentLength(),
+                    false,
+                    response.getLastModified().getTime());
         } catch (final BmcException e) {
-            boolean throwEx = true;
             // also try to query for a directory with this key name
             if (e.getStatusCode() == 404) {
-                if (!key.endsWith("/")) {
-                    try {
-                        keyUsed = key + "/";
-                        response =
-                                this.objectStorage.headObject(
-                                        this.requestBuilder.headObject(keyUsed));
-                        throwEx = false;
-                    } catch (final BmcException e1) {
-                        if (e1.getStatusCode() == 404) {
-                            throw new ObjectMetadataNotFoundException(key);
-                        }
-                    } finally {
-                        // in either case, it took 2 read operations to figure out this object either did or did not
-                        // exist
-                        this.statistics.incrementReadOps(2);
-                    }
-                } else {
-                    this.statistics.incrementReadOps(1);
-                    throw new ObjectMetadataNotFoundException(key);
+                FileStatusInfo directoryStatus = getDirectoryStatus(key + "/");
+                if (directoryStatus != null) {
+                    return directoryStatus;
                 }
-            }
-
-            if (throwEx) {
+            } else {
                 LOG.debug("Failed to get object metadata for {}", key, e);
                 throw new IOException("Unable to fetch file status for: " + key, e);
             }
+        } finally {
+            this.statistics.incrementReadOps(1);
         }
 
-        return new HeadPair(response, keyUsed);
+        // nothing left, return null
+        throw new ObjectMetadataNotFoundException(key);
+    }
+
+    /**
+     * Checks if the specified path is a directory.
+     *
+     * @param path
+     * @return true if path exists and is a directory, false otherwise.
+     */
+    public boolean isDirectory(Path path) throws IOException {
+        if (this.isRootDirectory(path)) {
+            return true;
+        }
+
+        final String dirKey = this.pathToDirectory(path);
+        FileStatusInfo fileStatus = this.objectMetadataCache.getIfPresent(dirKey);
+        if (fileStatus != null) {
+            return fileStatus.isDirectory;
+        }
+
+        fileStatus = this.getDirectoryStatus(dirKey);
+
+        return fileStatus != null && fileStatus.isDirectory;
+    }
+
+    /**
+     * Retrieves the FileStatusInfo for a directory with the given key. The method sends a ListObjectsRequest to
+     * the object storage to fetch a list of objects with a maximum size of 1, using the provided key as a prefix.
+     * Although there can be multiple objects with the provided key as a prefix, we're only interested in the
+     * directory represented by the key itself. Hence, we only fetch one object with the maximum size of 1.
+     * If the list is empty (no objects found with the key as a prefix), the method returns null.
+     * If the list has an object with the same key and its size is not 0 (indicating it is a file),
+     * it returns a new FileStatusInfo instance with the object's size, false for isDirectory, and the
+     * object's modification time. If the object size is 0 (indicating it is a directory), it returns a
+     * new FileStatusInfo instance with size 0, true for isDirectory, and the object's creation time.
+     *
+     * @param key The object key for which to retrieve the directory status.
+     * @return The FileStatusInfo for the directory, or null if the object list is empty.
+     * @throws IOException if the operation could not be completed.
+     */
+    private FileStatusInfo getDirectoryStatus(String key) throws IOException {
+        LOG.debug("Getting directory status for object key {}", key);
+        if (propertyAccessor.asBoolean().get(BmcProperties.REQUIRE_DIRECTORY_MARKER)) {
+            // The property is true, so we assume if the directory exists it has a placeholder object.
+            try {
+                HeadObjectResponse response = this.objectStorage.headObject(this.requestBuilder.headObject(key));
+                return new FileStatusInfo(0L,
+                        true,
+                        response.getLastModified().getTime());
+            } catch (final BmcException e) {
+                // If the marker object is missing, assume the directory does not exist
+                if (e.getStatusCode() == 404) {
+                    return null;
+                } else {
+                    LOG.debug("Failed to get object metadata for {}", key, e);
+                    throw new IOException("Unable to fetch file status for: " + key, e);
+                }
+            } finally {
+                this.statistics.incrementReadOps(1);
+            }
+        }
+
+        final ListObjectsRequest request = this.requestBuilder.listObjects(key, null, null, 1);
+        this.statistics.incrementReadOps(1);
+
+        final ListObjectsResponse response;
+        try {
+            response = this.objectStorage.listObjects(request);
+        } catch (final BmcException e) {
+            LOG.debug("Failed to list objects for {}", key, e);
+            throw new IOException("Unable to determine if path is a directory", e);
+        } finally {
+            this.statistics.incrementReadOps(1);
+        }
+
+        if (response.getListObjects().getObjects().isEmpty()) {
+            return null;
+        }
+
+        ObjectSummary objSummary = response.getListObjects().getObjects().get(0);
+        long modifiedTime = LAST_MODIFICATION_TIME;
+        if (objSummary.getName().equals(key)) {
+            if (objSummary.getSize() != 0L) {
+                return new FileStatusInfo(objSummary.getSize(),
+                        false,
+                        objSummary.getTimeModified().getTime());
+            }
+            modifiedTime = objSummary.getTimeCreated().getTime();
+        }
+
+        return new FileStatusInfo(0L,
+                true,
+                modifiedTime);
     }
 
     private static class ObjectMetadataNotFoundException extends RuntimeException {
@@ -1365,10 +1419,6 @@ public class BmcDataStore {
         return path.isRoot();
     }
 
-    private boolean isDirectory(final HeadPair headData) {
-        return (headData.response.getContentLength() == 0L) && headData.objectKey.endsWith("/");
-    }
-
     private boolean isDirectory(final ObjectSummary summary) {
         return (summary.getSize() == 0L) && summary.getName().endsWith("/");
     }
@@ -1443,9 +1493,20 @@ public class BmcDataStore {
     }
 
     @RequiredArgsConstructor
-    private static final class HeadPair {
-        private final HeadObjectResponse response;
-        private final String objectKey;
+    private static final class FileStatusInfo {
+        private final long contentLength;
+        private final boolean isDirectory;
+        private final long modificationTime;
+
+        public FileStatus toFileStatus(long blockSizeInBytes, Path path) {
+            return new FileStatus(
+                    contentLength,
+                    isDirectory,
+                    BLOCK_REPLICATION,
+                    blockSizeInBytes,
+                    modificationTime,
+                    path);
+        }
     }
 
     private <T> T createCustomReadStreamClass(

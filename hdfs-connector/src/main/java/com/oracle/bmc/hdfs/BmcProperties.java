@@ -93,6 +93,13 @@ public enum BmcProperties {
      */
     REGION_CODE_OR_ID(REGION_CODE_OR_ID_KEY, null),
     /**
+      * (boolean, optional) Enable multi-region support. Users have the ability to connect to multiple regions by
+     * specifying region in the connection URI. URI format (oci://bucket@namespace.region/path).
+      * Other properties related to endpoint hostnames, such as "fs.oci.client.hostname",
+     * "fs.oci.client.regionCodeOrId" and "fs.oci.realmspecific.endpoint.template.enabled" will not be ignored.
+      */
+    MULTIREGION_ENABLED(MULTIREGION_ENABLED_KEY, false),
+    /**
      * (int, optional) The max time to wait for a connection, in millis. See
      * {@link BmcConstants#CONNECTION_TIMEOUT_MILLIS_KEY} for config key name. Defaults to Java SDK timeout, see
      * {@link ClientConfiguration}.
@@ -247,6 +254,15 @@ public enum BmcProperties {
      * smaller than 0 is interpreted as using the default value. Default is 16.
      */
     NUM_READ_AHEAD_THREADS(NUM_READ_AHEAD_THREADS_KEY, 16),
+
+    /**
+     * (boolean, optional) When set to true, enforces strict directory marker rules for the file system represented by the Object Storage bucket.
+     * Each directory must be represented by a zero-byte object with the (directory name + '/') as the object name.
+     * If set to false, it allows the possibility of directories without zero-byte objects representing them.
+     * For example, if file "/a/b" exists but "/a/" does not exist, it still considers the directory "/a/" as existing due to the presence of the file "/a/b".
+     * If fs.oci.require.directory.marker is set to true, the status of file "/a/b" exists but "/a/" does not exist is considered invalid.
+     */
+    REQUIRE_DIRECTORY_MARKER(REQUIRE_DIRECTORY_MARKER_KEY, false),
 
     /**
      * (boolean, optional) Flag to enable parquet caching. See
