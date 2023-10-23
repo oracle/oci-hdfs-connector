@@ -19,8 +19,10 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Supplier;
@@ -46,6 +48,37 @@ public class BmcParallelReadAheadFSInputStreamTest {
         when(mockIntegerAccessor.get(eq(BmcProperties.NUM_READ_AHEAD_THREADS))).thenReturn(10);
         when(mockPropAccessor.asInteger()).thenReturn(mockIntegerAccessor);
         statistics = new FileSystem.Statistics("oci");
+    }
+
+    @Test
+    public void testReadSingleByte() throws IOException {
+        int blockSize = 10;
+        int blockCount = 5;
+        int fileSize = blockSize * blockCount;
+        byte[] contents = new byte[fileSize];
+        Random random = new Random();
+
+        // Fill the byte array with random values
+        random.nextBytes(contents);
+
+        // Generate unique indices to place bytes with values from 0x80 to 0xFF
+        // We want to make sure that the stream read does not return negative values except the real EOF
+        Set<Integer> uniqueIndices = new HashSet<>();
+        while (uniqueIndices.size() < fileSize / 2) {
+            int index = random.nextInt(fileSize / 2);
+            uniqueIndices.add(index);
+        }
+        // Assign random values from 0x80 to 0xFF to the chosen indices
+        for (int index : uniqueIndices) {
+            contents[index] = (byte) (random.nextInt(128) + 128);
+        }
+
+        BmcParallelReadAheadFSInputStream inputStream = createInputStream(fileSize, contents, blockSize, blockCount);
+        for (int i = 0; i < fileSize; i++) {
+            int val = inputStream.read();
+            Assert.assertEquals(Byte.toUnsignedInt(contents[i]), val);
+        }
+        Assert.assertEquals(-1, inputStream.read());
     }
 
     @Test

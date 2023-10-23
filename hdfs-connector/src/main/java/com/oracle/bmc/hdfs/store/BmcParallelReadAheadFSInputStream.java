@@ -68,7 +68,7 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
         }
         try {
             byte[] data = cachedRead.future.get();
-            int result = data[(int) (filePos - cachedRead.startOffset)];
+            int result = Byte.toUnsignedInt(data[(int) (filePos - cachedRead.startOffset)]);
             filePos++;
             if (!cachedRead.containsPosition(filePos)) {
                 clearCachedRead(cachedRead, filePos);

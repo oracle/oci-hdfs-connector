@@ -526,7 +526,7 @@ class BmcFilesystemImpl extends FileSystem {
                 // no existing file, so make sure all of the parent "directories" are created
                 this.mkdirs(path.getParent(), permission);
             } else {
-                if (this.getNullableFileStatus(path.getParent()) == null) {
+                if (!dataStore.isDirectory(path.getParent())) {
                     throw new FileNotFoundException(
                             "Cannot create file " + path + ", the parent directory does not exist");
                 }
@@ -679,6 +679,10 @@ class BmcFilesystemImpl extends FileSystem {
     public boolean mkdirs(final Path path, final FsPermission permission) throws IOException {
         LOG.debug("Requested mkdirs on path {}", path);
         Path currentPath = path;
+        if (this.dataStore.isDirectory(path)) {
+            LOG.debug("Path already exists, nothing to create");
+            return true;
+        }
 
         FileStatus status = this.getNullableFileStatus(currentPath);
 

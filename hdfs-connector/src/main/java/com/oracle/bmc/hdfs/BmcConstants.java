@@ -67,6 +67,8 @@ public final class BmcConstants {
     public static final String CONNECTION_TIMEOUT_MILLIS_KEY =
             "fs.oci.client.http.connectiontimeout";
 
+    public static final String MULTIREGION_ENABLED_KEY = "fs.oci.client.multiregion.enabled";
+
     public static final String READ_TIMEOUT_MILLIS_KEY = "fs.oci.client.http.readtimeout";
 
     public static final String MULTIPART_ALLOWED_KEY = "fs.oci.client.multipart.allowed";
@@ -127,6 +129,9 @@ public final class BmcConstants {
 
     public static final String OBJECT_PAYLOAD_CACHING_ENABLED_KEY =
             "fs.oci.caching.object.payload.enabled";
+
+    public static final String REQUIRE_DIRECTORY_MARKER_KEY =
+            "fs.oci.require.directory.marker";
 
     public static final String OBJECT_PAYLOAD_CACHING_MAXIMUM_WEIGHT_IN_BYTES_KEY =
             "fs.oci.caching.object.payload.maxweight.bytes";
@@ -213,6 +218,7 @@ public final class BmcConstants {
                         .put(PEM_FILE_PATH_KEY, "fs.oraclebmc.client.auth.pemfilepath")
                         .put(PASS_PHRASE_KEY, "fs.oraclebmc.client.auth.passphrase")
                         .put(REGION_CODE_OR_ID_KEY, "fs.oraclebmc.client.regionCodeOrId")
+                        .put(MULTIREGION_ENABLED_KEY, "fs.oraclebmc.client.multiregion.enabled")
                         .put(
                                 CONNECTION_TIMEOUT_MILLIS_KEY,
                                 "fs.oraclebmc.client.http.connectiontimeout")

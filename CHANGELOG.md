@@ -3,6 +3,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.4.1.2.1 - 2023-10-20
+### Added
+- Add multi-region support for the same configuration.  This feature can be enabled by setting `fs.oci.client.multiregion.enabled` to true. Once enabled, the user has the option to append a region code or ID after the namespace in the `oci://<bucket>@<namespace>.<region>/file` format. This action will result in the creation of a dedicated BmcFilesystem instance for the specified region. Your applications can then make use of different URIs to create BmcFilesystem instances, each directed towards distinct endpoints.
+
+### Changed
+- Removed unnecessary HeadObject requests on directory objects for getFileStatus
+- Enhanced object creation process by eliminating redundant ListObjects requests
+
+### Fixed
+- Fixed the problem that resulted in the premature termination of reading a single byte from an object using BmcParallelReadAheadFSInputStream
+
 ## 3.3.4.1.2.0 - 2023-06-22
 ### Added
 - Added support for namespace-prefixed domains in the Object Storage service
