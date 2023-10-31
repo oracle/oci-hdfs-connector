@@ -64,10 +64,17 @@ You can find information on any known issues with the connector [here](https://d
 
 **Direct link to this issue**: [Potential data corruption issue with OCI HDFS Connector on binary data upload with `RefreshableOnNotAuthenticatedProvider`](https://docs.cloud.oracle.com/en-us/iaas/Content/knownissues.htm#knownissues_topic_Potential_data_corruption_with_OCI_Java_SDK_on_binary_data_upload_with_RefreshableOnNotAuthenticatedProvider_HDFS)
 
+## Contributing
+
+This project welcomes contributions from the community. Before submitting a pull request, please [review our contribution guide](./CONTRIBUTING.md)
+
+## Security
+
+Please consult the [security guide](./SECURITY.md) for our responsible security vulnerability disclosure process
 
 ## License
 
-Copyright (c) 2016, 2020, Oracle and/or its affiliates.  All rights reserved.
+Copyright (c) 2016, 2023, Oracle and/or its affiliates.  All rights reserved.
 This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
 or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
 
