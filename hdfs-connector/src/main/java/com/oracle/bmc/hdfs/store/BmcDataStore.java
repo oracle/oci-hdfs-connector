@@ -32,6 +32,7 @@ import java.util.regex.Pattern;
 
 import com.google.common.base.Function;
 import java.util.function.Supplier;
+import com.google.common.base.Stopwatch;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheBuilderSpec;
 import com.google.common.cache.CacheLoader;
@@ -44,6 +45,11 @@ import com.oracle.bmc.hdfs.BmcConstants;
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.caching.CachingObjectStorage;
 import com.oracle.bmc.hdfs.caching.ConsistencyPolicy;
+import com.oracle.bmc.hdfs.monitoring.OCIMetricKeys;
+import com.oracle.bmc.hdfs.monitoring.OCIMonitorPlugin;
+import com.oracle.bmc.hdfs.monitoring.OCIMonitorPluginHandler;
+import com.oracle.bmc.hdfs.monitoring.StatsMonitorInputStream;
+import com.oracle.bmc.hdfs.monitoring.StatsMonitorOutputStream;
 import com.oracle.bmc.hdfs.util.BiFunction;
 import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
 import com.oracle.bmc.hdfs.util.DirectExecutorService;
@@ -52,9 +58,12 @@ import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
 import com.oracle.bmc.objectstorage.model.ObjectSummary;
 import com.oracle.bmc.objectstorage.requests.CreateMultipartUploadRequest;
+import com.oracle.bmc.objectstorage.requests.DeleteObjectRequest;
 import com.oracle.bmc.objectstorage.requests.GetObjectRequest;
+import com.oracle.bmc.objectstorage.requests.HeadObjectRequest;
 import com.oracle.bmc.objectstorage.requests.ListObjectsRequest;
 import com.oracle.bmc.objectstorage.requests.PutObjectRequest;
+import com.oracle.bmc.objectstorage.responses.DeleteObjectResponse;
 import com.oracle.bmc.objectstorage.responses.GetObjectResponse;
 import com.oracle.bmc.objectstorage.responses.HeadObjectResponse;
 import com.oracle.bmc.objectstorage.responses.ListObjectsResponse;
@@ -121,12 +130,15 @@ public class BmcDataStore {
 
     private int recursiveDirListingFetchSize;
 
+    private OCIMonitorPluginHandler ociMonitorPluginHandler;
+
     public BmcDataStore(
             final BmcPropertyAccessor propertyAccessor,
             final ObjectStorage objectStorage,
             final String namespace,
             final String bucket,
-            final Statistics statistics) {
+            final Statistics statistics,
+            OCIMonitorPluginHandler ociMonitorPluginHandler) {
         this.propertyAccessor = propertyAccessor;
         this.objectStorage = configureObjectStorage(objectStorage, propertyAccessor);
         this.statistics = statistics;
@@ -186,6 +198,7 @@ public class BmcDataStore {
         this.parallelMd5executor = this.createParallelMd5Executor(propertyAccessor);
         this.recursiveDirListingFetchSize =
                 propertyAccessor.asInteger().get(BmcProperties.RECURSIVE_DIR_LISTING_FETCH_SIZE);
+        this.ociMonitorPluginHandler = ociMonitorPluginHandler;
     }
 
     public static int getReadAheadSizeInBytes(BmcPropertyAccessor propertyAccessor) {
@@ -621,7 +634,7 @@ public class BmcDataStore {
                 LOG.debug("Making request with next token {}", nextToken);
                 request = this.requestBuilder.listObjects(sourceDirectory, nextToken, null, 1000);
 
-                response = this.objectStorage.listObjects(request);
+                response = getListObjectsResponse(request);
                 this.statistics.incrementReadOps(1);
 
                 final List<ObjectSummary> summaries = response.getListObjects().getObjects();
@@ -637,6 +650,58 @@ public class BmcDataStore {
         }
 
         renameOperationsUsingExecutor(objectsToRename, sourceDirectory, destinationDirectory);
+    }
+
+    private ListObjectsResponse getListObjectsResponse(ListObjectsRequest request) {
+        Stopwatch sw = Stopwatch.createStarted();
+        ListObjectsResponse response;
+        try {
+            response = this.objectStorage.listObjects(request);
+            sw.stop();
+            recordOCIStats(OCIMetricKeys.LIST, sw.elapsed(TimeUnit.MILLISECONDS), null);
+        } catch (Exception e) {
+            sw.stop();
+            recordOCIStats(OCIMetricKeys.LIST, sw.elapsed(TimeUnit.MILLISECONDS), e);
+            throw e;
+        }
+        return response;
+    }
+
+    private HeadObjectResponse getHeadObjectResponse(HeadObjectRequest request) {
+        Stopwatch sw = Stopwatch.createStarted();
+        HeadObjectResponse response;
+        try {
+            response = this.objectStorage.headObject(request);
+            sw.stop();
+            recordOCIStats(OCIMetricKeys.HEAD, sw.elapsed(TimeUnit.MILLISECONDS), null);
+        } catch (Exception e) {
+            sw.stop();
+            if (e instanceof BmcException) {
+                if (((BmcException) e).getStatusCode() == 404) {
+                    // Don't record 404 status code as an error. But it should go as a success metric.
+                    recordOCIStats(OCIMetricKeys.HEAD, sw.elapsed(TimeUnit.MILLISECONDS), null);
+                } else {
+                    recordOCIStats(OCIMetricKeys.HEAD, sw.elapsed(TimeUnit.MILLISECONDS), e);
+                }
+            }
+            throw e;
+        }
+        return response;
+    }
+
+    private DeleteObjectResponse getDeleteObjectResponse(DeleteObjectRequest request) {
+        Stopwatch sw = Stopwatch.createStarted();
+        DeleteObjectResponse response;
+        try {
+            response = this.objectStorage.deleteObject(request);
+            sw.stop();
+            recordOCIStats(OCIMetricKeys.DELETE, sw.elapsed(TimeUnit.MILLISECONDS), null);
+        } catch (Exception e) {
+            sw.stop();
+            recordOCIStats(OCIMetricKeys.DELETE, sw.elapsed(TimeUnit.MILLISECONDS), e);
+            throw e;
+        }
+        return response;
     }
 
     private void renameOperationsUsingExecutor(
@@ -655,7 +720,7 @@ public class BmcDataStore {
                             new RenameOperation(
                                     this.objectStorage,
                                     this.requestBuilder.renameObject(
-                                            objectToRename, newObjectName)));
+                                            objectToRename, newObjectName), ociMonitorPluginHandler));
             renameResponses.add(new RenameResponse(objectToRename, newObjectName, futureResponse));
         }
         awaitRenameOperationTermination(renameResponses);
@@ -721,7 +786,7 @@ public class BmcDataStore {
                     new RenameOperation(
                             this.objectStorage,
                             this.requestBuilder.renameObject(
-                                    sourceObject, destinationObject))
+                                    sourceObject, destinationObject), ociMonitorPluginHandler)
                             .call();
             this.statistics.incrementWriteOps(1); // 1 put
             LOG.debug("Newly renamed object has eTag {}", newEntityTag);
@@ -749,7 +814,7 @@ public class BmcDataStore {
         LOG.debug("Attempting to delete object {} from path {}", object, path);
 
         try {
-            this.objectStorage.deleteObject(this.requestBuilder.deleteObject(object));
+            getDeleteObjectResponse(this.requestBuilder.deleteObject(object));
             // Invalidate the cache after deleting the object to ensure data consistency when objectMetadataCache is enabled
             this.objectMetadataCache.invalidate(object);
             this.statistics.incrementWriteOps(1);
@@ -778,7 +843,7 @@ public class BmcDataStore {
         LOG.debug("Attempting to delete directory {} from path {}", directory, path);
 
         try {
-            this.objectStorage.deleteObject(this.requestBuilder.deleteObject(directory));
+            getDeleteObjectResponse(this.requestBuilder.deleteObject(directory));
             // Invalidate the cache after deleting the directory to ensure data consistency when objectMetadataCache is enabled
             this.objectMetadataCache.invalidate(this.pathToObject(path));
             this.statistics.incrementWriteOps(1);
@@ -846,7 +911,7 @@ public class BmcDataStore {
 
         final ListObjectsResponse response;
         try {
-            response = this.objectStorage.listObjects(request);
+            response = getListObjectsResponse(request);
         } catch (final BmcException e) {
             LOG.debug("Failed to list objects for {}", key, e);
             throw new IOException("Unable to determine if path is a directory", e);
@@ -888,7 +953,8 @@ public class BmcDataStore {
             do {
                 LOG.debug("Listing objects with next token {}", nextToken);
                 request = this.requestBuilder.listObjects(key, nextToken, "/", 1000);
-                response = this.objectStorage.listObjects(request);
+                response = getListObjectsResponse(request);
+
                 nextToken =
                         calculateNextToken(
                                 response.getListObjects().getNextStartWith(),
@@ -921,6 +987,10 @@ public class BmcDataStore {
         return entries;
     }
 
+    private void recordOCIStats(String key, long overallTime, Exception e) {
+        ociMonitorPluginHandler.recordStats(key, overallTime, e);
+    }
+
     /**
      * A method to list all files/dirs in a given directory in a flat manner. This is done without using any
      * delimiters in the OSS list objects API.
@@ -940,7 +1010,7 @@ public class BmcDataStore {
 
             ListObjectsRequest request = this.requestBuilder.listObjects(
                     key, nextToken, null, recursiveDirListingFetchSize);
-            ListObjectsResponse response = this.objectStorage.listObjects(request);
+            ListObjectsResponse response = getListObjectsResponse(request);
 
             List<ObjectSummary> summaries = response.getListObjects().getObjects();
 
@@ -1006,7 +1076,7 @@ public class BmcDataStore {
         LOG.debug("Getting content summary for path {}, object {}", path, objKey);
 
         try {
-            HeadObjectResponse response = this.objectStorage.headObject(this.requestBuilder.headObject(objKey));
+            HeadObjectResponse response = getHeadObjectResponse(this.requestBuilder.headObject(objKey));
             this.statistics.incrementReadOps(1);
             return new ContentSummary.Builder()
                     .length(response.getContentLength())
@@ -1034,7 +1104,7 @@ public class BmcDataStore {
             do {
                 LOG.debug("Listing objects with next token {}", nextToken);
                 request = this.requestBuilder.listObjects(key, nextToken, null, 1000);
-                response = this.objectStorage.listObjects(request);
+                response = getListObjectsResponse(request);
                 nextToken = response.getListObjects().getNextStartWith();
 
                 this.statistics.incrementReadOps(1);
@@ -1159,7 +1229,7 @@ public class BmcDataStore {
         }
 
         try {
-            HeadObjectResponse response = this.objectStorage.headObject(this.requestBuilder.headObject(key));
+            HeadObjectResponse response = getHeadObjectResponse(this.requestBuilder.headObject(key));
             return new FileStatusInfo(response.getContentLength(),
                     false,
                     response.getLastModified().getTime());
@@ -1224,7 +1294,7 @@ public class BmcDataStore {
         if (propertyAccessor.asBoolean().get(BmcProperties.REQUIRE_DIRECTORY_MARKER)) {
             // The property is true, so we assume if the directory exists it has a placeholder object.
             try {
-                HeadObjectResponse response = this.objectStorage.headObject(this.requestBuilder.headObject(key));
+                HeadObjectResponse response = getHeadObjectResponse(this.requestBuilder.headObject(key));
                 return new FileStatusInfo(0L,
                         true,
                         response.getLastModified().getTime());
@@ -1246,7 +1316,7 @@ public class BmcDataStore {
 
         final ListObjectsResponse response;
         try {
-            response = this.objectStorage.listObjects(request);
+            response = getListObjectsResponse(request);
         } catch (final BmcException e) {
             LOG.debug("Failed to list objects for {}", key, e);
             throw new IOException("Unable to determine if path is a directory", e);
@@ -1312,30 +1382,33 @@ public class BmcDataStore {
             return readStreamInstance;
         }
         if (this.useInMemoryReadBuffer) {
-            return new BmcInMemoryFSInputStream(
-                    this.objectStorage, status, requestBuilder, this.statistics);
+            return new StatsMonitorInputStream(new BmcInMemoryFSInputStream(
+                    this.objectStorage, status, requestBuilder, this.statistics), ociMonitorPluginHandler);
         }
         if (this.useReadAhead) {
             if (this.readAheadBlockCount > 1) {
-                return new BmcParallelReadAheadFSInputStream(
-                        this.objectStorage,
-                        status,
-                        requestBuilder,
-                        this.statistics,
-                        this.parallelDownloadExecutor,
-                        this.readAheadSizeInBytes,
-                        this.readAheadBlockCount);
+                return new StatsMonitorInputStream(
+                        new BmcParallelReadAheadFSInputStream(
+                                this.objectStorage,
+                                status,
+                                requestBuilder,
+                                this.statistics,
+                                this.parallelDownloadExecutor,
+                                this.readAheadSizeInBytes,
+                                this.readAheadBlockCount), ociMonitorPluginHandler);
             }
-            return new BmcReadAheadFSInputStream(
-                    this.objectStorage,
-                    status,
-                    requestBuilder,
-                    this.statistics,
-                    this.readAheadSizeInBytes,
-                    this.parquetCacheString);
+            return new StatsMonitorInputStream(
+                    new BmcReadAheadFSInputStream(
+                            this.objectStorage,
+                            status,
+                            requestBuilder,
+                            this.statistics,
+                            this.readAheadSizeInBytes,
+                            this.parquetCacheString), ociMonitorPluginHandler);
         } else {
-            return new BmcDirectFSInputStream(
-                    this.objectStorage, status, requestBuilder, this.statistics);
+            return new StatsMonitorInputStream(
+                    new BmcDirectFSInputStream(
+                            this.objectStorage, status, requestBuilder, this.statistics), ociMonitorPluginHandler);
         }
     }
 
@@ -1394,15 +1467,15 @@ public class BmcDataStore {
                             .multipartUploadRequest(createMultipartUploadRequest)
                             .allowOverwrite(allowOverwrite)
                             .build();
-            return new BmcMultipartOutputStream(
+            return new StatsMonitorOutputStream(new BmcMultipartOutputStream(
                     this.propertyAccessor, multipartUploadRequest, bufferSizeInBytes,
-                    this.parallelMd5executor);
+                    this.parallelMd5executor), ociMonitorPluginHandler);
         } else if (this.useInMemoryWriteBuffer) {
-            return new BmcInMemoryOutputStream(
-                    this.uploadManager, bufferSizeInBytes, requestBuilderFn);
+            return new StatsMonitorOutputStream(new BmcInMemoryOutputStream(
+                    this.uploadManager, bufferSizeInBytes, requestBuilderFn), ociMonitorPluginHandler);
         } else {
-            return new BmcFileBackedOutputStream(
-                    this.propertyAccessor, this.uploadManager, requestBuilderFn);
+            return new StatsMonitorOutputStream(new BmcFileBackedOutputStream(
+                    this.propertyAccessor, this.uploadManager, requestBuilderFn), ociMonitorPluginHandler);
         }
     }
 

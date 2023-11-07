@@ -52,6 +52,11 @@ public abstract class BmcFSInputStream extends FSInputStream {
     protected long currentPosition = 0;
     protected boolean closed = false;
 
+    // The following two variables are used to track if it's the first time a read is being done,
+    // and reduce the length of the read to 1MB (if greater), in order to calculate the TTFB correctly.
+    protected boolean firstRead = true;
+    protected static final int FIRST_READ_WINDOW_SIZE = 1 * 1024 * 1024;
+
     @Override
     public long getPos() throws IOException {
         return this.currentPosition;

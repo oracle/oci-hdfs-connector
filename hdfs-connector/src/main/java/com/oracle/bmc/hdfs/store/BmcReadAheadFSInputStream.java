@@ -198,7 +198,13 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
     private void fillBuffer() throws IOException {
         LOG.debug("{}: Filling buffer at {} length {}", this, filePos, status.getLen());
         long start = filePos;
-        long end = Math.min(filePos + ociReadAheadBlockSize, status.getLen());
+        long end;
+        if (firstRead) {
+            firstRead = false;
+            end = Math.min(filePos + FIRST_READ_WINDOW_SIZE, status.getLen());
+        } else {
+            end = Math.min(filePos + ociReadAheadBlockSize, status.getLen());
+        }
         if (end == start) {
             return;
         }

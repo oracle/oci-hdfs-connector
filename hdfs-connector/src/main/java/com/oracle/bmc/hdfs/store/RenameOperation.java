@@ -6,7 +6,12 @@
 package com.oracle.bmc.hdfs.store;
 
 import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
 
+import com.google.common.base.Stopwatch;
+import com.oracle.bmc.hdfs.monitoring.OCIMetricKeys;
+import com.oracle.bmc.hdfs.monitoring.OCIMonitorPlugin;
+import com.oracle.bmc.hdfs.monitoring.OCIMonitorPluginHandler;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 
 import com.oracle.bmc.objectstorage.requests.RenameObjectRequest;
@@ -23,6 +28,8 @@ public class RenameOperation implements Callable<String> {
     private final ObjectStorage objectStorage;
     private final RenameObjectRequest renameRequest;
 
+    private final OCIMonitorPluginHandler ociMonitorPluginHandler;
+
     /**
      * Delete will not happen if the copy fails. Returns the entity tag of the newly copied renamed object.
      * <p>
@@ -34,7 +41,23 @@ public class RenameOperation implements Callable<String> {
                 "Renaming object from {} to {}.",
                 this.renameRequest.getRenameObjectDetails().getSourceName(),
                 this.renameRequest.getRenameObjectDetails().getNewName());
-        RenameObjectResponse renameResponse = this.objectStorage.renameObject(this.renameRequest);
-        return renameResponse.getETag();
+
+        Stopwatch sw = Stopwatch.createStarted();
+        try {
+            RenameObjectResponse renameResponse = this.objectStorage.renameObject(this.renameRequest);
+            sw.stop();
+            recordRenameStats(sw.elapsed(TimeUnit.MILLISECONDS), null);
+            return renameResponse.getETag();
+        } catch (Exception e) {
+            sw.stop();
+            recordRenameStats(sw.elapsed(TimeUnit.MILLISECONDS), e);
+            throw e;
+        }
+    }
+
+    private void recordRenameStats(long overallTime, Exception e) {
+        if (ociMonitorPluginHandler.isEnabled()) {
+            ociMonitorPluginHandler.recordStats(OCIMetricKeys.RENAME, overallTime, e);
+        }
     }
 }
