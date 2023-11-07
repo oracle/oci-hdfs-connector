@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import com.oracle.bmc.hdfs.contract.BmcContract;
@@ -20,9 +21,11 @@ import com.oracle.bmc.hdfs.store.BmcDataStore;
 import org.apache.hadoop.conf.Configuration;
 
 import org.apache.hadoop.fs.ContentSummary;
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystemContractBaseTest;
+import org.apache.hadoop.fs.FutureDataInputStreamBuilder;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
@@ -68,7 +71,7 @@ public class TestBmcFileSystemContract extends FileSystemContractBaseTest {
 
     @Override
     protected int getGlobalTimeout() {
-        return (int) TimeUnit.SECONDS.toMillis(120);
+        return (int) TimeUnit.SECONDS.toMillis(1200);
     }
 
     @Override

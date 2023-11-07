@@ -12,7 +12,7 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.3.4.1.2.1</version>
+    <version>3.3.4.1.3.0</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -333,6 +333,11 @@
     <dependency>
       <groupId>com.oracle.oci.sdk</groupId>
       <artifactId>oci-java-sdk-objectstorage-generated</artifactId>
+      <version>${oci.java.sdk.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.oracle.oci.sdk</groupId>
+      <artifactId>oci-java-sdk-monitoring</artifactId>
       <version>${oci.java.sdk.version}</version>
     </dependency>
     <dependency>

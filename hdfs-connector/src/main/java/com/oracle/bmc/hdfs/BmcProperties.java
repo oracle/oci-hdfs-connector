@@ -7,6 +7,7 @@ package com.oracle.bmc.hdfs;
 
 import com.oracle.bmc.auth.BasicAuthenticationDetailsProvider;
 import com.oracle.bmc.hdfs.caching.StrongConsistencyPolicy;
+import com.oracle.bmc.hdfs.monitoring.OCIMonitorConsumerPlugin;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 
 import com.oracle.bmc.ClientConfiguration;
@@ -510,7 +511,70 @@ public enum BmcProperties {
      * to be listed in one call to OSS Service (essentially the page size of the OSS listing API).
      * See {@link BmcConstants#RECURSIVE_DIR_LISTING_FETCH_SIZE_KEY} for config key name.
      */
-    RECURSIVE_DIR_LISTING_FETCH_SIZE(RECURSIVE_DIR_LISTING_FETCH_SIZE_KEY, 1000)
+    RECURSIVE_DIR_LISTING_FETCH_SIZE(RECURSIVE_DIR_LISTING_FETCH_SIZE_KEY, 1000),
+
+    /**
+     * (String, optional) This defines what plugins are available to consume the metrics collected by the OCI
+     * monitoring framework. This has to be the fully qualified classname of the class extending the
+     * {@link OCIMonitorConsumerPlugin} class. Comma separated values are accepted.
+     * for multiple plugins.
+     * See {@link BmcConstants#OCI_MON_TELEMETRY_INGESTION_ENDPOINT_KEY} for config key name.
+     */
+    OCI_MONITORING_CONSUMER_PLUGINS(OCI_MONITORING_CONSUMER_PLUGINS_KEY,
+            "com.oracle.bmc.hdfs.monitoring.OCIMonitorPlugin"),
+
+    /**
+     * (String, optional) The endpoint for telemetry ingestion. This is required if OCI monitoring is enabled.
+     * A typical endpoint is like the following: https://telemetry-ingestion.us-ashburn-1.oraclecloud.com
+     * See {@link BmcConstants#OCI_MON_TELEMETRY_INGESTION_ENDPOINT_KEY} for config key name.
+     */
+    OCI_MON_TELEMETRY_INGESTION_ENDPOINT(OCI_MON_TELEMETRY_INGESTION_ENDPOINT_KEY, null),
+
+    /**
+     * (String, optional) The compartment OCID to which the metrics will be emitted. This compartment should
+     * have the right Identity policies setup for receiving monitoring information. This field is mandatory only if
+     * the OCI monitoring is enabled.
+     * See {@link BmcConstants#OCI_MON_COMPARTMENT_OCID_KEY} for config key name.
+     */
+    OCI_MON_COMPARTMENT_OCID(OCI_MON_COMPARTMENT_OCID_KEY, null),
+
+    /**
+     * (String, optional) This is the unique identifier used to group analytics values. For example it could be the
+     * ID of the HDFS cluster. All the metrics belonging to this ID are grouped together on OCI monitoring no matter
+     * where they are emitted from. This field is mandatory only if OCI monitoring is enabled.
+     * See {@link BmcConstants#OCI_MON_GROUPING_CLUSTER_ID_KEY} for config key name.
+     */
+    OCI_MON_GROUPING_CLUSTER_ID(OCI_MON_GROUPING_CLUSTER_ID_KEY, null),
+
+    /**
+     * (String, optional) This is the resource group name on the OCI monitoring.
+     * See {@link BmcConstants#OCI_MON_RG_NAME_KEY} for config key name.
+     */
+    OCI_MON_RG_NAME(OCI_MON_RG_NAME_KEY, "apicallstest"),
+
+    /**
+     * (String, optional) This is the namespace name on the OCI monitoring.
+     * See {@link BmcConstants#OCI_MON_NS_NAME_KEY} for config key name.
+     */
+    OCI_MON_NS_NAME(OCI_MON_NS_NAME_KEY, "ocihdfsconnector"),
+
+    /**
+     * (boolean, optional) This field determines if the stats are emitted with bucket name as a dimension or not.
+     * See {@link BmcConstants#OCI_MON_BUCKET_LEVEL_ENABLED_KEY} for config key name.
+     */
+    OCI_MON_BUCKET_LEVEL_ENABLED(OCI_MON_BUCKET_LEVEL_ENABLED_KEY, true),
+
+    /**
+     * (Integer, optional) The sleep time for the monitor thread in between runs.
+     * See {@link BmcConstants#OCI_MON_EMIT_THREAD_POLL_INTERVAL_SECONDS_KEY} for config key name.
+     */
+    OCI_MON_EMIT_THREAD_POLL_INTERVAL_SECONDS(OCI_MON_EMIT_THREAD_POLL_INTERVAL_SECONDS_KEY, 2),
+
+    /**
+     * (Integer, optional) The maximum backlog that will be allowed in the list before no-admit.
+     * See {@link BmcConstants#OCI_MON_MAX_BACKLOG_BEFORE_DROP_KEY} for config key name.
+     */
+    OCI_MON_MAX_BACKLOG_BEFORE_DROP(OCI_MON_MAX_BACKLOG_BEFORE_DROP_KEY, 100000)
     ;
 
     @Getter private final String propertyName;

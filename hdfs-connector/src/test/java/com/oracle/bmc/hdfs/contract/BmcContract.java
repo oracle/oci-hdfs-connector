@@ -78,4 +78,13 @@ public class BmcContract extends AbstractBondedFSContract {
             this.addConfResource(FILESYSTEM_CACHING_XML);
         }
     }
+
+    public static class StatsMonitorStream extends BmcContract {
+        public static final String STATS_MON_STREAM_XML = "contract/oci-statsmonitorstream.xml";
+
+        public StatsMonitorStream(Configuration conf) {
+            super(conf);
+            this.addConfResource(STATS_MON_STREAM_XML);
+        }
+    }
 }

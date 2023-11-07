@@ -193,6 +193,20 @@ public final class BmcConstants {
     public static final String RECURSIVE_DIR_LISTING_FETCH_SIZE_KEY = "fs.oci.dir.recursive.list.fetch.size";
 
     /**
+     * Following are the properties related to OCI monitoring for the connector
+     */
+    public static final String OCI_MONITORING_CONSUMER_PLUGINS_KEY = "fs.oci.mon.consumer.plugins";
+    public static final String OCI_MON_TELEMETRY_INGESTION_ENDPOINT_KEY = "fs.oci.mon.telemetry.ingestion.endpoint";
+    public static final String OCI_MON_COMPARTMENT_OCID_KEY = "fs.oci.mon.compartment.ocid";
+    public static final String OCI_MON_GROUPING_CLUSTER_ID_KEY = "fs.oci.mon.grouping.cluster.id";
+    public static final String OCI_MON_RG_NAME_KEY = "fs.oci.mon.rg.name";
+    public static final String OCI_MON_NS_NAME_KEY = "fs.oci.mon.ns.name";
+    public static final String OCI_MON_BUCKET_LEVEL_ENABLED_KEY = "fs.oci.mon.bucket.level.enabled";
+    public static final String OCI_MON_EMIT_THREAD_POLL_INTERVAL_SECONDS_KEY
+            = "fs.oci.emit.thread.poll.interval.seconds";
+    public static final String OCI_MON_MAX_BACKLOG_BEFORE_DROP_KEY = "fs.oci.mon.max.backlog.before.drop";
+
+    /**
      * This class contains constants with deprecated values. The HDFS connector will first try the current values
      * in {@link com.oracle.bmc.hdfs.BmcConstants}.
      */

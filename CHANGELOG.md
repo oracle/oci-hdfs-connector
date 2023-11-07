@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.4.1.3.0 - 2023-11-07
+### Added
+- Added observability feature that generates metrics pertaining to operations conducted through the connector, such as reading, writing, and deleting data. 
+
 ## 3.3.4.1.2.1 - 2023-10-20
 ### Added
 - Add multi-region support for the same configuration.  This feature can be enabled by setting `fs.oci.client.multiregion.enabled` to true. Once enabled, the user has the option to append a region code or ID after the namespace in the `oci://<bucket>@<namespace>.<region>/file` format. This action will result in the creation of a dedicated BmcFilesystem instance for the specified region. Your applications can then make use of different URIs to create BmcFilesystem instances, each directed towards distinct endpoints.

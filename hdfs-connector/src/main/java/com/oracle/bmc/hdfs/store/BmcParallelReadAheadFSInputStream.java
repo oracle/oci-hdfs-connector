@@ -256,7 +256,15 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
                    adjust the readLength to the block size to avoid submitting multiple I/O requests for a single block.
                    This improves performance and reduces the likelihood of issues related to partial block reads
                  */
-                int readLength = (int) Math.min(this.ociReadAheadBlockSize, endPos - curPos);
+                int readLength;
+                if (firstRead) {
+                    // Only for first read make the readLength lesser so that we can get as near to an accurate
+                    // ttfb for reads as possible.
+                    firstRead = false;
+                    readLength = (int) Math.min(FIRST_READ_WINDOW_SIZE, endPos - curPos);
+                } else {
+                    readLength = (int) Math.min(this.ociReadAheadBlockSize, endPos - curPos);
+                }
                 Map.Entry<Long, CachedRead> nextEntry = cachedData.higherEntry(curPos);
                 if (nextEntry != null) {
                     long nextStartPos = nextEntry.getKey();

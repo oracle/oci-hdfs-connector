@@ -37,27 +37,31 @@ import com.oracle.bmc.auth.SimplePrivateKeySupplier;
 import com.oracle.bmc.auth.internal.DelegationTokenConfigurator;
 import com.oracle.bmc.hdfs.BmcConstants;
 import com.oracle.bmc.hdfs.BmcProperties;
+import com.oracle.bmc.hdfs.monitoring.OCIMonitorConsumerPlugin;
+import com.oracle.bmc.hdfs.monitoring.OCIMonitorPlugin;
+import com.oracle.bmc.hdfs.monitoring.OCIMonitorPluginHandler;
 import com.oracle.bmc.hdfs.waiter.ResettingExponentialBackoffStrategy;
 import com.oracle.bmc.http.ClientConfigurator;
 import com.oracle.bmc.http.client.Options;
 import com.oracle.bmc.http.client.ProxyConfiguration;
 import com.oracle.bmc.http.client.StandardClientProperties;
-import com.oracle.bmc.http.client.jersey.apacheconfigurator.ApacheConnectionPoolConfig;
 import com.oracle.bmc.http.client.jersey.ApacheClientProperties;
 import com.oracle.bmc.http.client.jersey.JerseyClientProperties;
 import com.oracle.bmc.http.client.jersey.JerseyClientProperty;
+import com.oracle.bmc.http.client.jersey.apacheconfigurator.ApacheConnectionPoolConfig;
+import com.oracle.bmc.monitoring.MonitoringClient;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.ObjectStorageClient;
 import com.oracle.bmc.retrier.RetryConfiguration;
 import com.oracle.bmc.util.StreamUtils;
 import com.oracle.bmc.util.internal.FileUtils;
+import com.oracle.bmc.util.internal.StringUtils;
 import com.oracle.bmc.waiter.ExponentialBackoffDelayStrategy;
 import com.oracle.bmc.waiter.ExponentialBackoffDelayStrategyWithJitter;
-import com.oracle.bmc.waiter.WaiterConfiguration;
 import com.oracle.bmc.waiter.MaxTimeTerminationStrategy;
+import com.oracle.bmc.waiter.WaiterConfiguration;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import com.oracle.bmc.util.internal.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem.Statistics;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
@@ -68,6 +72,8 @@ import javax.ws.rs.client.Client;
 import javax.ws.rs.client.ClientBuilder;
 import javax.ws.rs.client.WebTarget;
 import javax.ws.rs.core.MediaType;
+import java.util.ArrayList;
+import java.util.List;
 
 import static com.oracle.bmc.Region.enableInstanceMetadataService;
 import static com.oracle.bmc.auth.AbstractFederationClientAuthenticationDetailsProviderBuilder.AUTHORIZATION_HEADER_VALUE;
@@ -133,12 +139,193 @@ public class BmcDataStoreFactory {
                 LOG.info("Multi-region support enabled, namespace {}, region {}", namespaceName, regionCodeOrId);
             }
         }
+
+        OCIMonitorPluginHandler monPluginHandler = initMonitoringConsumerPlugins(propertyAccessor, bucket, namespace);
+
         return new BmcDataStore(
                 propertyAccessor,
                 this.createClient(propertyAccessor),
                 namespaceName,
                 bucket,
-                statistics);
+                statistics, monPluginHandler);
+    }
+
+    private OCIMonitorPluginHandler initMonitoringConsumerPlugins(BmcPropertyAccessor propertyAccessor,
+                                                                  String bucketName, String ossNamespaceName) {
+        OCIMonitorPluginHandler pluginHandler = new OCIMonitorPluginHandler();
+
+        String plugins = propertyAccessor.asString().get(BmcProperties.OCI_MONITORING_CONSUMER_PLUGINS);
+        if (!StringUtils.isEmpty(plugins)) {
+
+            String monGroupingClusterID = propertyAccessor.asString().get(BmcProperties.OCI_MON_GROUPING_CLUSTER_ID);
+            if (StringUtils.isEmpty(monGroupingClusterID)) {
+                LOG.info("OCI monitoring framework is enabled, but the unique ID for identifying the HDFS cluster" +
+                        " is not provided. Not initalizing monitoring framework.");
+                pluginHandler.setEnabled(false);
+                return pluginHandler;
+            }
+
+            int maxBacklogBeforeDrop = propertyAccessor.asInteger().get(BmcProperties.OCI_MON_MAX_BACKLOG_BEFORE_DROP);
+            pluginHandler.setMaxBacklogBeforeDrop(maxBacklogBeforeDrop);
+
+            List<OCIMonitorConsumerPlugin> pluginList = new ArrayList<>();
+
+            String[] pluginClasses = plugins.split(",");
+
+            for (String pluginClass : pluginClasses) {
+
+                pluginClass = pluginClass.trim();
+
+                try {
+                    // Special handling for oci monitoring plugin implementation because much of
+                    // init code resides inside the bmcDataStoreFactory.
+                    if (pluginClass.equals("com.oracle.bmc.hdfs.monitoring.OCIMonitorPlugin")) {
+                        OCIMonitorPlugin plugin = initOCIMonitoringPlugin(propertyAccessor, bucketName,
+                                monGroupingClusterID, ossNamespaceName);
+
+                        if (plugin != null) {
+                            pluginList.add(plugin);
+                            LOG.info("Successfully initialized {} to consume OCI metrics.", pluginClass);
+                        }
+                    } else {
+                        Constructor pluginConstructor =
+                                Class.forName(pluginClass).getConstructor(BmcPropertyAccessor.class, String.class,
+                                        String.class, String.class);
+                        OCIMonitorConsumerPlugin plugin = (OCIMonitorConsumerPlugin)
+                                pluginConstructor.newInstance(propertyAccessor, bucketName, monGroupingClusterID,
+                                        ossNamespaceName);
+                        pluginList.add(plugin);
+                        LOG.info("Successfully initialized {} to consume OCI metrics.", pluginClass);
+                    }
+
+                } catch (Exception e) {
+                    LOG.error("Unable to initialize {} due to {}", pluginClass, e);
+                }
+            }
+
+            if (pluginList.size() > 0) {
+                pluginHandler.setEnabled(true);
+                pluginHandler.setListOfPlugins(pluginList);
+                pluginHandler.setBucketName(bucketName);
+                pluginHandler.init();
+                LOG.info("Initialized the OCI monitoring framework successfully.");
+            } else {
+                LOG.info("No plugins found for OCI montioring emit, so disabling the metrics emission.");
+                pluginHandler.setEnabled(false);
+            }
+        }
+        return pluginHandler;
+    }
+
+    private OCIMonitorPlugin initOCIMonitoringPlugin(BmcPropertyAccessor propertyAccessor, String bucketName,
+                                                     String monGroupingClusterID, String ossNamespaceName) {
+        try {
+
+            String telemetryIngestionEndpoint =
+                    propertyAccessor.asString().get(BmcProperties.OCI_MON_TELEMETRY_INGESTION_ENDPOINT);
+            if (StringUtils.isEmpty(telemetryIngestionEndpoint)) {
+                LOG.info("OCI monitoring is enabled, but the telemetry ingestion URL is undefined." +
+                        " Not initalizing OCI monitoring. Example endpoint URL for Ashburn: " +
+                        "https://telemetry-ingestion.us-ashburn-1.oraclecloud.com");
+                return null;
+            }
+
+            String monCompartmentOCID = propertyAccessor.asString().get(BmcProperties.OCI_MON_COMPARTMENT_OCID);
+            if (StringUtils.isEmpty(monCompartmentOCID)) {
+                LOG.info("OCI monitoring is enabled, but the compartment OCID where monitoring is enabled" +
+                        " is not provided. Not initalizing OCI monitoring.");
+                return null;
+            }
+
+            String monRGName = propertyAccessor.asString().get(BmcProperties.OCI_MON_RG_NAME);
+            String monNamespacename = propertyAccessor.asString().get(BmcProperties.OCI_MON_NS_NAME);
+
+            if (StringUtils.isEmpty(monNamespacename)) {
+                LOG.info("OCI monitoring is enabled, but namespace name override is invalid." +
+                        " Not initializing OCI monitoring");
+                return null;
+            }
+
+            boolean bucketLevelStatsEnabled = propertyAccessor.asBoolean().get(BmcProperties.OCI_MON_BUCKET_LEVEL_ENABLED);
+
+            int emitThreadIntervalSeconds =
+                    propertyAccessor.asInteger().get(BmcProperties.OCI_MON_EMIT_THREAD_POLL_INTERVAL_SECONDS);
+
+            long maxBacklogBeforeDrop = propertyAccessor.asInteger().get(BmcProperties.OCI_MON_MAX_BACKLOG_BEFORE_DROP);
+
+            MonitoringClient mc = getMonitoringClient(propertyAccessor);
+
+            OCIMonitorPlugin ociMonitorPlugin = new OCIMonitorPlugin(telemetryIngestionEndpoint, monCompartmentOCID, monGroupingClusterID,
+                    monRGName, monNamespacename, bucketLevelStatsEnabled, emitThreadIntervalSeconds,
+                    maxBacklogBeforeDrop, mc, bucketName, propertyAccessor, ossNamespaceName);
+
+            LOG.info("Initialized OCI monitoring with telemetryIngestionEndpoint:{} monCompartmentOCID:{} " +
+                            "monGroupingClusterID:{} monRGName:{} monNamespacename:{} bucketLevelStatsEnabled:{} " +
+                            "emitThreadIntervalSeconds:{} maxBacklogBeforeDrop:{}",
+                    telemetryIngestionEndpoint, monCompartmentOCID, monGroupingClusterID, monRGName, monNamespacename,
+                    bucketLevelStatsEnabled, emitThreadIntervalSeconds, maxBacklogBeforeDrop);
+
+            return ociMonitorPlugin;
+        } catch (Exception e) {
+            LOG.error("Exception encountered when initializing OCI metrics. Proceeding without OCI metrics init.", e);
+            return null;
+        }
+    }
+
+    private MonitoringClient getMonitoringClient(BmcPropertyAccessor propertyAccessor) {
+        final ClientConfiguration.ClientConfigurationBuilder clientConfigurationBuilder =
+                ClientConfiguration.builder();
+
+        final Integer connectionTimeoutMillis =
+                propertyAccessor.asInteger().get(BmcProperties.CONNECTION_TIMEOUT_MILLIS);
+        if (connectionTimeoutMillis != null) {
+            LOG.info("Setting Monitoring connection timeout to {}", connectionTimeoutMillis);
+            clientConfigurationBuilder.connectionTimeoutMillis(connectionTimeoutMillis);
+        }
+
+        final Integer readTimeoutMillis =
+                propertyAccessor.asInteger().get(BmcProperties.READ_TIMEOUT_MILLIS);
+        if (readTimeoutMillis != null) {
+            LOG.info("Setting Monitoring read timeout to {}", readTimeoutMillis);
+            clientConfigurationBuilder.readTimeoutMillis(readTimeoutMillis);
+        }
+
+        ClientConfiguration clientConfig = clientConfigurationBuilder.build();
+        BasicAuthenticationDetailsProvider authDetailsProvider = this.createAuthenticator(propertyAccessor);
+
+        MonitoringClient.Builder monitoringClientBuilder = MonitoringClient.builder().configuration(clientConfig);
+
+        // TODO: There seems to be an existing bug where, if proxy is enabled the delegation token configurator
+        // is never used in @createClient method down below. For now reusing the code as is.
+        String delegationTokenFilePath =
+                System.getenv(OCI_DELEGATION_TOKEN_FILE) != null
+                        ? System.getenv(OCI_DELEGATION_TOKEN_FILE)
+                        : propertyAccessor
+                        .asString()
+                        .get(BmcProperties.OCI_DELEGATION_TOKEN_FILEPATH);
+        LOG.info("Monitoring delegation token file path: {}", delegationTokenFilePath);
+        if (delegationTokenFilePath != null) {
+            StringBuilder tokenBuilder = new StringBuilder();
+            try (Stream<String> stream =
+                         Files.lines(
+                                 Paths.get(FileUtils.expandUserHome(delegationTokenFilePath)),
+                                 StandardCharsets.UTF_8)) {
+                stream.forEach(s -> tokenBuilder.append(s));
+            } catch (IOException e) {
+                LOG.warn("Exception in reading or parsing delegation token file", e);
+            }
+            String delegationToken = tokenBuilder.toString();
+            monitoringClientBuilder.additionalClientConfigurator(new DelegationTokenConfigurator(delegationToken));
+        }
+
+        String httpProxyUri = propertyAccessor.asString().get(BmcProperties.HTTP_PROXY_URI);
+
+        if (StringUtils.isEmpty(httpProxyUri)) {
+            return monitoringClientBuilder.build(authDetailsProvider);
+        } else {
+            return buildMonitoringClientWithProxy(authDetailsProvider, clientConfig, propertyAccessor, httpProxyUri,
+                    monitoringClientBuilder);
+        }
     }
 
     @VisibleForTesting
@@ -445,6 +632,31 @@ public class BmcDataStoreFactory {
                 ? objectStorageBuilder.build(authDetailsProvider)
                 : buildClientWithProxy(
                         authDetailsProvider, clientConfig, propertyAccessor, httpProxyUri);
+    }
+
+    private MonitoringClient buildMonitoringClientWithProxy(BasicAuthenticationDetailsProvider authDetailsProvider,
+                                                            ClientConfiguration clientConfig,
+                                                            BmcPropertyAccessor propertyAccessor,
+                                                            String httpProxyUri,
+                                                            MonitoringClient.Builder monitoringClientBuilder) {
+        LOG.info("Setting Monitoring HTTP Proxy URI to {}", httpProxyUri);
+        final ApacheConnectionPoolConfig poolConfig = buildApacheConnectionPoolingClientConfig(clientConfig);
+        final ProxyConfiguration proxyConfig = buildApacheProxyConfig(httpProxyUri, propertyAccessor);
+
+        com.oracle.bmc.http.client.jersey.apacheconfigurator.ApacheConnectorProperties
+                apacheConnectorProperties =
+                com.oracle.bmc.http.client.jersey.apacheconfigurator
+                        .ApacheConnectorProperties.builder()
+                        .connectionPoolConfig(poolConfig)
+                        .build();
+
+        final ClientConfigurator clientConnectorPropertiesConfigurator =
+                new ClientConfiguratorWithProxy(
+                        apacheConnectorProperties, proxyConfig, propertyAccessor);
+
+        monitoringClientBuilder.clientConfigurator(clientConnectorPropertiesConfigurator);
+
+        return monitoringClientBuilder.build(authDetailsProvider);
     }
 
     private ObjectStorage buildClientWithProxy(
