@@ -62,6 +62,22 @@ public final class BmcConstants {
 
     public static final String PASS_PHRASE_KEY = "fs.oci.client.auth.passphrase";
 
+    public static final String TOKEN_EXCHANGE_SERVICE_PRINCIPAL_KEY = "fs.oci.client.upst.tokenExchangeServicePrincipal";
+
+    public static final String TOKEN_EXCHANGE_USER_PRINCIPAL_KEY = "fs.oci.client.upst.userPrincipal";
+
+    public static final String TOKEN_EXCHANGE_SERVICE_ISSUER_KEY = "fs.oci.client.upst.issuer";
+
+    public static final String IAM_DOMAIN_APP_CLIENT_ID_KEY = "fs.oci.client.upst.clientId";
+
+    public static final String IAM_DOMAIN_APP_CLIENT_SECRET_KEY = "fs.oci.client.upst.clientSecret";
+
+    public static final String IAM_TOKEN_EXCHANGE_ENDPOINT_URL_KEY = "fs.oci.client.upst.domainUrl";
+
+    public static final String IAM_TOKEN_EXCHANGE_KEYTAB_PATH_KEY = "fs.oci.client.keytab.path";
+
+    public static final String ENABLE_INTERNAL_KINIT_FOR_TOKEN_EXCHANGE_KEY = "fs.oci.client.kinit.internal.mode";
+
     public static final String REGION_CODE_OR_ID_KEY = "fs.oci.client.regionCodeOrId";
 
     public static final String CONNECTION_TIMEOUT_MILLIS_KEY =

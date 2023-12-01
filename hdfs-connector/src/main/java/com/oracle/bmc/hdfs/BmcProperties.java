@@ -6,6 +6,7 @@
 package com.oracle.bmc.hdfs;
 
 import com.oracle.bmc.auth.BasicAuthenticationDetailsProvider;
+import com.oracle.bmc.hdfs.auth.spnego.UPSTAuthenticationCustomAuthenticator;
 import com.oracle.bmc.hdfs.caching.StrongConsistencyPolicy;
 import com.oracle.bmc.hdfs.monitoring.OCIMonitorConsumerPlugin;
 import com.oracle.bmc.objectstorage.ObjectStorage;
@@ -87,6 +88,71 @@ public enum BmcProperties {
      * {@link BmcConstants#PASS_PHRASE_KEY} for config key name.
      */
     PASS_PHRASE(PASS_PHRASE_KEY, null),
+    /**
+     * (string, optional) Service Principal required to use for generating SPNEGO token.
+     * Note: This configuration is only relevant when using {@link UPSTAuthenticationCustomAuthenticator}..
+     * See {@link BmcConstants#TOKEN_EXCHANGE_SERVICE_PRINCIPAL_KEY} for config key name.
+     */
+    TOKEN_EXCHANGE_SERVICE_PRINCIPAL(TOKEN_EXCHANGE_SERVICE_PRINCIPAL_KEY, null),
+    /**
+     * (string, optional) User Principal required to use for generating SPNEGO token.
+     * Note: This configuration is only relevant when using {@link UPSTAuthenticationCustomAuthenticator}.
+     * See {@link BmcConstants#TOKEN_EXCHANGE_SERVICE_PRINCIPAL_KEY} for config key name.
+     */
+    TOKEN_EXCHANGE_USER_PRINCIPAL(TOKEN_EXCHANGE_USER_PRINCIPAL_KEY, null),
+    /**
+     * (string, optional) Issuer required to use for generating SPNEGO token.
+     * Note: This configuration is only relevant when using {@link UPSTAuthenticationCustomAuthenticator}.
+     * See {@link BmcConstants#TOKEN_EXCHANGE_SERVICE_ISSUER_KEY} for config key name.
+     */
+    TOKEN_EXCHANGE_SERVICE_ISSUER(TOKEN_EXCHANGE_SERVICE_ISSUER_KEY, null),
+    /**
+     * (string, optional) The domain application client ID used for IAM token exchange.
+     * This is used to identify the domain application for which IAM token is being requested.
+     * Note: This configuration is only relevant when using {@link UPSTAuthenticationCustomAuthenticator}.
+     * See {@link BmcConstants#IAM_DOMAIN_APP_CLIENT_ID_KEY} for config key name.
+     */
+    IAM_DOMAIN_APP_CLIENT_ID(IAM_DOMAIN_APP_CLIENT_ID_KEY, null),
+
+    /**
+     * (string, optional) The domain application client secret used for IAM token exchange.
+     * This secret acts as a password for the corresponding client ID, ensuring that only
+     * authorized applications can request IAM tokens.
+     * Note: This configuration is only relevant when using {@link UPSTAuthenticationCustomAuthenticator}.
+     * See {@link BmcConstants#IAM_DOMAIN_APP_CLIENT_SECRET_KEY} for config key name.
+     */
+    IAM_DOMAIN_APP_CLIENT_SECRET(IAM_DOMAIN_APP_CLIENT_SECRET_KEY, null),
+    /**
+     * (string, required) The endpoint URL for the IAM token exchange API. This is where
+     * the SPNEGO token will be exchanged for an IAM token.
+     * Note: This configuration is only relevant when using {@link UPSTAuthenticationCustomAuthenticator}.
+     * See {@link BmcConstants#IAM_TOKEN_EXCHANGE_ENDPOINT_URL_KEY} for config key name.
+     */
+    IAM_TOKEN_EXCHANGE_ENDPOINT_URL(IAM_TOKEN_EXCHANGE_ENDPOINT_URL_KEY, null),
+    /**
+     * (string, required) The file path to the keytab used for the token exchange process.
+     * This keytab is essential when opting for the Kerberos authentication mechanism for token generation.
+     * Note: This configuration is only relevant when using {@link UPSTAuthenticationCustomAuthenticator}.
+     * See {@link BmcConstants#IAM_TOKEN_EXCHANGE_KEYTAB_PATH_KEY} for config key name.
+     */
+    IAM_TOKEN_EXCHANGE_KEYTAB_PATH(IAM_TOKEN_EXCHANGE_KEYTAB_PATH_KEY, null),
+    /**
+     * (boolean, optional) Flag indicating the mechanism for SPNEGO token generation.
+     *
+     * If set to true (internal):
+     * The connector will handle the `kinit` process programmatically. Users must provide the
+     * path to the keytab file via the "IAM_TOKEN_EXCHANGE_KEYTAB_PATH" configuration.
+     * The connector will then use this keytab to programmatically obtain and cache the
+     * necessary Kerberos ticket for SPNEGO token generation.
+     *
+     * If set to false (external):
+     * The connector expects that users have already invoked `kinit` or an equivalent external process
+     * using an external Kerberos client to obtain and cache the necessary Kerberos ticket before using the connector.
+     * Failing to do so may result in authentication failures.
+     * Note: This configuration is only relevant when using {@link UPSTAuthenticationCustomAuthenticator}.
+     * See {@link BmcConstants#ENABLE_INTERNAL_KINIT_FOR_TOKEN_EXCHANGE_KEY} for config key name.
+     */
+    ENABLE_INTERNAL_KINIT_FOR_TOKEN_EXCHANGE(ENABLE_INTERNAL_KINIT_FOR_TOKEN_EXCHANGE_KEY, false),
     /**
      * (string, optional) The region code or region identifier used to establish Object Storage endpoint name.
      * Note, if "fs.oci.client.hostname property" is set, then this field is not required.
