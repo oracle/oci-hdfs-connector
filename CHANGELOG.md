@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
+## 3.3.4.1.4.0 - 2023-12-01
+### Added
+- Added support to Kerberos authentication with SPNEGO token 
+
 ## 3.3.4.1.3.0 - 2023-11-07
 ### Added
 - Added observability feature that generates metrics pertaining to operations conducted through the connector, such as reading, writing, and deleting data. 
