@@ -111,6 +111,7 @@ public abstract class BmcFSInputStream extends FSInputStream {
 
     @Override
     public int read() throws IOException {
+        LOG.debug("{}: Reading single byte from position {}", this, this.currentPosition);
         this.validateState(this.currentPosition);
 
         final int byteRead = this.sourceInputStream.read();
@@ -123,6 +124,7 @@ public abstract class BmcFSInputStream extends FSInputStream {
 
     @Override
     public int read(final byte[] b, final int off, final int len) throws IOException {
+        LOG.debug("{}: Attempting to read offset {} length {} from position {}", this, off, len, this.currentPosition);
         this.validateState(this.currentPosition);
 
         // see https://issues.apache.org/jira/browse/HDFS-10277
@@ -223,6 +225,17 @@ public abstract class BmcFSInputStream extends FSInputStream {
             this.currentPosition = response.getContentRange().getStartByte();
         } else {
             this.currentPosition = startPosition;
+        }
+    }
+
+    static protected void readAllBytes(InputStream is, byte[] b) throws IOException {
+        int offset = 0;
+        int n = b.length;
+        while (n > 0) {
+            int i = is.read(b, offset, n);
+            if (i <= 0) throw new IOException("Unexpected EOF");
+            offset += i;
+            n -= i;
         }
     }
 }

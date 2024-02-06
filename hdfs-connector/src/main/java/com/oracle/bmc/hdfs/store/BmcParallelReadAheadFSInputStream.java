@@ -62,6 +62,7 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
 
     @Override
     public int read() throws IOException {
+        LOG.debug("{}: Reading single byte at position {}", this, filePos);
         CachedRead cachedRead = getCachedRead(filePos);
         if (cachedRead == null) {
             return -1;
@@ -94,7 +95,7 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
 
     @Override
     public int read(byte[] buffer, int offset, int length) throws IOException {
-        LOG.debug("{}: Attempting to read offset {} length {}", this, offset, length);
+        LOG.debug("{}: Attempting to read offset {} length {} from position {}", this, offset, length, filePos);
         CachedRead cachedRead = getCachedRead(filePos);
         if (cachedRead == null) {
             LOG.debug("{}: No cached read found, returning EOF", this);
@@ -113,7 +114,7 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
             LOG.debug("{}: Read {} bytes", this, bytesToRead);
             return bytesToRead;
         } catch (InterruptedException e) {
-            LOG.warn("Read operation interrupted, retrying...");
+            LOG.warn("{}: Read operation interrupted, retrying...", this);
             return read(buffer, offset, length);
         } catch (ExecutionException e) {
             clearCachedRead(cachedRead, filePos);
@@ -127,7 +128,7 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
 
     @Override
     public void readFully(long position, byte[] buffer, int offset, int length) throws IOException {
-        LOG.debug("{}: ReadFully {} bytes from {}", this, position, length);
+        LOG.debug("{}: ReadFully {} bytes from {}", this, length, position);
         int nBytes = Math.min((int) (status.getLen() - position), length);
         int offsetPosition = offset;
         while (nBytes > 0) {
@@ -156,6 +157,7 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
      * @throws IOException if an I/O error occurs during the read operation.
      */
     protected int readAtPosition(long position, byte[] buffer, int offset, int length) throws IOException {
+        LOG.debug("{}: Attempting to read offset {} length {} at position {}", this, offset, length, position);
         CachedRead cachedRead = getCachedRead(position);
         if (cachedRead == null) {
             return -1;
@@ -174,7 +176,7 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
             }
             return bytesToRead;
         } catch (InterruptedException e) {
-            LOG.warn("Read operation interrupted, retrying...");
+            LOG.warn("{}: Read operation interrupted, retrying...", this);
             return readAtPosition(position, buffer, offset, length);
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
@@ -296,17 +298,6 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
             readAllBytes(is, data);
         }
         return data;
-    }
-
-    static void readAllBytes(InputStream is, byte[] b) throws IOException {
-        int offset = 0;
-        int n = b.length;
-        while (n > 0) {
-            int i = is.read(b, offset, n);
-            if (i <= 0) throw new IOException("Unexpected EOF");
-            offset += i;
-            n -= i;
-        }
     }
 
     private String reqString;

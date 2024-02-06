@@ -360,17 +360,6 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
         return reqString;
     }
 
-    static void readAllBytes(InputStream is, byte[] b) throws IOException {
-        int offset = 0;
-        int n = b.length;
-        while (n > 0) {
-            int i = is.read(b, offset, n);
-            if (i <= 0) throw new IOException("Unexpected EOF");
-            offset += i;
-            n -= i;
-        }
-    }
-
     static RemovalListener<String, ParquetFooterInfo> getParquetCacheRemovalListener() {
         return (RemovalNotification<String, ParquetFooterInfo> rn) -> {
             LOG.debug("Removed entry {}, cause {}", rn.getKey(), rn.getCause());

@@ -142,7 +142,7 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
 
     @Override
     public void readFully(long position, byte[] buffer, int offset, int length) throws IOException {
-        LOG.debug("{}: ReadFully {} bytes from {}", this, position, length);
+        LOG.debug("{}: ReadFully {} bytes from {}", this, length, position);
         seek(position);
         int nBytes = Math.min((int) (status.getLen() - position), length);
         int pos = offset;
@@ -303,17 +303,6 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
             reqString = "ReadAhead Stream for " + requestBuilder.get().build().getObjectName();
         }
         return reqString;
-    }
-
-    static void readAllBytes(InputStream is, byte[] b) throws IOException {
-        int offset = 0;
-        int n = b.length;
-        while (n > 0) {
-            int i = is.read(b, offset, n);
-            if (i <= 0) throw new IOException("Unexpected EOF");
-            offset += i;
-            n -= i;
-        }
     }
 
     static RemovalListener<String, ParquetFooterInfo> getParquetCacheRemovalListener() {
