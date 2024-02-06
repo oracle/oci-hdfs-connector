@@ -23,6 +23,7 @@ public class FSStreamUtils {
      */
     public static void closeQuietly(final InputStream stream) {
         try {
+            LOG.debug("Close stream {} quietly", stream);
             IOUtils.closeQuietly(stream);
         } catch (ProcessingException e) {
             // Jersey client will throw this when closing a stream that is in an invalid state

@@ -44,10 +44,11 @@ public class BmcDirectFSInputStream extends BmcFSInputStream {
     @Override
     public int read() throws IOException {
         // Try reading from the current stream
+        LOG.debug("{}: Reading single byte", this);
         try {
             return super.read();
         } catch (IOException e) {
-            LOG.warn("Read failed, possibly a stale connection. Will re-attempt.", e);
+            LOG.warn("{}: Read failed, possibly a stale connection. Will close connection and re-attempt. Exception: {}", this, e);
             // If the stream has been idle for a while, then Object Storage LB closes the connection causing an IOException
             // on the client side. Close the current stream and try again.
             FSStreamUtils.closeQuietly(super.getSourceInputStream());
@@ -59,10 +60,11 @@ public class BmcDirectFSInputStream extends BmcFSInputStream {
     @Override
     public int read(final byte[] b, final int off, final int len) throws IOException {
         // Try reading from the current stream
+        LOG.debug("{}: Attempting to read offset {} length {}", this, off, len);
         try {
             return super.read(b, off, len);
         } catch (IOException e) {
-            LOG.warn("Read failed, possibly a stale connection. Will re-attempt.", e);
+            LOG.warn("{}: Read failed, possibly a stale connection. Will close connection and re-attempt.", this, e);
             // If the stream has been idle for a while, then Object Storage LB closes the connection causing an IOException
             // on the client side. Close the current stream and try again.
             FSStreamUtils.closeQuietly(super.getSourceInputStream());

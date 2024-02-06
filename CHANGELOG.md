@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
+## 3.3.4.1.4.1 - 2024-02-06
+### Added
+- Added custom authenticator which uses OKE Workload Identity authentication
+
+### Changed
+- Improved logs in InputStreams
 
 ## 3.3.4.1.4.0 - 2023-12-01
 ### Added
