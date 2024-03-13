@@ -60,7 +60,7 @@ You can find information on any known issues with the connector [here](https://d
 
 ## Contributing
 
-oci-hdfs-connector is an open source project. This project welcomes contributions from the community. Before submitting a pull request, please [review our contribution guide](./CONTRIBUTING.md)
+This project welcomes contributions from the community. Before submitting a pull request, please [review our contribution guide](./CONTRIBUTING.md)
 
 ## Security
 
