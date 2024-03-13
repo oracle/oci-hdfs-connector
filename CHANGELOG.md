@@ -2,6 +2,19 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
+## 3.3.4.1.4.2 - 2024-03-12
+### Changed
+-  Updated OCI Java SDK version to `3.34.0`
+-  Updated com.fasterxml.jackson.core:jackson-databind to `2.16.0`
+-  Updated org.apache.avro.avro to `1.11.3`
+-  Use org.apache.commons.commons-text `2.16.0`
+-  Shaded io.netty packages
+
+### Fixed
+-  Fixed external kinit OID issue and refactored SpnegoGenerator
+-  Fixed contract test failure AbstractContractSeekTest.testReadFullyZeroByteFile
+-  Fixed contract test failure AbstractContractSeekTest.testSeekReadClosedFile
+
 ## 3.3.4.1.4.1 - 2024-02-06
 ### Added
 - Added custom authenticator which uses OKE Workload Identity authentication

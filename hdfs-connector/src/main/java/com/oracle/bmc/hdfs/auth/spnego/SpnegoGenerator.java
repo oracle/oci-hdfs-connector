@@ -33,11 +33,30 @@ public class SpnegoGenerator implements TokenGenerator {
     public String generateToken() throws IOException, InterruptedException {
         Boolean useInternalKinit = propertyAccessor.asBoolean().get(BmcProperties.ENABLE_INTERNAL_KINIT_FOR_TOKEN_EXCHANGE);
         if (useInternalKinit) {
-            log.info("in generateTokenWithInternalKinit");
+            log.debug("Using internal kinit for token generation.");
             return generateTokenWithInternalKinit();
         } else {
+            log.debug("Using external kinit for token generation.");
             return generateTokenWithExternalKinit();
         }
+    }
+
+    private GSSContext initializeGSSContext() throws GSSException {
+        Oid krb5Mechanism = KerberosUtil.GSS_KRB5_MECH_OID;
+        Oid krb5PrincipalNameType = KerberosUtil.NT_GSS_KRB5_PRINCIPAL_OID;
+        Oid spnegoOid = KerberosUtil.GSS_SPNEGO_MECH_OID;
+
+        GSSManager manager = GSSManager.getInstance();
+        GSSName gssServerName = manager.createName(
+                propertyAccessor.asString().get(BmcProperties.TOKEN_EXCHANGE_SERVICE_PRINCIPAL),
+                krb5PrincipalNameType,
+                krb5Mechanism
+        );
+        GSSContext gssContext = manager.createContext(gssServerName, spnegoOid, null, GSSContext.DEFAULT_LIFETIME);
+        gssContext.requestCredDeleg(true);
+        gssContext.requestMutualAuth(true);
+        gssContext.requestLifetime(3600);
+        return gssContext;
     }
 
     /**
@@ -45,38 +64,29 @@ public class SpnegoGenerator implements TokenGenerator {
      * for Kerberos authentication.
      */
     public String generateTokenWithExternalKinit() throws IOException, InterruptedException {
-
-        byte[] outToken = UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<byte[]>() {
+        byte[] spnegoToken = UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<byte[]>() {
             @Override
             public byte[] run() throws Exception {
                 GSSContext gssContext = null;
-                byte[] outToken = null;
+                byte[] token = null;
                 try {
-                    GSSManager gssManager = GSSManager.getInstance();
-                    String servicePrincipal = propertyAccessor.asString().get(BmcProperties.TOKEN_EXCHANGE_SERVICE_PRINCIPAL);
-                    Oid oid = KerberosUtil.NT_GSS_KRB5_PRINCIPAL_OID;
-                    GSSName serviceName = gssManager.createName(servicePrincipal, oid);
-                    oid = KerberosUtil.GSS_KRB5_MECH_OID;
-                    gssContext = gssManager.createContext(serviceName, oid, null, GSSContext.DEFAULT_LIFETIME);
-                    gssContext.requestCredDeleg(true);
-                    gssContext.requestMutualAuth(true);
-
-                    byte[] inToken = new byte[0];
-                    outToken = gssContext.initSecContext(inToken, 0, inToken.length);
+                    gssContext = initializeGSSContext();
+                    token = gssContext.initSecContext(new byte[0], 0, 0);
+                } catch (GSSException e) {
+                    log.error("Failed to generate the SPNEGO token due to a GSS exception: " + e.getMessage(), e);
+                    throw new RuntimeException("GSSException encountered in generateTokenWithExternalKinit", e);
                 } finally {
-                    if (gssContext != null) {
-                        gssContext.dispose();
-                    }
+                    disposeGSSContext(gssContext);
                 }
-                return outToken;
+                return token;
             }
         });
 
-        if (outToken == null) {
+        if (spnegoToken == null) {
             log.error("Failed to generate the SPNEGO token.");
-            throw new RuntimeException("Failed to generate the SPNEGO token.");
+            throw new RuntimeException("Failed to generate the SPNEGO token. Token is null.");
         }
-        return Base64.getEncoder().encodeToString(outToken);
+        return Base64.getEncoder().encodeToString(spnegoToken);
     }
 
     /**
@@ -86,29 +96,34 @@ public class SpnegoGenerator implements TokenGenerator {
     public String generateTokenWithInternalKinit() {
         Subject subject = getAuthenticateSubject();
         return Subject.doAs(subject, (PrivilegedAction<String>) () -> {
+            GSSContext gssContext = null;
+            byte[] token = null;
             try {
-                Oid krb5Mechanism = KerberosUtil.GSS_KRB5_MECH_OID;
-                Oid krb5PrincipalNameType = KerberosUtil.NT_GSS_KRB5_PRINCIPAL_OID;
-                Oid spnegoOid = KerberosUtil.GSS_SPNEGO_MECH_OID;
-
-                GSSManager manager = GSSManager.getInstance();
-                GSSName gssServerName = manager.createName(
-                        propertyAccessor.asString().get(BmcProperties.TOKEN_EXCHANGE_SERVICE_PRINCIPAL),
-                        krb5PrincipalNameType,
-                        krb5Mechanism
-                );
-                GSSContext gssContext = manager.createContext(gssServerName, spnegoOid, null, GSSContext.DEFAULT_LIFETIME);
-                gssContext.requestMutualAuth(true);
-                gssContext.requestCredDeleg(true);
-                gssContext.requestLifetime(10);
-
-                byte[] token = new byte[0];
-                token = gssContext.initSecContext(token, 0, token.length);
-                return Base64.getEncoder().encodeToString(token);
+                gssContext = initializeGSSContext();
+                token = gssContext.initSecContext(new byte[0], 0, 0);
             } catch (GSSException e) {
-                throw new RuntimeException(e);
+                log.error("Failed to generate the SPNEGO token due to a GSS exception: " + e.getMessage(), e);
+                throw new RuntimeException("GSSException encountered in generateTokenWithInternalKinit", e);
+            } finally {
+                disposeGSSContext(gssContext);
             }
+
+            if (token == null) {
+                log.error("Failed to generate the SPNEGO token.");
+                throw new RuntimeException("Failed to generate the SPNEGO token. Token is null.");
+            }
+            return Base64.getEncoder().encodeToString(token);
         });
+    }
+
+    private void disposeGSSContext(GSSContext gssContext) {
+        if (gssContext != null) {
+            try {
+                gssContext.dispose();
+            } catch (GSSException e) {
+                log.warn("Error disposing GSSContext: {}", e.getMessage(), e);
+            }
+        }
     }
 
     public Subject getAuthenticateSubject() {

@@ -114,7 +114,8 @@ public class BmcParallelReadAheadFSInputStreamTest {
         byte[] readContent = new byte[fileSize];
         int bytesRead = 0;
         int totalBytesRead = 0;
-        while ((bytesRead = inputStream.read(readContent, totalBytesRead, fileSize - totalBytesRead)) != -1) {
+        while (totalBytesRead < fileSize && (bytesRead = inputStream.read(readContent, totalBytesRead,
+                fileSize - totalBytesRead)) != -1) {
             totalBytesRead += bytesRead;
         }
 
@@ -140,7 +141,8 @@ public class BmcParallelReadAheadFSInputStreamTest {
         byte[] readContent = new byte[fileSize - offset];
         int bytesRead = 0;
         int totalBytesRead = 0;
-        while ((bytesRead = inputStream.read(readContent, totalBytesRead, fileSize - offset - totalBytesRead)) != -1) {
+        while (totalBytesRead < fileSize - offset && (bytesRead = inputStream.read(readContent, totalBytesRead,
+                fileSize - offset - totalBytesRead)) != -1) {
             totalBytesRead += bytesRead;
         }
 
@@ -150,7 +152,7 @@ public class BmcParallelReadAheadFSInputStreamTest {
     }
 
     @Test
-    public void testSeek() {
+    public void testSeek() throws IOException {
         int blockSize = 10;
         int blockCount = 10;
         int fileSize = blockSize * blockCount;

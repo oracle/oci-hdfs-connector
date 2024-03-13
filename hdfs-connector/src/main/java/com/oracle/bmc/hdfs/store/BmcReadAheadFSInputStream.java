@@ -34,7 +34,6 @@ import java.util.concurrent.ExecutionException;
 @Slf4j
 public class BmcReadAheadFSInputStream extends BmcFSInputStream {
     private byte[] data;
-    private long filePos = 0;
     private long dataPos = -1;
     private int dataMax = 0;
     private int dataCurOffset = 0;
@@ -74,20 +73,16 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
     }
 
     @Override
-    public long getPos() {
-        return filePos;
-    }
-
-    @Override
     public int read() throws IOException {
-        LOG.debug("{}: Reading single byte at position {}", this, filePos);
+        this.checkNotClosed();
+        LOG.debug("{}: Reading single byte at position {}", this, this.currentPosition);
         if (dataPos == -1) {
             fillBuffer();
         }
         if (dataPos == -1) {
             return -1;
         }
-        filePos++;
+        this.currentPosition++;
         int result = Byte.toUnsignedInt(data[dataCurOffset++]);
         if (atEndOfBuffer()) {
             clearBuffer();
@@ -107,14 +102,24 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
 
     @Override
     public int read(long position, byte[] buffer, int offset, int length) throws IOException {
+        this.checkNotClosed();
         LOG.debug("{}: Reading {} bytes at position {}", this, length, position);
+        // see https://issues.apache.org/jira/browse/HDFS-10277
+        if (length == 0) {
+            return 0;
+        }
         seek(position);
         return read(buffer, offset, length);
     }
 
     @Override
     public int read(byte[] buffer, int offset, int length) throws IOException {
-        LOG.debug("{}: Reading {} bytes at current position {}", this, length, filePos);
+        this.checkNotClosed();
+        LOG.debug("{}: Reading {} bytes at current position {}", this, length, this.currentPosition);
+        // see https://issues.apache.org/jira/browse/HDFS-10277
+        if (length == 0) {
+            return 0;
+        }
         if (dataPos == -1) {
             fillBuffer();
         }
@@ -124,7 +129,7 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
         int n = Math.min(length, dataMax - dataCurOffset);
         System.arraycopy(data, dataCurOffset, buffer, offset, n);
         dataCurOffset += n;
-        filePos += n;
+        this.currentPosition += n;
         if (atEndOfBuffer()) {
             if (n != length) {
                 LOG.debug("{}: Short Read; exhausted buffer", this);
@@ -142,8 +147,13 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
 
     @Override
     public void readFully(long position, byte[] buffer, int offset, int length) throws IOException {
+        this.checkNotClosed();
         LOG.debug("{}: ReadFully {} bytes from {}", this, length, position);
         seek(position);
+        // see https://issues.apache.org/jira/browse/HDFS-10277
+        if (length == 0) {
+            return;
+        }
         int nBytes = Math.min((int) (status.getLen() - position), length);
         int pos = offset;
         while (nBytes > 0) {
@@ -158,21 +168,17 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
 
     @Override
     protected long doSeek(long pos) throws IOException {
-        throw new IOException("doSeek not implemented for read-ahead stream");
-    }
-
-    @Override
-    public void seek(long pos) {
-        LOG.debug("{}: Seek to {}", this, pos);
-        filePos = pos;
-        if (filePos < dataPos) {
+        this.currentPosition = pos;
+        if (this.currentPosition < dataPos) {
             dataPos = -1;
-        } else if (dataPos != -1 && filePos > (dataPos + dataMax)) {
+        } else if (dataPos != -1 && this.currentPosition > (dataPos + dataMax)) {
             dataPos = -1;
         } else {
-            dataCurOffset = (int) (filePos - dataPos);
+            dataCurOffset = (int) (this.currentPosition - dataPos);
         }
+        return pos;
     }
+
 
     @Override
     public boolean seekToNewSource(long targetPos) {
@@ -180,8 +186,9 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
     }
 
     @Override
-    public void close() {
+    public void close() throws IOException {
         LOG.debug("{}: Closing", this);
+        super.close();
         clearBuffer();
     }
 
@@ -196,14 +203,14 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
     }
 
     private void fillBuffer() throws IOException {
-        LOG.debug("{}: Filling buffer at {} length {}", this, filePos, status.getLen());
-        long start = filePos;
+        LOG.debug("{}: Filling buffer at {} length {}", this, this.currentPosition, status.getLen());
+        long start = this.currentPosition;
         long end;
         if (firstRead) {
             firstRead = false;
-            end = Math.min(filePos + FIRST_READ_WINDOW_SIZE, status.getLen());
+            end = Math.min(this.currentPosition + FIRST_READ_WINDOW_SIZE, status.getLen());
         } else {
-            end = Math.min(filePos + ociReadAheadBlockSize, status.getLen());
+            end = Math.min(this.currentPosition + ociReadAheadBlockSize, status.getLen());
         }
         if (end == start) {
             return;
@@ -285,14 +292,14 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
         try (InputStream is = response.getInputStream()) {
             readAllBytes(is, data);
         }
-        dataPos = filePos;
+        dataPos = this.currentPosition;
         dataMax = len;
         dataCurOffset = 0;
         LOG.debug(
-                "{}: After filling, dataPos {}, filePos {}, dataMax {}",
+                "{}: After filling, dataPos {}, this.currentPosition {}, dataMax {}",
                 this,
                 dataPos,
-                filePos,
+                this.currentPosition,
                 dataMax);
     }
 

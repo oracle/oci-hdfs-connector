@@ -45,12 +45,6 @@ Important: The Java SDK file version that you download from the [Oracle Releases
 
 See [CHANGELOG](/CHANGELOG.md).
 
-## Contributing
-
-oci-hdfs-connector is an open source project. See [CONTRIBUTING](/CONTRIBUTING.md) for details.
-
-Oracle gratefully acknowledges the contributions to oci-hdfs-connector that have been made by the community.
-
 ## Known Issues
 
 You can find information on any known issues with the connector [here](https://docs.cloud.oracle.com/Content/knownissues.htm) and under the “Issues” tab of this GitHub repository.
@@ -66,7 +60,7 @@ You can find information on any known issues with the connector [here](https://d
 
 ## Contributing
 
-This project welcomes contributions from the community. Before submitting a pull request, please [review our contribution guide](./CONTRIBUTING.md)
+oci-hdfs-connector is an open source project. This project welcomes contributions from the community. Before submitting a pull request, please [review our contribution guide](./CONTRIBUTING.md)
 
 ## Security
 
@@ -74,7 +68,7 @@ Please consult the [security guide](./SECURITY.md) for our responsible security 
 
 ## License
 
-Copyright (c) 2016, 2023, Oracle and/or its affiliates.  All rights reserved.
+Copyright (c) 2016, 2024, Oracle and/or its affiliates.  All rights reserved.
 This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
 or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
 
