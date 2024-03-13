@@ -193,7 +193,7 @@ public abstract class BmcFSInputStream extends FSInputStream {
         }
     }
 
-    private void checkNotClosed() throws IOException {
+    protected void checkNotClosed() throws IOException {
         if (this.closed) {
             throw new IOException(FSExceptionMessages.STREAM_IS_CLOSED);
         }

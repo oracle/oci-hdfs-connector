@@ -43,7 +43,6 @@ import java.util.concurrent.ExecutionException;
  */
 @Slf4j
 public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream {
-    private long filePos = 0;
     private long dataPos = -1;
     private int dataMax = 0;
     private int dataCurOffset = 0;
@@ -71,20 +70,16 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
     }
 
     @Override
-    public long getPos() {
-        return filePos;
-    }
-
-    @Override
     public int read() throws IOException {
-        LOG.debug("{}: Reading single byte at position {}", this, filePos);
+        this.checkNotClosed();
+        LOG.debug("{}: Reading single byte at position {}", this, this.currentPosition);
         if (dataPos == -1) {
             fillBuffer(1);
         }
         if (dataPos == -1) {
             return -1;
         }
-        filePos++;
+        this.currentPosition++;
         dataCurOffset++;
         this.statistics.incrementBytesRead(1L);
         int ret = wrappedStream.read();
@@ -97,6 +92,7 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
 
     @Override
     public int read(long position, byte[] buffer, int offset, int length) throws IOException {
+        this.checkNotClosed();
         LOG.debug("{}: Reading {} bytes at position {}", this, length, position);
         seek(position);
         return read(buffer, offset, length);
@@ -104,7 +100,12 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
 
     @Override
     public int read(byte[] buffer, int offset, int length) throws IOException {
-        LOG.debug("{}: Reading {} bytes at current position {}", this, length, filePos);
+        LOG.debug("{}: Reading {} bytes at current position {}", this, length, this.currentPosition);
+        this.checkNotClosed();
+        // see https://issues.apache.org/jira/browse/HDFS-10277
+        if (length == 0) {
+            return 0;
+        }
         if (dataPos == -1) {
             fillBuffer(length);
         }
@@ -114,7 +115,7 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
         int len = Math.min(length, dataMax - dataCurOffset);
         int n = wrappedStream.read(buffer, offset, len);
         dataCurOffset += n;
-        filePos += n;
+        this.currentPosition += n;
         this.statistics.incrementBytesRead(n);
         if (dataCurOffset == dataMax) {
             if (n != length) {
@@ -133,6 +134,7 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
 
     @Override
     public void readFully(long position, byte[] buffer, int offset, int length) throws IOException {
+        this.checkNotClosed();
         LOG.debug("{}: ReadFully {} bytes from {}", this, position, length);
         seek(position);
         int nBytes = Math.min((int) (status.getLen() - position), length);
@@ -149,26 +151,20 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
 
     @Override
     protected long doSeek(long pos) throws IOException {
-        throw new IOException("doSeek not implemented for read-ahead stream");
-    }
-
-    @Override
-    public void seek(long pos) throws IOException {
-        LOG.debug("{}: Seek to {}", this, pos);
         if (dataPos == -1) {
-            filePos = pos;
-            return;
+            this.currentPosition = pos;
+            return pos;
         }
-        if (pos < filePos) {
+        if (pos < this.currentPosition) {
             dataPos = -1;
-            filePos = pos;
+            this.currentPosition = pos;
             closeWrapped();
         } else if (pos >= (dataPos + dataMax)) {
             dataPos = -1;
-            filePos = pos;
+            this.currentPosition = pos;
             closeWrapped();
         } else {
-            int len = (int) (pos - filePos);
+            int len = (int) (pos - this.currentPosition);
             byte[] b = new byte[len];
             while (len > 0) {
                 int n = read(b, 0, len);
@@ -178,6 +174,7 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
                 len -= n;
             }
         }
+        return pos;
     }
 
     @Override
@@ -221,10 +218,10 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
     }
 
     private void fillBuffer(long requested) throws IOException {
-        LOG.debug("{}: Filling buffer at {} length {}", this, filePos, status.getLen());
-        long start = filePos;
+        LOG.debug("{}: Filling buffer at {} length {}", this, this.currentPosition, status.getLen());
+        long start = this.currentPosition;
         // Read at least blocksize
-        long end = filePos + Math.max(requested, ociReadAheadBlockSize);
+        long end = this.currentPosition + Math.max(requested, ociReadAheadBlockSize);
         // But don't read past the end
         end = Math.min(end, status.getLen());
         if (end == start) {
@@ -340,14 +337,14 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
                 status.getLen());
         GetObjectResponse response = objectStorage.getObject(modRequest);
         wrappedStream = response.getInputStream();
-        dataPos = filePos;
+        dataPos = this.currentPosition;
         dataMax = len;
         dataCurOffset = 0;
         LOG.debug(
-                "{}: After filling, dataPos {}, filePos {}, dataMax {}",
+                "{}: After filling, dataPos {}, this.currentPosition {}, dataMax {}",
                 this,
                 dataPos,
-                filePos,
+                this.currentPosition,
                 dataMax);
     }
 

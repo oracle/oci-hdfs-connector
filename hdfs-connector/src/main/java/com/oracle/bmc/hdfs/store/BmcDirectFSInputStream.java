@@ -43,6 +43,7 @@ public class BmcDirectFSInputStream extends BmcFSInputStream {
 
     @Override
     public int read() throws IOException {
+        this.checkNotClosed();
         // Try reading from the current stream
         LOG.debug("{}: Reading single byte", this);
         try {
@@ -59,8 +60,13 @@ public class BmcDirectFSInputStream extends BmcFSInputStream {
 
     @Override
     public int read(final byte[] b, final int off, final int len) throws IOException {
+        this.checkNotClosed();
         // Try reading from the current stream
         LOG.debug("{}: Attempting to read offset {} length {}", this, off, len);
+        // see https://issues.apache.org/jira/browse/HDFS-10277
+        if (len == 0) {
+            return 0;
+        }
         try {
             return super.read(b, off, len);
         } catch (IOException e) {

@@ -28,6 +28,10 @@ public class StatsMonitorInputStream extends FSInputStream {
         this.ociMonitorPluginHandler = ociMonitorPluginHandler;
     }
 
+    public int available() throws IOException {
+        return sourceStream.available();
+    }
+
     @Override
     public int read() throws IOException {
         triggerStopWatch();

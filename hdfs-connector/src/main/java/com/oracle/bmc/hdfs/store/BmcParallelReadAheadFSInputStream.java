@@ -35,7 +35,6 @@ import java.util.function.Supplier;
 public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
     private final NavigableMap<Long, CachedRead> cachedData;
     private final ExecutorService executor;
-    private long filePos = 0;
     private final int ociReadAheadBlockSize;
     private final int readAheadBlockCount;
 
@@ -55,31 +54,28 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
         this.readAheadBlockCount = readAheadBlockCount;
     }
 
-    @Override
-    public long getPos() {
-        return filePos;
-    }
 
     @Override
     public int read() throws IOException {
-        LOG.debug("{}: Reading single byte at position {}", this, filePos);
-        CachedRead cachedRead = getCachedRead(filePos);
+        this.checkNotClosed();
+        LOG.debug("{}: Reading single byte at position {}", this, this.currentPosition);
+        CachedRead cachedRead = getCachedRead(this.currentPosition);
         if (cachedRead == null) {
             return -1;
         }
         try {
             byte[] data = cachedRead.future.get();
-            int result = Byte.toUnsignedInt(data[(int) (filePos - cachedRead.startOffset)]);
-            filePos++;
-            if (!cachedRead.containsPosition(filePos)) {
-                clearCachedRead(cachedRead, filePos);
+            int result = Byte.toUnsignedInt(data[(int) (this.currentPosition - cachedRead.startOffset)]);
+            this.currentPosition++;
+            if (!cachedRead.containsPosition(this.currentPosition)) {
+                clearCachedRead(cachedRead, this.currentPosition);
             }
             return result;
         } catch (InterruptedException e) {
-            LOG.warn("Interrupted while reading data at position {}. Retrying...", filePos);
+            LOG.warn("Interrupted while reading data at position {}. Retrying...", this.currentPosition);
             return read();
         } catch (ExecutionException e) {
-            clearCachedRead(cachedRead, filePos);
+            clearCachedRead(cachedRead, this.currentPosition);
             Throwable cause = e.getCause();
             if (cause instanceof IOException) {
                 throw (IOException) cause;
@@ -90,26 +86,35 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
 
     @Override
     public int read(long position, byte[] buffer, int offset, int length) throws IOException {
+        this.checkNotClosed();
+        // see https://issues.apache.org/jira/browse/HDFS-10277
+        if (length == 0) {
+            return 0;
+        }
         return readAtPosition(position, buffer, offset, length);
     }
 
     @Override
     public int read(byte[] buffer, int offset, int length) throws IOException {
-        LOG.debug("{}: Attempting to read offset {} length {} from position {}", this, offset, length, filePos);
-        CachedRead cachedRead = getCachedRead(filePos);
+        this.checkNotClosed();
+        LOG.debug("{}: Attempting to read offset {} length {} from position {}", this, offset, length, this.currentPosition);        // see https://issues.apache.org/jira/browse/HDFS-10277
+        if (length == 0) {
+            return 0;
+        }
+        CachedRead cachedRead = getCachedRead(this.currentPosition);
         if (cachedRead == null) {
             LOG.debug("{}: No cached read found, returning EOF", this);
             return -1;
         }
         try {
             byte[] data = cachedRead.future.get();
-            int dataPos = (int) (filePos - cachedRead.startOffset);
+            int dataPos = (int) (this.currentPosition - cachedRead.startOffset);
             int bytesToRead = Math.min(length, cachedRead.length - dataPos);
             System.arraycopy(data, dataPos, buffer, offset, bytesToRead);
-            filePos += bytesToRead;
+            this.currentPosition += bytesToRead;
             this.statistics.incrementBytesRead(bytesToRead);
-            if (!cachedRead.containsPosition(filePos)) {
-                clearCachedRead(cachedRead, filePos);
+            if (!cachedRead.containsPosition(this.currentPosition)) {
+                clearCachedRead(cachedRead, this.currentPosition);
             }
             LOG.debug("{}: Read {} bytes", this, bytesToRead);
             return bytesToRead;
@@ -117,7 +122,7 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
             LOG.warn("{}: Read operation interrupted, retrying...", this);
             return read(buffer, offset, length);
         } catch (ExecutionException e) {
-            clearCachedRead(cachedRead, filePos);
+            clearCachedRead(cachedRead, this.currentPosition);
             Throwable cause = e.getCause();
             if (cause instanceof IOException) {
                 throw (IOException) cause;
@@ -128,7 +133,12 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
 
     @Override
     public void readFully(long position, byte[] buffer, int offset, int length) throws IOException {
+        this.checkNotClosed();
         LOG.debug("{}: ReadFully {} bytes from {}", this, length, position);
+        // see https://issues.apache.org/jira/browse/HDFS-10277
+        if (length == 0) {
+            return;
+        }
         int nBytes = Math.min((int) (status.getLen() - position), length);
         int offsetPosition = offset;
         while (nBytes > 0) {
@@ -189,18 +199,14 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
 
     @Override
     protected long doSeek(long position) throws IOException {
-        throw new IOException("doSeek not implemented for read-ahead stream");
+        this.currentPosition = position;
+        return position;
     }
 
     @Override
-    public void seek(long position) {
-        LOG.debug("{}: Seek to {}", this, position);
-        filePos = position;
-    }
-
-    @Override
-    public void close() {
+    public void close() throws IOException {
         LOG.debug("{}: Closing", this);
+        super.close();
         Iterator<Map.Entry<Long, CachedRead>> cachedEntries = cachedData.entrySet().iterator();
         while (cachedEntries.hasNext()) {
             CachedRead cachedRead = cachedEntries.next().getValue();
