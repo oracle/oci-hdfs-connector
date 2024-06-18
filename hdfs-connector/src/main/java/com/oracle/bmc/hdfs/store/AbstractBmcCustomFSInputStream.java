@@ -25,8 +25,9 @@ public abstract class AbstractBmcCustomFSInputStream extends BmcFSInputStream {
             ObjectStorage objectStorage,
             FileStatus status,
             Supplier<GetObjectRequest.Builder> requestBuilder,
+            int readMaxRetries,
             FileSystem.Statistics statistics) {
-        super(objectStorage, status, requestBuilder, statistics);
+        super(objectStorage, status, requestBuilder, readMaxRetries, statistics);
         this.propertyAccessor = propertyAccessor;
     }
 }

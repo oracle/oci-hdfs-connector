@@ -87,6 +87,8 @@ public final class BmcConstants {
 
     public static final String READ_TIMEOUT_MILLIS_KEY = "fs.oci.client.http.readtimeout";
 
+    public static final String  READ_MAX_RETRIES_KEY = "fs.oci.client.http.readmaxretries";
+
     public static final String MULTIPART_ALLOWED_KEY = "fs.oci.client.multipart.allowed";
 
     public static final String MULTIPART_NUM_UPLOAD_THREADS_KEY =
@@ -253,6 +255,7 @@ public final class BmcConstants {
                                 CONNECTION_TIMEOUT_MILLIS_KEY,
                                 "fs.oraclebmc.client.http.connectiontimeout")
                         .put(READ_TIMEOUT_MILLIS_KEY, "fs.oraclebmc.client.http.readtimeout")
+                        .put(READ_MAX_RETRIES_KEY, "fs.oraclebmc.client.http.readmaxretries")
                         .put(MULTIPART_ALLOWED_KEY, "fs.oraclebmc.client.multipart.allowed")
                         .put(
                                 MULTIPART_NUM_UPLOAD_THREADS_KEY,

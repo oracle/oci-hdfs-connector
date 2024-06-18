@@ -1383,7 +1383,12 @@ public class BmcDataStore {
         }
         if (this.useInMemoryReadBuffer) {
             return new StatsMonitorInputStream(new BmcInMemoryFSInputStream(
-                    this.objectStorage, status, requestBuilder, this.statistics), ociMonitorPluginHandler);
+                    this.objectStorage,
+                    status,
+                    requestBuilder,
+                    this.propertyAccessor.asInteger().get(BmcProperties.READ_MAX_RETRIES),
+                    this.statistics),
+                    ociMonitorPluginHandler);
         }
         if (this.useReadAhead) {
             if (this.readAheadBlockCount > 1) {
@@ -1392,6 +1397,7 @@ public class BmcDataStore {
                                 this.objectStorage,
                                 status,
                                 requestBuilder,
+                                this.propertyAccessor.asInteger().get(BmcProperties.READ_MAX_RETRIES),
                                 this.statistics,
                                 this.parallelDownloadExecutor,
                                 this.readAheadSizeInBytes,
@@ -1402,13 +1408,18 @@ public class BmcDataStore {
                             this.objectStorage,
                             status,
                             requestBuilder,
+                            this.propertyAccessor.asInteger().get(BmcProperties.READ_MAX_RETRIES),
                             this.statistics,
                             this.readAheadSizeInBytes,
                             this.parquetCacheString), ociMonitorPluginHandler);
         } else {
             return new StatsMonitorInputStream(
                     new BmcDirectFSInputStream(
-                            this.objectStorage, status, requestBuilder, this.statistics), ociMonitorPluginHandler);
+                            this.objectStorage,
+                            status,
+                            requestBuilder,
+                            this.propertyAccessor.asInteger().get(BmcProperties.READ_MAX_RETRIES),
+                            this.statistics),ociMonitorPluginHandler);
         }
     }
 

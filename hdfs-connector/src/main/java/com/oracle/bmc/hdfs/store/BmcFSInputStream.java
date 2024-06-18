@@ -5,6 +5,9 @@
  */
 package com.oracle.bmc.hdfs.store;
 
+import com.google.common.annotations.VisibleForTesting;
+import net.jodah.failsafe.Failsafe;
+import net.jodah.failsafe.RetryPolicy;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -15,6 +18,8 @@ import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem.Statistics;
 
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import com.oracle.bmc.model.BmcException;
 import com.oracle.bmc.model.Range;
@@ -37,10 +42,11 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor(access = AccessLevel.PUBLIC)
 public abstract class BmcFSInputStream extends FSInputStream {
     private static final int EOF = -1;
-
+    protected volatile RetryPolicy<Object> retryPolicy;
     protected final ObjectStorage objectStorage;
     protected final FileStatus status;
     protected final Supplier<GetObjectRequest.Builder> requestBuilder;
+    protected  final int readMaxRetries;
 
     @Getter(value = AccessLevel.PROTECTED)
     protected final Statistics statistics;
@@ -112,9 +118,21 @@ public abstract class BmcFSInputStream extends FSInputStream {
     @Override
     public int read() throws IOException {
         LOG.debug("{}: Reading single byte from position {}", this, this.currentPosition);
-        this.validateState(this.currentPosition);
+        final AtomicInteger byteReadAtomic = new AtomicInteger();
+        try {
+            Failsafe.with(retryPolicy()).run(() -> {
+                this.validateState(this.currentPosition);
+                byteReadAtomic.set(this.sourceInputStream.read());
+            });
+        } catch (Exception e) {
+            if (e.getCause() instanceof IOException) {
+                throw (IOException) e.getCause();
+            } else {
+                throw e;
+            }
+        }
 
-        final int byteRead = this.sourceInputStream.read();
+        final int byteRead = byteReadAtomic.get();
         if (byteRead != EOF) {
             this.currentPosition++;
             this.statistics.incrementBytesRead(1L);
@@ -125,14 +143,25 @@ public abstract class BmcFSInputStream extends FSInputStream {
     @Override
     public int read(final byte[] b, final int off, final int len) throws IOException {
         LOG.debug("{}: Attempting to read offset {} length {} from position {}", this, off, len, this.currentPosition);
-        this.validateState(this.currentPosition);
-
         // see https://issues.apache.org/jira/browse/HDFS-10277
         if (len == 0) {
             return 0;
         }
+        final AtomicInteger bytesReadAtomic = new AtomicInteger();
+        try {
+            Failsafe.with(retryPolicy()).run(() -> {
+                this.validateState(this.currentPosition);
+                bytesReadAtomic.set(this.sourceInputStream.read(b, off, len));
+            });
+        } catch (Exception e) {
+            if (e.getCause() instanceof IOException) {
+                throw (IOException) e.getCause();
+            } else {
+                throw e;
+            }
+        }
 
-        final int bytesRead = this.sourceInputStream.read(b, off, len);
+        final int bytesRead = bytesReadAtomic.get();
         if (bytesRead != EOF) {
             this.currentPosition += bytesRead;
             this.statistics.incrementBytesRead(bytesRead);
@@ -215,7 +244,7 @@ public abstract class BmcFSInputStream extends FSInputStream {
 
         final GetObjectResponse response = this.objectStorage.getObject(request);
         LOG.debug(
-                "Opened object with etag {} and size {}",
+                "New stream, opened object with etag {} and size {}",
                 response.getETag(),
                 response.getContentLength());
         final InputStream dataStream = response.getInputStream();
@@ -228,7 +257,55 @@ public abstract class BmcFSInputStream extends FSInputStream {
         }
     }
 
-    static protected void readAllBytes(InputStream is, byte[] b) throws IOException {
+    public RetryPolicy retryPolicy() {
+        if (this.retryPolicy == null) {
+            synchronized (this) {
+                if (this.retryPolicy == null) {
+                    LOG.info("Read retry policy, maximum retries: {}", readMaxRetries);
+                    this.retryPolicy = new RetryPolicy<>()
+                            .handle(Exception.class)
+                            .handleIf(e -> !this.closed)
+                            .withMaxRetries(readMaxRetries)
+                            .withDelay(Duration.ofSeconds(3))
+                            .withJitter(Duration.ofMillis(200))
+                            .onRetry(e -> {
+                                LOG.info("Read failed, possibly a stale connection. Will close connection and " +
+                                                "re-attempt. Message: {}, Retry count {}",
+                                        e.getLastFailure().getMessage(), e.getAttemptCount());
+                                // reset sourceInputStream, call verifyInitialized to rebuild if needed.
+                                FSStreamUtils.closeQuietly(sourceInputStream);
+                                sourceInputStream = null;
+                            })
+                            .onRetriesExceeded(e -> {
+                                LOG.error("Retries exhausted. Last failure: ", e.getFailure());
+                                FSStreamUtils.closeQuietly(sourceInputStream);
+                                sourceInputStream = null;
+                            });
+                }
+            }
+        }
+        return this.retryPolicy;
+    }
+
+    protected void readAllBytes(Range range, byte[] b) throws IOException {
+        try {
+            Failsafe.with(retryPolicy()).run(() -> {
+                GetObjectRequest request = this.requestBuilder.get().range(range).build();
+                GetObjectResponse response = objectStorage.getObject(request);
+                try (final InputStream is = response.getInputStream()) {
+                    readAllBytes(is, b);
+                }
+            });
+        } catch (Exception e) {
+            if (e.getCause() instanceof IOException) {
+                throw (IOException) e.getCause();
+            } else {
+                throw e;
+            }
+        }
+    }
+
+    protected void readAllBytes(InputStream is, byte[] b) throws IOException {
         int offset = 0;
         int n = b.length;
         while (n > 0) {

@@ -42,16 +42,19 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
             final ObjectStorage objectStorage,
             final FileStatus status,
             final Supplier<GetObjectRequest.Builder> requestBuilder,
+            final int readMaxRetries,
             final FileSystem.Statistics statistics,
             ExecutorService executor,
             int ociReadAheadBlockSize,
             int readAheadBlockCount) {
-        super(objectStorage, status, requestBuilder, statistics);
+        super(objectStorage, status, requestBuilder, readMaxRetries, statistics);
 
         this.executor = executor;
         this.cachedData = new TreeMap<>();
         this.ociReadAheadBlockSize = ociReadAheadBlockSize;
+        LOG.info("ReadAhead block size is " + ociReadAheadBlockSize);
         this.readAheadBlockCount = readAheadBlockCount;
+        LOG.info("ReadAhead block count is " + readAheadBlockCount);
     }
 
 
@@ -297,12 +300,8 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
 
     private byte[] performRead(long offset, int length) throws IOException {
         Range range = new Range(offset, offset + length);
-        GetObjectRequest request = requestBuilder.get().range(range).build();
-        GetObjectResponse response = objectStorage.getObject(request);
         byte[] data = new byte[length];
-        try (InputStream is = response.getInputStream()) {
-            readAllBytes(is, data);
-        }
+        readAllBytes(range, data);
         return data;
     }
 

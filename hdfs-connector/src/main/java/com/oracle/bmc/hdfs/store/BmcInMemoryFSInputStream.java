@@ -27,8 +27,9 @@ public class BmcInMemoryFSInputStream extends BmcFSInputStream {
             final ObjectStorage objectStorage,
             final FileStatus status,
             final Supplier<GetObjectRequest.Builder> requestBuilder,
+            final int readMaxRetries,
             final Statistics statistics) {
-        super(objectStorage, status, requestBuilder, statistics);
+        super(objectStorage, status, requestBuilder, readMaxRetries, statistics);
     }
 
     @Override

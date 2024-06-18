@@ -49,15 +49,15 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
     private final int ociReadAheadBlockSize;
     private final Cache<String, ParquetFooterInfo> parquetCache;
     private boolean closed = false;
-    private InputStream wrappedStream;
 
     public BmcSmartParquetFSInputStream(
             final BmcPropertyAccessor propertyAccessor,
             final ObjectStorage objectStorage,
             final FileStatus status,
             final Supplier<GetObjectRequest.Builder> requestBuilder,
+            final int readMaxRetries,
             final Statistics statistics) {
-        super(propertyAccessor, objectStorage, status, requestBuilder, statistics);
+        super(propertyAccessor, objectStorage, status, requestBuilder, readMaxRetries, statistics);
         this.ociReadAheadBlockSize = BmcDataStore.getReadAheadSizeInBytes(propertyAccessor);
         this.parquetCache =
                 configureParquetCache(BmcDataStore.configureParquetCacheString(propertyAccessor));
@@ -82,10 +82,10 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
         this.currentPosition++;
         dataCurOffset++;
         this.statistics.incrementBytesRead(1L);
-        int ret = wrappedStream.read();
+        int ret = super.read();
         if (dataCurOffset == dataMax) {
             dataPos = -1;
-            closeWrapped();
+            drainStream();
         }
         return ret;
     }
@@ -113,7 +113,7 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
             return -1; // EOF
         }
         int len = Math.min(length, dataMax - dataCurOffset);
-        int n = wrappedStream.read(buffer, offset, len);
+        int n = super.read(buffer, offset, len);
         dataCurOffset += n;
         this.currentPosition += n;
         this.statistics.incrementBytesRead(n);
@@ -122,7 +122,7 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
                 LOG.debug("{}: Short Read; exhausted buffer", this);
             }
             dataPos = -1;
-            closeWrapped();
+            drainStream();
         }
         return n;
     }
@@ -158,11 +158,11 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
         if (pos < this.currentPosition) {
             dataPos = -1;
             this.currentPosition = pos;
-            closeWrapped();
+            drainStream();
         } else if (pos >= (dataPos + dataMax)) {
             dataPos = -1;
             this.currentPosition = pos;
-            closeWrapped();
+            drainStream();
         } else {
             int len = (int) (pos - this.currentPosition);
             byte[] b = new byte[len];
@@ -190,20 +190,21 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
         }
         closed = true;
         dataPos = -1;
-        closeWrapped();
+        drainStream();
     }
 
-    private void closeWrapped() {
+    private void drainStream() {
         try {
-            if (wrappedStream != null) {
+            InputStream is = super.getSourceInputStream();
+            if (is != null) {
                 byte[] b = new byte[8192];
-                while (wrappedStream.read(b) > 0) ; // Read all data so stream can be reused
-                wrappedStream.close();
+                while (is.read(b) > 0) ; // Read all data so stream can be reused
+                is.close();
             }
         } catch (IOException ioe) {
             // The underlying stream may be closed but there's no API to tell....
         }
-        wrappedStream = null;
+        super.setSourceInputStream(null);
     }
 
     /**
@@ -242,18 +243,16 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
             LOG.debug("{}: Detected footer read", this);
             // Parquet footer. Load from cache (side effect: will load info)
             ParquetFooterInfo fi;
+            final Range fRange = range;
             try {
                 fi =
                         parquetCache.get(
                                 key,
                                 () -> {
                                     LOG.debug("Loading parquet cache for {}", key);
-                                    GetObjectResponse response = objectStorage.getObject(request);
                                     ParquetFooterInfo ret = new ParquetFooterInfo();
-                                    try (final InputStream is = response.getInputStream()) {
-                                        ret.footer = new byte[8];
-                                        readAllBytes(is, ret.footer);
-                                    }
+                                    ret.footer = new byte[8];
+                                    readAllBytes(fRange, ret.footer);
                                     ret.metadataLen =
                                             Byte.toUnsignedInt(ret.footer[3]) << 24
                                                     | Byte.toUnsignedInt(ret.footer[2]) << 16
@@ -263,14 +262,8 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
                                     long metaStart = metaEnd - ret.metadataLen;
                                     ret.metadataStart = metaStart;
                                     Range mdRange = new Range(metaStart, metaEnd);
-                                    GetObjectRequest mdRequest =
-                                            requestBuilder.get().range(mdRange).build();
-                                    GetObjectResponse mdResponse =
-                                            objectStorage.getObject(mdRequest);
                                     ret.metadata = new byte[ret.metadataLen];
-                                    try (InputStream is = mdResponse.getInputStream()) {
-                                        readAllBytes(is, ret.metadata);
-                                    }
+                                    readAllBytes(mdRange, ret.metadata);
                                     ret.fileMetaData =
                                             readFileMetaData(
                                                     new ByteArrayInputStream(ret.metadata), false);
@@ -282,7 +275,7 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
             dataPos = start;
             dataMax = len;
             dataCurOffset = 0;
-            wrappedStream = new ByteArrayInputStream(fi.footer);
+            super.setSourceInputStream(new ByteArrayInputStream(fi.footer));
             return;
         }
         GetObjectRequest modRequest = request;
@@ -293,7 +286,7 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
                 dataPos = start;
                 dataMax = fi.metadataLen;
                 dataCurOffset = 0;
-                wrappedStream = new ByteArrayInputStream(fi.metadata);
+                super.setSourceInputStream(new ByteArrayInputStream(fi.metadata));
                 return;
             }
             LOG.debug("{}: Checking metadata start length ", this, len);
@@ -336,7 +329,7 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
                 end,
                 status.getLen());
         GetObjectResponse response = objectStorage.getObject(modRequest);
-        wrappedStream = response.getInputStream();
+        super.setSourceInputStream(response.getInputStream());
         dataPos = this.currentPosition;
         dataMax = len;
         dataCurOffset = 0;

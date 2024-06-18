@@ -177,6 +177,15 @@ public enum BmcProperties {
      * config key name. Defaults to Java SDK timeout, see {@link ClientConfiguration}.
      */
     READ_TIMEOUT_MILLIS(READ_TIMEOUT_MILLIS_KEY, null),
+
+
+    /**
+     * (int, optional) The maximum number of retries if data reading fails. See
+     * {@link BmcConstants#READ_MAX_RETRIES_KEY}
+     * default 2, retry once if the initial read attempt failed.
+     */
+    READ_MAX_RETRIES(READ_MAX_RETRIES_KEY, 2),
+
     /**
      * (boolean, optional) Flag for whether or not multi-part uploads are allowed at all. See
      * {@link BmcConstants#MULTIPART_ALLOWED_KEY} for config key name. Default true.
