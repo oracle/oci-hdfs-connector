@@ -344,7 +344,7 @@ public class BmcParallelReadAheadFSInputStreamTest {
                 GetObjectRequest.builder().objectName("testObject");
 
         return new BmcParallelReadAheadFSInputStream(
-                objectStorage, status, requestBuilder, statistics, createExecutorService(), blockSize, blockCount);
+                objectStorage, status, requestBuilder, 0, statistics, createExecutorService(), blockSize, blockCount);
     }
 
     private ByteArrayInputStream createInputStream(byte[] contents, int startByte, int endByte) {

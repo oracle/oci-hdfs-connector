@@ -5,6 +5,7 @@
  */
 package com.oracle.bmc.hdfs.store;
 
+import java.time.Duration;
 import java.util.function.Supplier;
 import com.oracle.bmc.model.Range;
 import com.oracle.bmc.objectstorage.ObjectStorage;
@@ -16,6 +17,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.runners.MockitoJUnitRunner;
 import org.mockito.stubbing.Answer;
@@ -59,7 +61,7 @@ public class BmcDirectFSInputStreamTest {
 
         BmcDirectFSInputStream directFSInputStream =
                 new BmcDirectFSInputStream(
-                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, statistics);
+                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 0, statistics);
 
         for (int i = 0; i < READ_COUNT; i++) {
             directFSInputStream.read();
@@ -125,7 +127,7 @@ public class BmcDirectFSInputStreamTest {
 
         final BmcDirectFSInputStream directFSInputStream =
                 new BmcDirectFSInputStream(
-                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, statistics);
+                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 1, statistics);
 
         for (int i = 0; i < READ_COUNT; i++) {
             directFSInputStream.read();
@@ -148,6 +150,225 @@ public class BmcDirectFSInputStreamTest {
                 assertEquals(null, range.getEndByte());
             }
         }
+    }
+
+    @Test
+    public void testReadRetryOnceSingleByte() throws IOException {
+        // Create a mock InputStream
+        InputStream mockStreamFailed = Mockito.mock(InputStream.class);
+        InputStream mockStreamSucceeded = Mockito.mock(InputStream.class);
+        Supplier<GetObjectRequest.Builder> requestBuilder = () -> GetObjectRequest.builder().objectName("testObject");
+
+        Mockito.doThrow(new IOException("Read timed out"))
+                .when(mockStreamFailed).read();
+
+
+        // Mock reading 2 bytes successfully
+        when(mockStreamSucceeded.read())
+                .thenReturn(32)
+                .thenReturn(125);
+
+        // Configure the mock to throw a TimeoutException on the first call and succeed on the second call
+        when(objectStorage.getObject(any(GetObjectRequest.class)))
+                .thenReturn(GetObjectResponse.builder().inputStream(mockStreamFailed).build())
+                .thenReturn(GetObjectResponse.builder().inputStream(mockStreamSucceeded).build());
+
+        BmcDirectFSInputStream underTest =
+                new BmcDirectFSInputStream(
+                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 1, statistics);
+        underTest.retryPolicy().withDelay(Duration.ofMillis(200));
+
+        // First read, initial ObjectStorage stream read would fail, retry triggered.
+        assertEquals(32, underTest.read());
+        // Second read, read from local buffer.
+        assertEquals(125, underTest.read());
+        // Verify that objectStorage.getObject was called twice
+        verify(objectStorage, times(2)).getObject(any(GetObjectRequest.class));
+    }
+
+    @Test
+    public void testReadRetryOnceMultiByte() throws IOException {
+        // Create mock InputStreams
+        InputStream mockStreamFailed = Mockito.mock(InputStream.class);
+        InputStream mockStreamSucceeded = Mockito.mock(InputStream.class);
+
+        // Mock the InputStream read method to throw IOException on the first read and return data on the second
+        Mockito.doThrow(new IOException("Read timed out"))
+                .when(mockStreamFailed).read(any(byte[].class), anyInt(), anyInt());
+
+        byte[] buffer = new byte[]{32, 125};  // bytes to be read by the mockStreamSucceeded
+        Mockito.when(mockStreamSucceeded.read(any(byte[].class), anyInt(), anyInt()))
+                .thenAnswer(invocation -> {
+                    byte[] b = (byte[]) invocation.getArguments()[0];
+                    int off = (int) invocation.getArguments()[1];
+                    int len = (int) invocation.getArguments()[2];
+                    System.arraycopy(buffer, 0, b, off, len);
+                    return len;
+                });
+
+        Supplier<GetObjectRequest.Builder> requestBuilder = () -> GetObjectRequest.builder().objectName("testObject");
+
+        // Configure the mock objectStorage to return the failed stream first, then the succeeded stream
+        when(objectStorage.getObject(any(GetObjectRequest.class)))
+                .thenReturn(GetObjectResponse.builder().inputStream(mockStreamFailed).build())
+                .thenReturn(GetObjectResponse.builder().inputStream(mockStreamSucceeded).build());
+
+        BmcDirectFSInputStream underTest = new BmcDirectFSInputStream(
+                objectStorage, fileStatus, requestBuilder, 1, statistics);
+        underTest.retryPolicy().withDelay(Duration.ofMillis(200));
+
+        // Byte array to read into
+        byte[] byteArray = new byte[2];
+
+        // First read, initial ObjectStorage stream read would fail, retry triggered.
+        int bytesRead = underTest.read(byteArray, 0, byteArray.length);
+        assertEquals(2, bytesRead);
+        assertArrayEquals(buffer, byteArray);
+
+        // Verify that objectStorage.getObject was called twice
+        verify(objectStorage, times(2)).getObject(any(GetObjectRequest.class));
+    }
+
+    @Test
+    public void testReadNoRetrySingleByte() throws IOException {
+        // Create a mock InputStream
+        InputStream mockStreamSucceeded = Mockito.mock(InputStream.class);
+        InputStream mockDummyStream = Mockito.mock(InputStream.class);
+        Supplier<GetObjectRequest.Builder> requestBuilder = () -> GetObjectRequest.builder().objectName("testObject");
+
+
+        // Mock reading 2 bytes successfully
+        when(mockStreamSucceeded.read())
+                .thenReturn(32)
+                .thenReturn(125);
+
+        //when(status.getLen()).thenReturn(30L);
+        when(objectStorage.getObject(any(GetObjectRequest.class)))
+                .thenReturn(GetObjectResponse.builder().inputStream(mockStreamSucceeded).build())
+                .thenReturn(GetObjectResponse.builder().inputStream(mockDummyStream).build());
+
+        BmcDirectFSInputStream underTest =
+                new BmcDirectFSInputStream(
+                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 1, statistics);
+
+        // First read, initial ObjectStorage stream read would fail, retry triggered.
+        assertEquals(32, underTest.read());
+        // Second read, read from local buffer.
+        assertEquals(125, underTest.read());
+        // Verify that objectStorage.getObject was called only once
+        verify(objectStorage, times(1)).getObject(any(GetObjectRequest.class));
+    }
+
+    @Test
+    public void testReadNoRetryMultiByte() throws IOException {
+        // Create mock InputStreams
+        InputStream mockStreamSucceeded = Mockito.mock(InputStream.class);
+        InputStream mockDummyStream = Mockito.mock(InputStream.class);
+
+        byte[] buffer = new byte[]{32, 125};  // bytes to be read by the mockStreamSucceeded
+        Mockito.when(mockStreamSucceeded.read(any(byte[].class), anyInt(), anyInt()))
+                .thenAnswer(invocation -> {
+                    byte[] b = (byte[]) invocation.getArguments()[0];
+                    int off = (int) invocation.getArguments()[1];
+                    int len = (int) invocation.getArguments()[2];
+                    System.arraycopy(buffer, 0, b, off, len);
+                    return len;
+                });
+
+        Supplier<GetObjectRequest.Builder> requestBuilder = () -> GetObjectRequest.builder().objectName("testObject");
+
+        // Configure the mock objectStorage to return the failed stream first, then the succeeded stream
+        when(objectStorage.getObject(any(GetObjectRequest.class)))
+                .thenReturn(GetObjectResponse.builder().inputStream(mockStreamSucceeded).build())
+                .thenReturn(GetObjectResponse.builder().inputStream(mockDummyStream).build());
+
+        BmcDirectFSInputStream underTest = new BmcDirectFSInputStream(
+                objectStorage, fileStatus, requestBuilder, 1, statistics);
+        underTest.retryPolicy().withDelay(Duration.ofMillis(200));
+
+        // Byte array to read into
+        byte[] byteArray = new byte[2];
+
+        // First read, initial ObjectStorage stream read would fail, retry triggered.
+        int bytesRead = underTest.read(byteArray, 0, byteArray.length);
+        assertEquals(2, bytesRead);
+        assertArrayEquals(buffer, byteArray);
+
+        // Verify that objectStorage.getObject was called twice
+        verify(objectStorage, times(1)).getObject(any(GetObjectRequest.class));
+    }
+
+    @Test
+    public void testReadRetryFailed() throws IOException {
+        // Create a mock InputStream
+        InputStream mockStreamFailed = Mockito.mock(InputStream.class);
+        Supplier<GetObjectRequest.Builder> requestBuilder = () -> GetObjectRequest.builder().objectName("testObject");
+
+        Mockito.doThrow(new IOException("Read timed out"))
+                .when(mockStreamFailed).read();
+        Mockito.doThrow(new IOException("Read timed out"))
+                .when(mockStreamFailed).read(Mockito.any(byte[].class));
+        Mockito.doThrow(new IOException("Read timed out"))
+                .when(mockStreamFailed).read(Mockito.any(byte[].class), Mockito.anyInt(), Mockito.anyInt());
+
+        // Configure the mock to throw a TimeoutException on the first call and succeed on the second call
+
+        when(objectStorage.getObject(any(GetObjectRequest.class)))
+                .thenReturn(GetObjectResponse.builder().inputStream(mockStreamFailed).build());
+
+        BmcDirectFSInputStream underTest =
+                new BmcDirectFSInputStream(
+                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 3, statistics);
+        underTest.retryPolicy().withDelay(Duration.ofMillis(200));
+
+        // First read, initial ObjectStorage stream read would fail, retry triggered.
+        assertThrows(IOException.class, () -> underTest.read());
+        verify(objectStorage, times(4)).getObject(any(GetObjectRequest.class));
+
+        assertThrows(IOException.class, () -> underTest.read(new byte[2]));
+        verify(objectStorage, times(8)).getObject(any(GetObjectRequest.class));
+
+        assertThrows(IOException.class, () -> underTest.read(new byte[3], 0, 2));
+        verify(objectStorage, times(12)).getObject(any(GetObjectRequest.class));
+    }
+
+    @Test
+    public void testReadRetryFailedThenRecover() throws IOException {
+        // Create a mock InputStream
+        InputStream mockStreamFailed = Mockito.mock(InputStream.class);
+        InputStream mockStreamSucceeded = Mockito.mock(InputStream.class);
+        Supplier<GetObjectRequest.Builder> requestBuilder = () -> GetObjectRequest.builder().objectName("testObject");
+
+        Mockito.doThrow(new IOException("Read timed out"))
+                .when(mockStreamFailed).read();
+
+        when(mockStreamSucceeded.read())
+                .thenReturn(32)
+                .thenReturn(125);
+        // Configure the mock to throw a TimeoutException on the first call and succeed on the second call
+
+        when(objectStorage.getObject(any(GetObjectRequest.class)))
+                .thenReturn(GetObjectResponse.builder().inputStream(mockStreamFailed).build())
+                .thenReturn(GetObjectResponse.builder().inputStream(mockStreamFailed).build())
+                .thenReturn(GetObjectResponse.builder().inputStream(mockStreamFailed).build())
+                .thenReturn(GetObjectResponse.builder().inputStream(mockStreamFailed).build())
+                .thenReturn(GetObjectResponse.builder().inputStream(mockStreamSucceeded).build());
+
+        BmcDirectFSInputStream underTest =
+                new BmcDirectFSInputStream(
+                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 3, statistics);
+        underTest.retryPolicy().withDelay(Duration.ofMillis(200));
+
+        // First read, initial ObjectStorage stream read would fail, retry triggered.
+        assertThrows(IOException.class, () -> underTest.read());
+        verify(objectStorage, times(4)).getObject(any(GetObjectRequest.class));
+
+        // First read, initial ObjectStorage stream read would fail, retry triggered.
+        assertEquals(32, underTest.read());
+        // Second read, read from local buffer.
+        assertEquals(125, underTest.read());
+
+        verify(objectStorage, times(5)).getObject(any(GetObjectRequest.class));
     }
 
     private static int generateRandomByte() {

@@ -80,8 +80,8 @@
              and will not work if bundled with a shaded jar.
              https://stackoverflow.com/questions/32775478/jce-cannot-authenticate-the-provider-bc
         -->
-        <include>org.bouncycastle:bcpkix-jdk15on</include>
-        <include>org.bouncycastle:bcprov-jdk15on</include>
+        <include>org.bouncycastle:bcpkix-jdk15to18</include>
+        <include>org.bouncycastle:bcprov-jdk15to18</include>
 
         <include>com.google.code.findbugs:jsr305</include>
       </includes>

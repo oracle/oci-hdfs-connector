@@ -2,6 +2,13 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
+## 3.3.4.1.5.0 - 2024-06-17
+### Changed
+-  Updated OCI Java SDK version to `3.39.0`
+-  Updated org.bouncycastle from `jdk15on` to `jdk15to18`
+### Added
+-  Added read retry policy to InputStream
+
 ## 3.3.4.1.4.2 - 2024-03-12
 ### Changed
 -  Updated OCI Java SDK version to `3.34.0`

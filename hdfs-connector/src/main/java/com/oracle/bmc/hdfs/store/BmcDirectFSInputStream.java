@@ -28,8 +28,9 @@ public class BmcDirectFSInputStream extends BmcFSInputStream {
             final ObjectStorage objectStorage,
             final FileStatus status,
             final Supplier<GetObjectRequest.Builder> requestBuilder,
+            final int readMaxRetries,
             final Statistics statistics) {
-        super(objectStorage, status, requestBuilder, statistics);
+        super(objectStorage, status, requestBuilder, readMaxRetries, statistics);
     }
 
     @Override
@@ -39,43 +40,5 @@ public class BmcDirectFSInputStream extends BmcFSInputStream {
         super.setSourceInputStream(null);
         super.validateState(position);
         return super.getPos();
-    }
-
-    @Override
-    public int read() throws IOException {
-        this.checkNotClosed();
-        // Try reading from the current stream
-        LOG.debug("{}: Reading single byte", this);
-        try {
-            return super.read();
-        } catch (IOException e) {
-            LOG.warn("{}: Read failed, possibly a stale connection. Will close connection and re-attempt. Exception: {}", this, e);
-            // If the stream has been idle for a while, then Object Storage LB closes the connection causing an IOException
-            // on the client side. Close the current stream and try again.
-            FSStreamUtils.closeQuietly(super.getSourceInputStream());
-            super.setSourceInputStream(null);
-            return super.read();
-        }
-    }
-
-    @Override
-    public int read(final byte[] b, final int off, final int len) throws IOException {
-        this.checkNotClosed();
-        // Try reading from the current stream
-        LOG.debug("{}: Attempting to read offset {} length {}", this, off, len);
-        // see https://issues.apache.org/jira/browse/HDFS-10277
-        if (len == 0) {
-            return 0;
-        }
-        try {
-            return super.read(b, off, len);
-        } catch (IOException e) {
-            LOG.warn("{}: Read failed, possibly a stale connection. Will close connection and re-attempt.", this, e);
-            // If the stream has been idle for a while, then Object Storage LB closes the connection causing an IOException
-            // on the client side. Close the current stream and try again.
-            FSStreamUtils.closeQuietly(super.getSourceInputStream());
-            super.setSourceInputStream(null);
-            return super.read(b, off, len);
-        }
     }
 }

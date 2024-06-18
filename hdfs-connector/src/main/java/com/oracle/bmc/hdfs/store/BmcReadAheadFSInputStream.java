@@ -14,6 +14,7 @@ import com.google.common.cache.CacheBuilderSpec;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
 import lombok.extern.slf4j.Slf4j;
+import net.jodah.failsafe.RetryPolicy;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem.Statistics;
@@ -44,10 +45,11 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
             final ObjectStorage objectStorage,
             final FileStatus status,
             final Supplier<GetObjectRequest.Builder> requestBuilder,
+            final int readMaxRetries,
             final Statistics statistics,
             final int ociReadAheadBlockSize,
             final Cache<String, ParquetFooterInfo> parquetCache) {
-        super(objectStorage, status, requestBuilder, statistics);
+        super(objectStorage, status, requestBuilder, readMaxRetries, statistics);
         this.ociReadAheadBlockSize = ociReadAheadBlockSize;
         LOG.info("ReadAhead block size is " + ociReadAheadBlockSize);
         this.parquetCache = parquetCache;
@@ -57,10 +59,11 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
             final ObjectStorage objectStorage,
             final FileStatus status,
             final Supplier<GetObjectRequest.Builder> requestBuilder,
+            final int readMaxRetries,
             final Statistics statistics,
             final int ociReadAheadBlockSize,
             final String parquetCacheString) {
-        super(objectStorage, status, requestBuilder, statistics);
+        super(objectStorage, status, requestBuilder, readMaxRetries, statistics);
         this.ociReadAheadBlockSize = ociReadAheadBlockSize;
         LOG.info("ReadAhead block size is " + ociReadAheadBlockSize);
         this.parquetCache = configureParquetCache(parquetCacheString);
@@ -230,18 +233,16 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
             LOG.debug("{}: Detected footer read", this);
             // Parquet footer. Load from cache (side effect: will load info)
             ParquetFooterInfo fi;
+            final Range fRange = range;
             try {
                 fi =
                         parquetCache.get(
                                 key,
                                 () -> {
                                     LOG.debug("Loading parquet cache for {}", key);
-                                    GetObjectResponse response = objectStorage.getObject(request);
                                     ParquetFooterInfo ret = new ParquetFooterInfo();
-                                    try (final InputStream is = response.getInputStream()) {
-                                        ret.footer = new byte[8];
-                                        readAllBytes(is, ret.footer);
-                                    }
+                                    ret.footer = new byte[8];
+                                    readAllBytes(fRange, ret.footer);
                                     ret.metadataLen =
                                             Byte.toUnsignedInt(ret.footer[3]) << 24
                                                     | Byte.toUnsignedInt(ret.footer[2]) << 16
@@ -251,14 +252,8 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
                                     long metaStart = metaEnd - ret.metadataLen;
                                     ret.metadataStart = metaStart;
                                     Range mdRange = new Range(metaStart, metaEnd);
-                                    GetObjectRequest mdRequest =
-                                            requestBuilder.get().range(mdRange).build();
-                                    GetObjectResponse mdResponse =
-                                            objectStorage.getObject(mdRequest);
                                     ret.metadata = new byte[ret.metadataLen];
-                                    try (InputStream is = mdResponse.getInputStream()) {
-                                        readAllBytes(is, ret.metadata);
-                                    }
+                                    readAllBytes(mdRange, ret.metadata);
                                     return ret;
                                 });
             } catch (ExecutionException ex) {
@@ -287,11 +282,8 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
             LOG.debug("{}: Not using parquet semantics", this);
         }
         // Not a parquet file, or column data; just read normally
-        GetObjectResponse response = objectStorage.getObject(request);
         data = new byte[len];
-        try (InputStream is = response.getInputStream()) {
-            readAllBytes(is, data);
-        }
+        readAllBytes(range, data);
         dataPos = this.currentPosition;
         dataMax = len;
         dataCurOffset = 0;
