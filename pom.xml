@@ -11,7 +11,7 @@
 
   <groupId>com.oracle.oci.sdk</groupId>
   <artifactId>oci-hdfs</artifactId>
-  <version>3.3.4.1.5.0</version>
+  <version>3.3.4.1.5.1</version>
   <packaging>pom</packaging>
 
   <name>Oracle Cloud Infrastructure HDFS Connector for Storage Service</name>
@@ -337,7 +337,7 @@
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-compress</artifactId>
-      <version>1.21</version>
+      <version>1.26.0</version>
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>

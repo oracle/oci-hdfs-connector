@@ -2,6 +2,13 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
+## 3.3.4.1.5.1 - 2024-08-27
+### Changed
+-  Updated commons-compress from `1.21` to `1.26.0`,  CVE-2024-26308
+### Added
+-  Added jettison as dependency for HDFS-connector fat jar
+-  Added SECURITY.md
+
 ## 3.3.4.1.5.0 - 2024-06-17
 ### Changed
 -  Updated OCI Java SDK version to `3.39.0`
