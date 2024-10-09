@@ -75,6 +75,8 @@ public class BmcFilesystem extends FileSystem {
 
     private volatile BmcFilesystemImpl delegate;
 
+    private volatile FSKey delegteFSKey;
+
     private static class FSKey {
         private final URI uri;
         private final Configuration configuration;
@@ -119,21 +121,15 @@ public class BmcFilesystem extends FileSystem {
                     }
                 };
 
+        /*
+        Which ever BmcFileSystem had the BmcFilesystemImpl instance at the point of time it was removed from cache,
+        will continue to hold it and use it , until they close it from their end
+         */
+
         CacheBuilder<FSKey, BmcFilesystemImpl> cacheBuilder =
                 CacheBuilder.newBuilder()
                         .removalListener(
-                                rn -> {
-                                    LOG.info("Physically closing delegate for " + rn.getKey().uri);
-                                    try {
-                                        rn.getValue().close();
-                                    } catch (IOException ioe) {
-                                        LOG.warn(
-                                                "IOException "
-                                                        + ioe
-                                                        + " while physically closing "
-                                                        + rn.getKey().uri);
-                                    }
-                                });
+                                rn -> LOG.debug("Removing BmcFSImpl from cache for " + rn.getKey().uri)); // no-op on removal, just for logging
 
         if (!propertyAccessor.asBoolean().get(BmcProperties.FILESYSTEM_CACHING_ENABLED)) {
             LOG.info("BmcFilesystem caching disabled");
@@ -179,7 +175,8 @@ public class BmcFilesystem extends FileSystem {
             return;
         }
         setupFilesystemCache(configuration);
-        delegate = fsCache.getUnchecked(new FSKey(uri, configuration));
+        delegteFSKey = new FSKey(uri, configuration);
+        delegate = fsCache.getUnchecked(delegteFSKey);
         delegate.addOwner(this);
     }
 
@@ -192,7 +189,7 @@ public class BmcFilesystem extends FileSystem {
     @Override
     public FSDataOutputStream append(
             final Path path, final int bufferSize, final Progressable progress) throws IOException {
-        return delegate.append(path, bufferSize, progress);
+        return delegate == null || delegate.isClosed() ? null : delegate.append(path, bufferSize, progress);
     }
 
     @Override
@@ -205,7 +202,7 @@ public class BmcFilesystem extends FileSystem {
             final long blockSize,
             final Progressable progress)
             throws IOException {
-        return delegate.create(
+        return delegate == null || delegate.isClosed() ? null : delegate.create(
                 path, permission, overwrite, bufferSize, replication, blockSize, progress);
     }
 
@@ -219,75 +216,88 @@ public class BmcFilesystem extends FileSystem {
             long blockSize,
             Progressable progress)
             throws IOException {
-        return delegate.createNonRecursive(
+        return delegate == null || delegate.isClosed() ? null : delegate.createNonRecursive(
                 f, permission, flags, bufferSize, replication, blockSize, progress);
     }
 
     @Override
     public boolean delete(final Path path, final boolean recursive) throws IOException {
-        return delegate == null ? false : delegate.delete(path, recursive);
+        return delegate == null || delegate.isClosed() ? false : delegate.delete(path, recursive);
     }
 
     @Override
     public ContentSummary getContentSummary(final Path path) throws IOException {
-        return delegate == null ? null : delegate.getContentSummary(path);
+        return delegate == null || delegate.isClosed() ? null : delegate.getContentSummary(path);
     }
 
     @Override
     public FileStatus getFileStatus(final Path path) throws IOException {
-        return delegate == null ? null : delegate.getFileStatus(path);
+        return delegate == null || delegate.isClosed() ? null : delegate.getFileStatus(path);
     }
 
     @Override
     public FileStatus[] listStatus(final Path path) throws IOException {
-        return delegate == null ? null : delegate.listStatus(path);
+        return delegate == null || delegate.isClosed() ? null : delegate.listStatus(path);
     }
 
     @Override
     public boolean mkdirs(final Path path, final FsPermission permission) throws IOException {
-        return delegate == null ? false : delegate.mkdirs(path, permission);
+        return delegate == null || delegate.isClosed() ? false : delegate.mkdirs(path, permission);
     }
 
     @Override
     public FSDataInputStream open(final Path path, final int bufferSize) throws IOException {
-        return delegate == null ? null : delegate.open(path, bufferSize);
+        return delegate == null || delegate.isClosed() ? null : delegate.open(path, bufferSize);
     }
 
     @Override
     public boolean rename(final Path source, final Path destination) throws IOException {
-        return delegate == null ? false : delegate.rename(source, destination);
+        return delegate == null || delegate.isClosed() ? false : delegate.rename(source, destination);
     }
 
     @Override
     public long getDefaultBlockSize() {
-        return delegate == null ? 0 : delegate.getDefaultBlockSize();
+        return delegate == null || delegate.isClosed() ? 0 : delegate.getDefaultBlockSize();
     }
 
     @Override
     public int getDefaultPort() {
-        return delegate == null ? BmcConstants.DEFAULT_PORT : delegate.getDefaultPort();
+        return delegate == null || delegate.isClosed() ? BmcConstants.DEFAULT_PORT : delegate.getDefaultPort();
     }
 
     @Override
     public String getCanonicalServiceName() {
-        return delegate == null ? null : delegate.getCanonicalServiceName();
+        return delegate == null || delegate.isClosed() ? null : delegate.getCanonicalServiceName();
     }
 
-    // This will only close if all owners have been closed to avoid memory leaks.
-    public void close() throws IOException {
-        if (delegate != null && delegate.isClosed()) {
-            super.close();
+    @Override
+    public synchronized void close() throws IOException {
+        // synchronized to make closing thread safe of FileSystem instance
+        super.close();
+        if (delegate == null || delegate.isClosed()) {
+            return;
+        }
+        delegate.removeOwner(this);
+        if (delegate.ownersCount() == 0 ) {
+            delegate.close();
+            if (delegteFSKey != null && fsCache != null) {
+                BmcFilesystemImpl fs = fsCache.getIfPresent(delegteFSKey);
+                if (delegate.equals(fs)) {
+                    // remove from cache if it's the same instance of BmcFilesystemImpl
+                    fsCache.invalidate(delegteFSKey);
+                }
+            }
         }
     }
 
     @Override
     public Path getWorkingDirectory() {
-        return delegate == null ? null : delegate.getWorkingDirectory();
+        return delegate == null || delegate.isClosed() ? null : delegate.getWorkingDirectory();
     }
 
     @Override
     public void setWorkingDirectory(final Path workingDirectory) {
-        if (delegate == null) {
+        if (delegate == null || delegate.isClosed()) {
             return;
         }
         delegate.setWorkingDirectory(workingDirectory);
@@ -295,23 +305,23 @@ public class BmcFilesystem extends FileSystem {
 
     @Override
     public URI getUri() {
-        return delegate == null ? null : delegate.getUri();
+        return delegate == null || delegate.isClosed() ? null : delegate.getUri();
     }
 
     public BmcDataStore getDataStore() {
-        return delegate == null ? null : delegate.getDataStore();
+        return delegate == null || delegate.isClosed() ? null : delegate.getDataStore();
     }
 
     @Override
     public Configuration getConf() {
-        return delegate == null ? null : delegate.getConf();
+        return delegate == null || delegate.isClosed() ? null : delegate.getConf();
     }
 
     @Override
     public RemoteIterator<LocatedFileStatus> listFiles(final Path f,
                 final boolean recursive) throws FileNotFoundException, IOException {
         if (recursive) {
-            return delegate == null ? null : delegate.listFiles(f, true);
+            return delegate == null || delegate.isClosed() ? null : delegate.listFiles(f, true);
         } else {
             return super.listFiles(f, false);
         }
@@ -906,10 +916,6 @@ class BmcFilesystemImpl extends FileSystem {
             isClosed = true;
         } catch (Exception e) {
             LOG.warn("Caught exception while closing filesystem", e);
-        } finally {
-            for (BmcFilesystem fs : owners) {
-                fs.close();
-            }
         }
     }
 
@@ -922,6 +928,14 @@ class BmcFilesystemImpl extends FileSystem {
 
     private RemoteIterator<LocatedFileStatus> listFilesAndZeroByteDirs(Path path) throws IOException {
         return new FlatListingRemoteIterator(path, true);
+    }
+
+    public synchronized void removeOwner(BmcFilesystem fs) {
+        owners.remove(fs);
+    }
+
+    public int ownersCount() {
+        return owners.size();
     }
 
     @Override
@@ -966,7 +980,7 @@ class BmcFilesystemImpl extends FileSystem {
             if (resultList.size() > 0) {
                 return true;
             }
-
+            dataStore.close();
             if (fetchComplete) {
                 return false;
             } else {
