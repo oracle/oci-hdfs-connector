@@ -103,6 +103,8 @@ public class BmcDataStore {
     // TODO: need to get last modified date (creation date for objects) in some missing cases
     private static final long LAST_MODIFICATION_TIME = 0L;
 
+    private static final TimeUnit THREAD_KEEP_ALIVE_TIME_UNIT = TimeUnit.SECONDS;
+
     private final ObjectStorage objectStorage;
     private final Statistics statistics;
     private final String bucket;
@@ -208,49 +210,83 @@ public class BmcDataStore {
     private ExecutorService createParallelDownloadExecutor(final BmcPropertyAccessor propertyAccessor) {
         final Integer numThreadsForReadaheadOperations =
                 propertyAccessor.asInteger().get(BmcProperties.NUM_READ_AHEAD_THREADS);
+        final long threadsTimeoutInSeconds = getThreadsTimeoutInSeconds(propertyAccessor);
         final ExecutorService executorService;
         if (numThreadsForReadaheadOperations == null
                 || numThreadsForReadaheadOperations <= 1) {
             executorService =
-                    Executors.newFixedThreadPool(
+                newSwingFixedThreadPool(
                             1,
                             new ThreadFactoryBuilder()
                                     .setDaemon(true)
                                     .setNameFormat("bmcs-hdfs-readahead-%d")
-                                    .build());
+                                    .build(),threadsTimeoutInSeconds);
         } else {
             executorService =
-                    Executors.newFixedThreadPool(
+                newSwingFixedThreadPool(
                             numThreadsForReadaheadOperations,
                             new ThreadFactoryBuilder()
                                     .setDaemon(true)
                                     .setNameFormat("bmcs-hdfs-readahead-%d")
-                                    .build());
+                                    .build(),threadsTimeoutInSeconds);
         }
         return executorService;
+    }
+
+
+    private long getThreadsTimeoutInSeconds(BmcPropertyAccessor propertyAccessor) {
+        Long threadsTimeoutInSeconds = propertyAccessor.asLong().get(BmcProperties.BMC_DATASTORE_IO_THREAD_TIMEOUT_IN_SECONDS);
+        if(threadsTimeoutInSeconds == null || threadsTimeoutInSeconds <= 0) {
+            // safety check to handle even if previous impl sent a non-positive value
+            LOG.warn("Invalid value received {} for property {}. Using default value of {} seconds", threadsTimeoutInSeconds , BmcProperties.BMC_DATASTORE_IO_THREAD_TIMEOUT_IN_SECONDS.getPropertyName(), (Long) BmcProperties.BMC_DATASTORE_IO_THREAD_TIMEOUT_IN_SECONDS.getDefaultValue());
+            threadsTimeoutInSeconds = (Long) BmcProperties.BMC_DATASTORE_IO_THREAD_TIMEOUT_IN_SECONDS.getDefaultValue();
+        }
+        return threadsTimeoutInSeconds;
+    }
+
+
+    /**
+     * Creates a thread pool that will be able to swing open threads between 0 to nThreads
+     * If any additional tasks come , they wait in the queue
+     *
+     * @param nThreads the number of threads in the pool
+     * @param threadFactory the factory to use when creating new threads
+     * @param threadsTimeoutInSeconds timeout Of threads in seconds
+     * @return the newly created thread pool
+     * @throws NullPointerException if threadFactory is null
+     * @throws IllegalArgumentException if {@code nThreads <= 0}
+     */
+    public static ExecutorService newSwingFixedThreadPool(int nThreads, ThreadFactory threadFactory,long threadsTimeoutInSeconds) {
+        ThreadPoolExecutor tp =  new ThreadPoolExecutor(nThreads, nThreads,
+            threadsTimeoutInSeconds, THREAD_KEEP_ALIVE_TIME_UNIT,
+            new LinkedBlockingQueue<Runnable>(),
+            threadFactory);
+        tp.allowCoreThreadTimeOut(true);
+        return tp;
     }
 
     private ExecutorService createParallelRenameExecutor(BmcPropertyAccessor propertyAccessor) {
         final Integer numThreadsForRenameDirectoryOperation =
                 propertyAccessor.asInteger().get(BmcProperties.RENAME_DIRECTORY_NUM_THREADS);
+        final long threadsTimeoutInSeconds = getThreadsTimeoutInSeconds(propertyAccessor);
         final ExecutorService executorService;
         if (numThreadsForRenameDirectoryOperation == null
                 || numThreadsForRenameDirectoryOperation <= 1) {
             executorService =
-                    Executors.newFixedThreadPool(
+                newSwingFixedThreadPool(
                             1,
                             new ThreadFactoryBuilder()
                                     .setDaemon(true)
                                     .setNameFormat("bmcs-hdfs-rename-%d")
-                                    .build());
+                                    .build(),threadsTimeoutInSeconds);
         } else {
             executorService =
-                    Executors.newFixedThreadPool(
+                newSwingFixedThreadPool(
                             numThreadsForRenameDirectoryOperation,
                             new ThreadFactoryBuilder()
                                     .setDaemon(true)
                                     .setNameFormat("bmcs-hdfs-rename-%d")
-                                    .build());
+                                    .build(),threadsTimeoutInSeconds);
         }
         return executorService;
     }
@@ -258,6 +294,7 @@ public class BmcDataStore {
     private ExecutorService createParallelMd5Executor(BmcPropertyAccessor propertyAccessor) {
         final Integer numThreadsForParallelMd5Operation =
                 propertyAccessor.asInteger().get(BmcProperties.MD5_NUM_THREADS);
+        final long threadsTimeoutInSeconds = getThreadsTimeoutInSeconds(propertyAccessor);
         final int taskTimeout =
                 propertyAccessor
                         .asInteger()
@@ -269,17 +306,19 @@ public class BmcDataStore {
                 || numThreadsForParallelMd5Operation <= 1) {
             executorService = new DirectExecutorService();
         } else {
-            executorService = new ThreadPoolExecutor(
+            ThreadPoolExecutor tp = new ThreadPoolExecutor(
                     numThreadsForParallelMd5Operation,
                     numThreadsForParallelMd5Operation,
-                    0L,
-                    TimeUnit.MILLISECONDS,
+                    threadsTimeoutInSeconds,
+                    THREAD_KEEP_ALIVE_TIME_UNIT,
                     new SynchronousQueue<>(),
                     new ThreadFactoryBuilder()
                             .setDaemon(true)
                             .setNameFormat("bmcs-hdfs-multipart-md5-%d")
                             .build(),
                     rejectedExecutionHandler);
+            tp.allowCoreThreadTimeOut(true);
+            executorService = tp;
         }
         return executorService;
     }
@@ -521,6 +560,7 @@ public class BmcDataStore {
             final UploadConfigurationBuilder uploadConfigurationBuilder) {
         final Integer numThreadsForParallelUpload =
                 propertyAccessor.asInteger().get(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS);
+        final long threadsTimeoutInSeconds = getThreadsTimeoutInSeconds(propertyAccessor);
 
         final boolean streamMultipartEnabled =
                 propertyAccessor
@@ -560,24 +600,26 @@ public class BmcDataStore {
             final BlockingRejectionHandler rejectedExecutionHandler =
                     new BlockingRejectionHandler(taskTimeout);
 
-            return new ThreadPoolExecutor(
-                    numThreadsForParallelUpload,
-                    numThreadsForParallelUpload,
-                    0L,
-                    TimeUnit.MILLISECONDS,
-                    new LinkedBlockingQueue<Runnable>(numThreadsForParallelUpload),
-                    new ThreadFactoryBuilder()
-                            .setDaemon(true)
-                            .setNameFormat("bmcs-hdfs-blocking-upload-%d")
-                            .build(),
-                    rejectedExecutionHandler);
+            ThreadPoolExecutor tp = new ThreadPoolExecutor(
+                numThreadsForParallelUpload,
+                numThreadsForParallelUpload,
+                threadsTimeoutInSeconds,
+                THREAD_KEEP_ALIVE_TIME_UNIT,
+                new LinkedBlockingQueue<Runnable>(numThreadsForParallelUpload),
+                new ThreadFactoryBuilder()
+                    .setDaemon(true)
+                    .setNameFormat("bmcs-hdfs-blocking-upload-%d")
+                    .build(),
+                rejectedExecutionHandler);
+            tp.allowCoreThreadTimeOut(true);
+            return tp;
         }
-        return Executors.newFixedThreadPool(
+        return newSwingFixedThreadPool(
                 numThreadsForParallelUpload,
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
                         .setNameFormat("bmcs-hdfs-upload-%d")
-                        .build());
+                        .build(),threadsTimeoutInSeconds);
     }
 
     /**
