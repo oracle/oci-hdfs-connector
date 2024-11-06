@@ -46,6 +46,13 @@ public enum BmcProperties {
      * Incompatible with READ_AHEAD.
      */
     IN_MEMORY_READ_BUFFER(IN_MEMORY_READ_BUFFER_KEY, false),
+
+    /**
+     * (boolean, optional) Flag to enable the SDK level circuit breaker.
+     * See {@link BmcConstants#OBJECT_STORAGE_CLIENT_CIRCUIT_BREAKER_ENABLED_KEY} for config key name. Default is true.
+     */
+    OBJECT_STORAGE_CLIENT_CIRCUIT_BREAKER_ENABLED(OBJECT_STORAGE_CLIENT_CIRCUIT_BREAKER_ENABLED_KEY, true),
+
     /**
      * (string, optional) Fully qualified class name of a custom implementation of {@link ObjectStorage}. See
      * {@link BmcConstants#OBJECT_STORE_CLIENT_CLASS_KEY} for config key name.

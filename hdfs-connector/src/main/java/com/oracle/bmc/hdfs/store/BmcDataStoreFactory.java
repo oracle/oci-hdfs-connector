@@ -53,6 +53,7 @@ import com.oracle.bmc.monitoring.MonitoringClient;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.ObjectStorageClient;
 import com.oracle.bmc.retrier.RetryConfiguration;
+import com.oracle.bmc.util.CircuitBreakerUtils;
 import com.oracle.bmc.util.StreamUtils;
 import com.oracle.bmc.util.internal.FileUtils;
 import com.oracle.bmc.util.internal.StringUtils;
@@ -290,6 +291,14 @@ public class BmcDataStoreFactory {
             clientConfigurationBuilder.readTimeoutMillis(readTimeoutMillis);
         }
 
+        final Boolean circuitBreakerEnabled =
+            propertyAccessor.asBoolean().get(BmcProperties.OBJECT_STORAGE_CLIENT_CIRCUIT_BREAKER_ENABLED);
+        if (circuitBreakerEnabled != null && !circuitBreakerEnabled) {
+            LOG.info("Setting to no-op circuit breaker conf");
+            clientConfigurationBuilder.circuitBreakerConfiguration(
+                CircuitBreakerUtils.getNoCircuitBreakerConfiguration());
+        }
+
         ClientConfiguration clientConfig = clientConfigurationBuilder.build();
         BasicAuthenticationDetailsProvider authDetailsProvider = this.createAuthenticator(propertyAccessor);
 
@@ -497,6 +506,14 @@ public class BmcDataStoreFactory {
         if (readTimeoutMillis != null) {
             LOG.info("Setting read timeout to {}", readTimeoutMillis);
             clientConfigurationBuilder.readTimeoutMillis(readTimeoutMillis);
+        }
+
+        final Boolean circuitBreakerEnabled =
+            propertyAccessor.asBoolean().get(BmcProperties.OBJECT_STORAGE_CLIENT_CIRCUIT_BREAKER_ENABLED);
+        if (circuitBreakerEnabled != null && !circuitBreakerEnabled) {
+            LOG.info("Setting to no-op circuit breaker conf");
+            clientConfigurationBuilder.circuitBreakerConfiguration(
+                CircuitBreakerUtils.getNoCircuitBreakerConfiguration());
         }
 
         // Set the retry strategy for the client

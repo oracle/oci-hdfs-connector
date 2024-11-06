@@ -224,6 +224,9 @@ public final class BmcConstants {
             = "fs.oci.emit.thread.poll.interval.seconds";
     public static final String OCI_MON_MAX_BACKLOG_BEFORE_DROP_KEY = "fs.oci.mon.max.backlog.before.drop";
 
+    // sdk circuit breaker conf
+    public static final String OBJECT_STORAGE_CLIENT_CIRCUIT_BREAKER_ENABLED_KEY = "fs.oci.client.circuitbreaker.enabled";
+
     /**
      * This class contains constants with deprecated values. The HDFS connector will first try the current values
      * in {@link com.oracle.bmc.hdfs.BmcConstants}.
