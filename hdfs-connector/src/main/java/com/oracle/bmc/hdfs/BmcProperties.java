@@ -338,6 +338,14 @@ public enum BmcProperties {
      */
     NUM_READ_AHEAD_THREADS(NUM_READ_AHEAD_THREADS_KEY, 16),
 
+
+    /**
+     * (long,optional) Timeout for the I/O threads created to make operations to the Object Storage service.
+     * See {@link BmcConstants#DATASTORE_IO_THREAD_TIMEOUT_IN_SECONDS_KEY} for config key name. Default is 10 minutes.
+     * Smaller than or equal to 0 is interpreted as using the default value.
+     */
+    BMC_DATASTORE_IO_THREAD_TIMEOUT_IN_SECONDS(DATASTORE_IO_THREAD_TIMEOUT_IN_SECONDS_KEY,600L),
+
     /**
      * (boolean, optional) When set to true, enforces strict directory marker rules for the file system represented by the Object Storage bucket.
      * Each directory must be represented by a zero-byte object with the (directory name + '/') as the object name.

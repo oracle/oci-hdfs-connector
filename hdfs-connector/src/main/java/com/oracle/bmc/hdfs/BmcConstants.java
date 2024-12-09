@@ -43,6 +43,8 @@ public final class BmcConstants {
 
     public static final String NUM_READ_AHEAD_THREADS_KEY = "fs.oci.io.read.ahead.numthreads";
 
+    public static final String DATASTORE_IO_THREAD_TIMEOUT_IN_SECONDS_KEY = "fs.oci.io.threads.timeout.seconds";
+
     public static final String WRITE_STREAM_CLASS_KEY = "fs.oci.io.write.custom.stream";
 
     public static final String OBJECT_STORE_CLIENT_CLASS_KEY = "fs.oci.client.custom.client";
