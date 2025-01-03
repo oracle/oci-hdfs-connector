@@ -2,6 +2,19 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
+## 3.4.1.0.0.0 - 2025-01-06
+### Changed
+- Updated Hadoop version from `3.3.4` to `3.4.1` to resolve security vulnerabilities ([GHSA-f5fw-25gw-5m92](https://github.com/advisories/GHSA-f5fw-25gw-5m92)).
+- Updated OCI Java SDK version from `3.39.0` to `3.50.0` to address security vulnerabilities ([GHSA-v435-xc8x-wvr9](https://github.com/advisories/GHSA-v435-xc8x-wvr9)).
+- Updated Netty dependencies from `4.1.86.Final` to `4.1.115.Final` to resolve vulnerabilities ([GHSA-5jpm-x58v-624v](https://github.com/advisories/GHSA-5jpm-x58v-624v)).
+- Updated Jetty dependencies from `9.4.44.v20210927` to `9.4.56.v20240826` to address security vulnerabilities ([GHSA-58qw-p7qm-5rvh](https://github.com/advisories/GHSA-58qw-p7qm-5rvh)).
+- Updated OkHttp from `4.9.3` to `4.12.0` to resolve vulnerabilities ([GHSA-w33c-445m-f8w7](https://github.com/advisories/GHSA-w33c-445m-f8w7)).
+- Updated Apache Avro from `1.11.3` to `1.11.4` to resolve vulnerabilities ([GHSA-r7pg-v2c8-mfg3](https://github.com/advisories/GHSA-r7pg-v2c8-mfg3)).
+### Fixed
+- Fixed `BmcFileSystemImpl` to enhance resource management by improving close operations and cache invalidation.
+### Added
+- Added configuration `fs.oci.client.circuitbreaker.enabled` to enable or disable the circuit breaker.
+
 ## 3.3.4.1.5.1 - 2024-08-27
 ### Changed
 -  Updated commons-compress from `1.21` to `1.26.0`,  CVE-2024-26308
