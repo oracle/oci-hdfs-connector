@@ -12,7 +12,7 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.3.4.1.5.1</version>
+    <version>3.4.1.0.0.0</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -82,7 +82,7 @@
     <dependency>
         <groupId>com.oracle.oci.sdk</groupId>
         <artifactId>oci-hdfs-connector</artifactId>
-        <version>3.3.4.1.5.1</version>
+        <version>3.4.1.0.0.0</version>
     </dependency>
     <!-- For setting up an HTTP proxy -->
     <dependency>
@@ -179,7 +179,7 @@
     <dependency>
       <groupId>com.squareup.okhttp3</groupId>
       <artifactId>okhttp</artifactId>
-      <version>4.9.3</version>
+      <version>4.12.0</version>
     </dependency>
     <!--
       Deal with CVE-2021-28165:
@@ -228,12 +228,12 @@
     <dependency>
       <groupId>org.eclipse.jetty.websocket</groupId>
       <artifactId>websocket-client</artifactId>
-      <version>${jetty.websocket.version}</version>
+      <version>${jetty.version}</version>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty.websocket</groupId>
       <artifactId>websocket-api</artifactId>
-      <version>${jetty.websocket.version}</version>
+      <version>${jetty.version}</version>
     </dependency>
     <!-- End: Deal with CVE-2021-28165 -->
   </dependencies>
