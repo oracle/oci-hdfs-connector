@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileAlreadyExistsException;
+import org.apache.hadoop.fs.FileChecksum;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
@@ -314,6 +315,16 @@ public class BmcFilesystem extends FileSystem {
         } else {
             return super.listFiles(f, false);
         }
+    }
+
+    @Override
+    public FileChecksum getFileChecksum(Path f) throws IOException {
+        return delegate.getFileChecksum(f);
+    }
+
+    @Override
+    public FileChecksum getFileChecksum(Path f, long length) throws IOException {
+        return delegate.getFileChecksum(f, length);
     }
 }
 
@@ -922,6 +933,12 @@ class BmcFilesystemImpl extends FileSystem {
         }
 
         return new FlatListingRemoteIterator(f, false);
+    }
+
+    @Override
+    public FileChecksum getFileChecksum(Path f) throws IOException {
+        LOG.debug("Calculating checksum for {}", f);
+        return dataStore.getFileChecksum(f);
     }
 
     /**

@@ -26,8 +26,9 @@ public class BmcInMemoryOutputStream extends BmcOutputStream {
     public BmcInMemoryOutputStream(
             final UploadManager uploadManager,
             final int bufferSizeInBytes,
-            final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn) {
-        super(uploadManager, requestBuilderFn);
+            final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn,
+            int writeMaxRetires) {
+        super(uploadManager, requestBuilderFn, writeMaxRetires);
         this.bufferSizeInBytes = bufferSizeInBytes;
     }
 

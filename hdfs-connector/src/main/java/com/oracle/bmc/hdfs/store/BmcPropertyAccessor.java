@@ -202,6 +202,13 @@ public class BmcPropertyAccessor {
         };
     }
 
+    /**
+     * Fetches a Hadoop configuration property by name, returning the default value if not found.
+     */
+    public String getHadoopProperty(String propertyName, String defaultValue) {
+        return configuration.get(propertyName, defaultValue);
+    }
+
     private boolean exists(String key) {
         return this.get(key) != null;
     }

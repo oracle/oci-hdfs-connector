@@ -258,30 +258,30 @@ public abstract class BmcFSInputStream extends FSInputStream {
     }
 
     public RetryPolicy retryPolicy() {
-        if (this.retryPolicy == null) {
-            synchronized (this) {
-                if (this.retryPolicy == null) {
-                    LOG.info("Read retry policy, maximum retries: {}", readMaxRetries);
-                    this.retryPolicy = new RetryPolicy<>()
-                            .handle(Exception.class)
-                            .handleIf(e -> !this.closed)
-                            .withMaxRetries(readMaxRetries)
-                            .withDelay(Duration.ofSeconds(3))
-                            .withJitter(Duration.ofMillis(200))
-                            .onRetry(e -> {
-                                LOG.info("Read failed, possibly a stale connection. Will close connection and " +
-                                                "re-attempt. Message: {}, Retry count {}",
-                                        e.getLastFailure().getMessage(), e.getAttemptCount());
-                                // reset sourceInputStream, call verifyInitialized to rebuild if needed.
-                                FSStreamUtils.closeQuietly(sourceInputStream);
-                                sourceInputStream = null;
-                            })
-                            .onRetriesExceeded(e -> {
-                                LOG.error("Retries exhausted. Last failure: ", e.getFailure());
-                                FSStreamUtils.closeQuietly(sourceInputStream);
-                                sourceInputStream = null;
-                            });
-                }
+        if (retryPolicy != null) {
+            return retryPolicy;
+        }
+        synchronized (this) {
+            if (this.retryPolicy == null) {
+                LOG.info("Read retry policy, maximum retries: {}", readMaxRetries);
+                this.retryPolicy = new RetryPolicy<>()
+                        .handleIf(e -> !this.closed)
+                        .withMaxRetries(readMaxRetries)
+                        .withDelay(Duration.ofSeconds(3))
+                        .withJitter(Duration.ofMillis(200))
+                        .onRetry(e -> {
+                            LOG.info("Read failed, possibly a stale connection. Will close connection and " +
+                                            "re-attempt. Message: {}, Retry count {}",
+                                    e.getLastFailure().getMessage(), e.getAttemptCount());
+                            // reset sourceInputStream, call verifyInitialized to rebuild if needed.
+                            FSStreamUtils.closeQuietly(sourceInputStream);
+                            sourceInputStream = null;
+                        })
+                        .onRetriesExceeded(e -> {
+                            LOG.error("Retries exhausted. Last failure: ", e.getFailure());
+                            FSStreamUtils.closeQuietly(sourceInputStream);
+                            sourceInputStream = null;
+                        });
             }
         }
         return this.retryPolicy;

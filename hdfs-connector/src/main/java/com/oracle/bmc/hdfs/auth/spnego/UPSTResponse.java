@@ -1,13 +1,14 @@
 package com.oracle.bmc.hdfs.auth.spnego;
 
-import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
+import com.oracle.bmc.http.client.pki.Pem;
 
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
+import java.nio.channels.WritableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.PrivateKey;
 import java.security.interfaces.RSAPrivateKey;
+import java.io.IOException;
 
 public class UPSTResponse {
     private final String upstToken;
@@ -41,14 +42,13 @@ public class UPSTResponse {
 
     public static byte[] toByteArrayFromRSAPrivateKey(RSAPrivateKey key) {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        try (JcaPEMWriter writer =
-                     new JcaPEMWriter(new OutputStreamWriter(baos, StandardCharsets.UTF_8))) {
-            writer.writeObject(key);
-            writer.flush();
+        try {
+            Pem.encoder()
+                    .with(Pem.Format.LEGACY)
+                    .write(java.nio.channels.Channels.newChannel(baos), key);
         } catch (IOException e) {
-            throw new IllegalStateException("Unable to write PEM object", e);
+            throw new IllegalStateException("Unable to encode PEM object", e);
         }
-
         return baos.toByteArray();
     }
 

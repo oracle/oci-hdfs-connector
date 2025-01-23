@@ -189,9 +189,16 @@ public enum BmcProperties {
     /**
      * (int, optional) The maximum number of retries if data reading fails. See
      * {@link BmcConstants#READ_MAX_RETRIES_KEY}
-     * default 2, retry once if the initial read attempt failed.
+     * default 3, retry once if the initial read attempt failed.
      */
-    READ_MAX_RETRIES(READ_MAX_RETRIES_KEY, 2),
+    READ_MAX_RETRIES(READ_MAX_RETRIES_KEY, 3),
+
+    /**
+     * (int, optional) The maximum number of retries if data writing fails. See
+     * {@link BmcConstants#WRITE_MAX_RETRIES_KEY}
+     * default 3, retry once if the initial write attempt failed.
+     */
+    WRITE_MAX_RETRIES(WRITE_MAX_RETRIES_KEY, 3),
 
     /**
      * (boolean, optional) Flag for whether or not multi-part uploads are allowed at all. See
@@ -513,9 +520,15 @@ public enum BmcProperties {
     /**
      * (boolean, optional) Flag to enable overwrites while using Multipart Uploads.
      * See {@link BmcConstants#MULTIPART_ALLOW_OVERWRITE_KEY} for config key name. Default is false.
+     * Deprecated use {@link BmcConstants#OBJECT_ALLOW_OVERWRITE_KEY} instead.
      */
     MULTIPART_ALLOW_OVERWRITE(MULTIPART_ALLOW_OVERWRITE_KEY, false),
 
+    /**
+     * (boolean, optional) Flag to enable object or part overwrites during retry or concurrent write.
+     * See {@link BmcConstants#OBJECT_ALLOW_OVERWRITE_KEY} for config key name. Default is true.
+     */
+    OBJECT_ALLOW_OVERWRITE(OBJECT_ALLOW_OVERWRITE_KEY, true),
     /**
      * (boolean, optional) Flag to enable/disable auto-close of object streams on full read. The default is true.
      */

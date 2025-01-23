@@ -232,9 +232,7 @@ public class TestBmcFileSystemContract extends FileSystemContractBaseTest {
                 .close();
         dataStore
                 .openWriteStream(
-                        new Path("/existingobjects/fileAndSubdir/subdir/singleFile.txt"),
-                        1024,
-                        null)
+                        new Path("/existingobjects/fileAndSubdir/subdir/singleFile.txt"), 1024, null)
                 .close();
         dataStore
                 .openWriteStream(

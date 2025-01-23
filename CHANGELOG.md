@@ -2,7 +2,24 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
-## 3.4.1.0.0.0 - 2025-01-06
+## 3.4.1.0.0.1 - 2025-01-23
+### Added
+- Introduced `fs.oci.io.write.allow.overwrite` property to manage overwrite behavior during write operations.
+- Added support for using CRC32c (composite-crc32c) during file uploads via the HDFS Connector. Users can enable this by setting `fs.checksum.combine.mode` property in `core-site.xml` to `COMPOSITE_CRC`.
+- Implemented `getFileChecksum()` API to provide the CRC32c checksum of an object, supporting data integrity verification for DistCP operations.
+
+### Removed
+- Removed the deprecated `fs.oci.io.write.multipart.overwrite` property in favor of the newly introduced `fs.oci.io.write.allow.overwrite` property.
+
+### Changed
+- Updated OCI Java SDK to version `3.55.0` to enable checksum support. This update also removes BouncyCastle dependencies, and changes have been made in the connector to ensure compatibility.
+
+### Fixed
+- Addressed potential issues with internal retries in the HDFS Connector's output stream. The new retrier ensures that retries do not result in a `412 Precondition Failed` error when the application assumes the object does not already exist.
+- Retrier behavior is now aligned with the `allowoverwrite` property passed from the `OpenOutputStream` method to API calls.
+  
+
+## 3.4.1.0.0.0 - 2024-12-13
 ### Changed
 - Updated Hadoop version from `3.3.4` to `3.4.1` to resolve security vulnerabilities ([GHSA-f5fw-25gw-5m92](https://github.com/advisories/GHSA-f5fw-25gw-5m92)).
 - Updated OCI Java SDK version from `3.39.0` to `3.50.0` to address security vulnerabilities ([GHSA-v435-xc8x-wvr9](https://github.com/advisories/GHSA-v435-xc8x-wvr9)).

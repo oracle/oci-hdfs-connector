@@ -9,6 +9,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
 import com.oracle.bmc.hdfs.util.DirectExecutorService;
+import com.oracle.bmc.model.BmcException;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
 import com.oracle.bmc.objectstorage.model.MultipartUpload;
@@ -26,6 +27,7 @@ import org.mockito.Mockito;
 import org.mockito.runners.MockitoJUnitRunner;
 
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -61,7 +63,7 @@ public class BmcMultipartOutputStreamTest {
                         mockIntegerAccessor.get(
                                 eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS)))
                 .thenReturn(900);
-        when(mockBooleanAccessor.get(eq(BmcProperties.MULTIPART_ALLOW_OVERWRITE))).thenReturn(true);
+        when(mockBooleanAccessor.get(eq(BmcProperties.OBJECT_ALLOW_OVERWRITE))).thenReturn(true);
 
         when(mockPropAccessor.asInteger()).thenReturn(mockIntegerAccessor);
         when(mockPropAccessor.asBoolean()).thenReturn(mockBooleanAccessor);
@@ -87,7 +89,7 @@ public class BmcMultipartOutputStreamTest {
                         .allowOverwrite(true)
                         .build();
         BmcMultipartOutputStream bmos =
-                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService());
+                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService(), 2);
 
         String uploadId = "TestRequest";
         MultipartUpload upload =
@@ -142,7 +144,7 @@ public class BmcMultipartOutputStreamTest {
                         .allowOverwrite(true)
                         .build();
         BmcMultipartOutputStream bmos =
-                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService());
+                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService(), 2);
 
         String uploadId = "TestRequest";
         MultipartUpload upload =
@@ -219,7 +221,7 @@ public class BmcMultipartOutputStreamTest {
 
         Exception exception = null;
         try (BmcMultipartOutputStream bmos =
-                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService())) {
+                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService(), 2)) {
             for (int parts = 0; parts < 1; ++parts) {
                 bmos.write(generateRandomBytes(1024));
             }
@@ -228,7 +230,7 @@ public class BmcMultipartOutputStreamTest {
         }
 
         assert (exception != null);
-        Mockito.verify(objectStorage, times(1)).uploadPart(any(UploadPartRequest.class));
+        Mockito.verify(objectStorage, times(3)).uploadPart(any(UploadPartRequest.class));
         Mockito.verify(objectStorage, times(1))
                 .createMultipartUpload(any(CreateMultipartUploadRequest.class));
         Mockito.verify(objectStorage, never())
@@ -288,7 +290,7 @@ public class BmcMultipartOutputStreamTest {
         ExecutorService md5Executor = createExecutorService();
 
         try (BmcMultipartOutputStream bmos =
-                     new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, md5Executor)) {
+                     new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, md5Executor, 2)) {
             bmos.write(new byte[0]);
             bmos.flush();
         } finally {
@@ -296,6 +298,118 @@ public class BmcMultipartOutputStreamTest {
         }
 
         Mockito.verify(objectStorage, times(1)).putObject(any(PutObjectRequest.class));
+        Mockito.verify(objectStorage, never()).createMultipartUpload(any(CreateMultipartUploadRequest.class));
+    }
+
+    /**
+     * Test retry on a two-part object upload
+     */
+
+    @Test()
+    public void retryOnFailedPart() {
+        String bucket = "test-bucket";
+        String namespace = "testing";
+        String objectName = "test-object.txt";
+        CreateMultipartUploadDetails details =
+                CreateMultipartUploadDetails.builder().object(objectName).build();
+        CreateMultipartUploadRequest multipartUploadRequest =
+                CreateMultipartUploadRequest.builder()
+                        .bucketName(bucket)
+                        .namespaceName(namespace)
+                        .createMultipartUploadDetails(details)
+                        .build();
+        MultipartUploadRequest uploadRequest =
+                MultipartUploadRequest.builder()
+                        .objectStorage(objectStorage)
+                        .multipartUploadRequest(multipartUploadRequest)
+                        .allowOverwrite(true)
+                        .build();
+
+        String uploadId = "TestRequest";
+        MultipartUpload upload =
+                MultipartUpload.builder()
+                        .uploadId(uploadId)
+                        .bucket(bucket)
+                        .namespace(namespace)
+                        .object(objectName)
+                        .storageTier(StorageTier.Standard)
+                        .build();
+        Mockito.when(objectStorage.createMultipartUpload(any(CreateMultipartUploadRequest.class)))
+                .thenReturn(
+                        CreateMultipartUploadResponse.builder().multipartUpload(upload).build());
+
+        Mockito.when(objectStorage.uploadPart(any(UploadPartRequest.class)))
+                .thenThrow(new BmcException(true, "timeout", new SocketTimeoutException("Read Timeout"), "abcd1-xdfay"))
+                .thenThrow(new BmcException(429, null, "Too many requests", null))
+                .thenReturn(UploadPartResponse.builder().eTag("etag").build())
+                .thenThrow(new BmcException(true, "timeout", new SocketTimeoutException("Read Timeout"), "abcd2-xdfay"))
+                .thenThrow(new BmcException(429, null, "Too many requests", null))
+                .thenReturn(UploadPartResponse.builder().eTag("etag").build());
+
+        Mockito.when(objectStorage.commitMultipartUpload(any(CommitMultipartUploadRequest.class)))
+                .thenReturn(CommitMultipartUploadResponse.builder().eTag("testingEtag").build());
+
+        Exception exception = null;
+        try (BmcMultipartOutputStream bmos =
+                     new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService(), 2)) {
+            // two parts, first part 1024, second part 2 bytes
+            for (int parts = 0; parts < 2; ++parts) {
+                bmos.write(generateRandomBytes(512 + 1));
+            }
+        } catch (IOException ioe) {
+            exception = ioe;
+        }
+
+        assert (exception == null);
+        Mockito.verify(objectStorage, times(6)).uploadPart(any(UploadPartRequest.class));
+        Mockito.verify(objectStorage, times(1))
+                .createMultipartUpload(any(CreateMultipartUploadRequest.class));
+        Mockito.verify(objectStorage, times(1))
+                .commitMultipartUpload(any(CommitMultipartUploadRequest.class));
+        Mockito.verify(objectStorage, times(0))
+                .abortMultipartUpload(any(AbortMultipartUploadRequest.class));
+    }
+
+    /**
+     * Test retry on small object upload, using plain PutObject operation
+     */
+    @Test
+    public void retryOnSmallFileWrite() throws IOException {
+        String bucket = "test-bucket";
+        String namespace = "testing";
+        String objectName = "test-object.txt";
+
+        CreateMultipartUploadDetails details =
+                CreateMultipartUploadDetails.builder().object(objectName).build();
+        CreateMultipartUploadRequest multipartUploadRequest =
+                CreateMultipartUploadRequest.builder()
+                        .bucketName(bucket)
+                        .namespaceName(namespace)
+                        .createMultipartUploadDetails(details)
+                        .build();
+        MultipartUploadRequest uploadRequest =
+                MultipartUploadRequest.builder()
+                        .objectStorage(objectStorage)
+                        .multipartUploadRequest(multipartUploadRequest)
+                        .allowOverwrite(true)
+                        .build();
+
+        PutObjectResponse putResponse = PutObjectResponse.builder().build();
+        Mockito.when(objectStorage.putObject(any(PutObjectRequest.class)))
+                .thenThrow(new BmcException(true, "timeout", new SocketTimeoutException("Read Timeout"), "abcd1-xdfay"))
+                .thenThrow(new BmcException(429, null, "Too many requests", null))
+                .thenReturn(putResponse);
+        ExecutorService md5Executor = createExecutorService();
+
+        try (BmcMultipartOutputStream bmos =
+                     new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, md5Executor, 2)) {
+            bmos.write(new byte[0]);
+            bmos.flush();
+        } finally {
+            md5Executor.shutdown();
+        }
+
+        Mockito.verify(objectStorage, times(3)).putObject(any(PutObjectRequest.class));
         Mockito.verify(objectStorage, never()).createMultipartUpload(any(CreateMultipartUploadRequest.class));
     }
 
