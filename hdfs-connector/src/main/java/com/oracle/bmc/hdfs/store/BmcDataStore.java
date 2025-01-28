@@ -6,6 +6,8 @@
 package com.oracle.bmc.hdfs.store;
 
 import java.io.ByteArrayInputStream;
+import java.io.DataInput;
+import java.io.DataOutput;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -14,8 +16,10 @@ import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -55,6 +59,7 @@ import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
 import com.oracle.bmc.hdfs.util.DirectExecutorService;
 import com.oracle.bmc.model.BmcException;
 import com.oracle.bmc.objectstorage.ObjectStorage;
+import com.oracle.bmc.objectstorage.model.ChecksumAlgorithm;
 import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
 import com.oracle.bmc.objectstorage.model.ObjectSummary;
 import com.oracle.bmc.objectstorage.requests.CreateMultipartUploadRequest;
@@ -81,6 +86,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileAlreadyExistsException;
+import org.apache.hadoop.fs.FileChecksum;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem.Statistics;
 import org.apache.hadoop.fs.Path;
@@ -129,6 +135,7 @@ public class BmcDataStore {
     private final String parquetCacheString;
     private final String customReadStreamClass;
     private final String customWriteStreamClass;
+    private final String additionalChecksumAlgorithm;
 
     private int recursiveDirListingFetchSize;
 
@@ -152,6 +159,13 @@ public class BmcDataStore {
                 createUploadConfiguration(propertyAccessor);
         this.parallelUploadExecutor =
                 this.createExecutor(propertyAccessor, uploadConfigurationBuilder);
+        String checksumCombineMode = propertyAccessor.getHadoopProperty(BmcConstants.DFS_CHECKSUM_COMBINE_MODE_KEY,BmcConstants.DEFAULT_CHECKSUM_COMBINE_MODE);
+        if (BmcConstants.CHECKSUM_COMBINE_MODE_CRC.equalsIgnoreCase(checksumCombineMode)) {
+            this.additionalChecksumAlgorithm = ChecksumAlgorithm.Crc32C.getValue();
+            uploadConfigurationBuilder.additionalChecksumAlgorithm(ChecksumAlgorithm.Crc32C);
+        } else {
+            this.additionalChecksumAlgorithm = null;
+        }
         final UploadConfiguration uploadConfiguration = uploadConfigurationBuilder.build();
         LOG.info("Using upload configuration: {}", uploadConfiguration);
         this.uploadManager =
@@ -1478,8 +1492,8 @@ public class BmcDataStore {
             final Path path, int bufferSizeInBytes, final Progressable progress) {
         LOG.debug("Opening write stream to {}", path);
         final boolean allowOverwrite =
-                this.propertyAccessor.asBoolean().get(BmcProperties.MULTIPART_ALLOW_OVERWRITE);
-        LOG.debug("Allowing overwrites when using Multipart uploads");
+                this.propertyAccessor.asBoolean().get(BmcProperties.OBJECT_ALLOW_OVERWRITE);
+        LOG.debug("Allowing overwrites during object upload");
 
         // The value set for MULTIPART_PART_SIZE_IN_MB is in megabytes and needs to be converted to bytes
         final Integer lengthPerUploadPart =
@@ -1508,12 +1522,17 @@ public class BmcDataStore {
             final String objectName = this.pathToObject(path);
             final CreateMultipartUploadDetails details =
                     CreateMultipartUploadDetails.builder().object(objectName).build();
-            final CreateMultipartUploadRequest createMultipartUploadRequest =
+            final CreateMultipartUploadRequest.Builder createMultipartUploadRequestBuilder =
                     CreateMultipartUploadRequest.builder()
                             .bucketName(this.bucket)
                             .namespaceName(this.namespace)
-                            .createMultipartUploadDetails(details)
-                            .buildWithoutInvocationCallback();
+                            .createMultipartUploadDetails(details);
+            if (additionalChecksumAlgorithm != null &&
+                    additionalChecksumAlgorithm.equalsIgnoreCase(ChecksumAlgorithm.Crc32C.getValue()) ) {
+                createMultipartUploadRequestBuilder.opcChecksumAlgorithm(ChecksumAlgorithm.Crc32C);
+            }
+            final CreateMultipartUploadRequest createMultipartUploadRequest =
+                    createMultipartUploadRequestBuilder.buildWithoutInvocationCallback();
             final MultipartUploadRequest multipartUploadRequest =
                     MultipartUploadRequest.builder()
                             .objectStorage(this.objectStorage)
@@ -1521,14 +1540,91 @@ public class BmcDataStore {
                             .allowOverwrite(allowOverwrite)
                             .build();
             return new StatsMonitorOutputStream(new BmcMultipartOutputStream(
-                    this.propertyAccessor, multipartUploadRequest, bufferSizeInBytes,
-                    this.parallelMd5executor), ociMonitorPluginHandler);
+                    this.propertyAccessor,
+                    multipartUploadRequest,
+                    bufferSizeInBytes,
+                    this.parallelMd5executor,
+                    this.propertyAccessor.asInteger().get(BmcProperties.WRITE_MAX_RETRIES)),
+                    ociMonitorPluginHandler);
         } else if (this.useInMemoryWriteBuffer) {
             return new StatsMonitorOutputStream(new BmcInMemoryOutputStream(
-                    this.uploadManager, bufferSizeInBytes, requestBuilderFn), ociMonitorPluginHandler);
+                    this.uploadManager, bufferSizeInBytes, requestBuilderFn,
+                    this.propertyAccessor.asInteger().get(BmcProperties.WRITE_MAX_RETRIES)),
+                    ociMonitorPluginHandler);
         } else {
             return new StatsMonitorOutputStream(new BmcFileBackedOutputStream(
-                    this.propertyAccessor, this.uploadManager, requestBuilderFn), ociMonitorPluginHandler);
+                    this.propertyAccessor, this.uploadManager, requestBuilderFn,
+                    this.propertyAccessor.asInteger().get(BmcProperties.WRITE_MAX_RETRIES)),
+                    ociMonitorPluginHandler);
+        }
+    }
+
+    public FileChecksum getFileChecksum(Path path) throws IOException {
+        if (additionalChecksumAlgorithm == null) {
+            return null;
+        }
+
+        if (!ChecksumAlgorithm.Crc32C.getValue().equalsIgnoreCase(additionalChecksumAlgorithm)) {
+            LOG.warn("Unsupported checksum algorithm: {}", additionalChecksumAlgorithm);
+            return null;
+        }
+
+        String objectName = pathToObject(path);
+        LOG.debug("Get Checksum for objectName : {}", objectName);
+
+        HeadObjectRequest headObjectRequest = HeadObjectRequest.builder()
+                .bucketName(this.bucket)
+                .namespaceName(this.namespace)
+                .objectName(objectName)
+                .build();
+
+        HeadObjectResponse headObjectResponse;
+        try {
+            headObjectResponse = objectStorage.headObject(headObjectRequest);
+        } catch (Exception e) {
+            throw new IOException("Failed to get object metadata", e);
+        }
+
+        Optional<String> checksum = Optional.ofNullable(headObjectResponse.getOpcContentCrc32c());
+
+        if (!checksum.isPresent()) {
+            LOG.warn("Checksum not found for algorithm: {}", additionalChecksumAlgorithm);
+            return null;
+        }
+
+        return new CRC32CFileChecksum(checksum.get());
+    }
+
+    private static class CRC32CFileChecksum extends FileChecksum {
+        private String checksum;
+
+        public CRC32CFileChecksum(String checksum) {
+            this.checksum = checksum;
+        }
+
+        @Override
+        public String getAlgorithmName() {
+            return "COMPOSITE-CRC32C";
+        }
+
+        @Override
+        public int getLength() {
+            return Base64.getDecoder().decode(checksum).length;
+        }
+
+        @Override
+        public byte[] getBytes() {
+            return Base64.getDecoder().decode(checksum);
+        }
+
+        @Override
+        public void write(DataOutput out) throws IOException {
+            out.writeUTF(checksum);
+        }
+
+        @Override
+        public void readFields(DataInput in) throws IOException {
+            checksum = in.readUTF();
         }
     }
 

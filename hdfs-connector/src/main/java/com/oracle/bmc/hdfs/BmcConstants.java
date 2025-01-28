@@ -30,8 +30,11 @@ public final class BmcConstants {
     public static final String MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS_KEY =
             "fs.oci.io.write.multipart.inmemory.tasktimeout.seconds";
 
-    public static final String MULTIPART_ALLOW_OVERWRITE_KEY =
-            "fs.oci.io.write.multipart.overwrite";
+    /** @deprecated use {@link #OBJECT_ALLOW_OVERWRITE_KEY} instead */
+    @java.lang.Deprecated
+    public static final String MULTIPART_ALLOW_OVERWRITE_KEY = "fs.oci.io.write.multipart.overwrite";
+
+    public static final String OBJECT_ALLOW_OVERWRITE_KEY = "fs.oci.io.write.allow.overwrite";
 
     public static final String READ_AHEAD_KEY = "fs.oci.io.read.ahead";
 
@@ -90,6 +93,8 @@ public final class BmcConstants {
     public static final String READ_TIMEOUT_MILLIS_KEY = "fs.oci.client.http.readtimeout";
 
     public static final String  READ_MAX_RETRIES_KEY = "fs.oci.client.http.readmaxretries";
+
+    public static final String  WRITE_MAX_RETRIES_KEY = "fs.oci.client.http.writemaxretries";
 
     public static final String MULTIPART_ALLOWED_KEY = "fs.oci.client.multipart.allowed";
 
@@ -229,6 +234,10 @@ public final class BmcConstants {
     // sdk circuit breaker conf
     public static final String OBJECT_STORAGE_CLIENT_CIRCUIT_BREAKER_ENABLED_KEY = "fs.oci.client.circuitbreaker.enabled";
 
+    public static final String DFS_CHECKSUM_COMBINE_MODE_KEY = "dfs.checksum.combine.mode";
+    public static final String CHECKSUM_COMBINE_MODE_CRC = "COMPOSITE_CRC";
+    public static final String DEFAULT_CHECKSUM_COMBINE_MODE = "MD5MD5CRC";
+
     /**
      * This class contains constants with deprecated values. The HDFS connector will first try the current values
      * in {@link com.oracle.bmc.hdfs.BmcConstants}.
@@ -255,12 +264,11 @@ public final class BmcConstants {
                         .put(PEM_FILE_PATH_KEY, "fs.oraclebmc.client.auth.pemfilepath")
                         .put(PASS_PHRASE_KEY, "fs.oraclebmc.client.auth.passphrase")
                         .put(REGION_CODE_OR_ID_KEY, "fs.oraclebmc.client.regionCodeOrId")
-                        .put(MULTIREGION_ENABLED_KEY, "fs.oraclebmc.client.multiregion.enabled")
                         .put(
                                 CONNECTION_TIMEOUT_MILLIS_KEY,
                                 "fs.oraclebmc.client.http.connectiontimeout")
                         .put(READ_TIMEOUT_MILLIS_KEY, "fs.oraclebmc.client.http.readtimeout")
-                        .put(READ_MAX_RETRIES_KEY, "fs.oraclebmc.client.http.readmaxretries")
+                        .put(OBJECT_ALLOW_OVERWRITE_KEY, "fs.oci.io.write.multipart.overwrite")
                         .put(MULTIPART_ALLOWED_KEY, "fs.oraclebmc.client.multipart.allowed")
                         .put(
                                 MULTIPART_NUM_UPLOAD_THREADS_KEY,

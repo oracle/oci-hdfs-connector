@@ -8,7 +8,10 @@ package com.oracle.bmc.hdfs.store;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.time.Duration;
 
+import net.jodah.failsafe.Failsafe;
+import net.jodah.failsafe.RetryPolicy;
 import org.apache.hadoop.fs.FSExceptionMessages;
 
 import com.oracle.bmc.hdfs.util.BiFunction;
@@ -16,7 +19,6 @@ import com.oracle.bmc.model.BmcException;
 import com.oracle.bmc.objectstorage.transfer.UploadManager;
 import com.oracle.bmc.objectstorage.transfer.UploadManager.UploadRequest;
 import com.oracle.bmc.objectstorage.transfer.UploadManager.UploadResponse;
-import com.oracle.bmc.util.StreamUtils;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -28,17 +30,21 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 abstract class BmcOutputStream extends OutputStream {
+    private static final int ERROR_CODE_FILE_EXISTS = 412;
     private final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn;
     private final UploadManager uploadManager;
+    protected volatile RetryPolicy<Object> retryPolicy;
+    protected  final int writeMaxRetries;
 
     private OutputStream outputBufferStream;
     private boolean closed = false;
 
     public BmcOutputStream(
             final UploadManager uploadManager,
-            final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn) {
+            final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn, int writeMaxRetries) {
         this.uploadManager = uploadManager;
         this.requestBuilderFn = requestBuilderFn;
+        this.writeMaxRetries = writeMaxRetries;
     }
 
     @Override
@@ -81,18 +87,19 @@ abstract class BmcOutputStream extends OutputStream {
         this.outputBufferStream.close();
         this.outputBufferStream = null;
 
-        InputStream fromBufferedStream = null;
         try {
-            fromBufferedStream = this.getInputStreamFromBufferedStream();
-            final UploadRequest request =
-                    this.requestBuilderFn.apply(
-                            this.getInputStreamLengthInBytes(), fromBufferedStream);
-            final UploadResponse response = this.uploadManager.upload(request);
-            LOG.debug("Put new file with etag {}", response.getETag());
+            Failsafe.with(retryPolicy()).run(() -> {
+                try (InputStream fromBufferedStream =  this.getInputStreamFromBufferedStream()) {
+                    final UploadRequest request =
+                            this.requestBuilderFn.apply(
+                                    this.getInputStreamLengthInBytes(), fromBufferedStream);
+                    final UploadResponse response = this.uploadManager.upload(request);
+                    LOG.debug("Put new file with etag {}", response.getETag());
+                }
+            });
         } catch (final BmcException e) {
             throw new IOException("Unable to put object", e);
         } finally {
-            StreamUtils.closeQuietly(fromBufferedStream);
             super.close();
         }
     }
@@ -140,5 +147,31 @@ abstract class BmcOutputStream extends OutputStream {
         if (this.closed) {
             throw new IOException(FSExceptionMessages.STREAM_IS_CLOSED);
         }
+    }
+
+    /**
+     * Creates a retrier that retries on all exceptions except for 412 File Exists exception.
+     */
+    public RetryPolicy retryPolicy() {
+        if (retryPolicy != null) {
+            return retryPolicy;
+        }
+        synchronized (this) {
+            if (this.retryPolicy == null) {
+                LOG.info("Initializing write retry policy, maximum retries: {}", writeMaxRetries);
+                this.retryPolicy = new RetryPolicy<>()
+                        .handle(Exception.class)
+                        .handleIf(e -> !this.closed &&
+                                (!(e instanceof BmcException) ||
+                                        ((BmcException) e).getStatusCode() != ERROR_CODE_FILE_EXISTS))
+                        .withMaxRetries(writeMaxRetries)
+                        .withDelay(Duration.ofSeconds(3))
+                        .withJitter(Duration.ofMillis(200))
+                        .onRetry(e -> LOG.info("Write failed, retrying. Message: {}, Retry count {}",
+                                    e.getLastFailure().getMessage(), e.getAttemptCount()))
+                        .onRetriesExceeded(e -> LOG.error("Write retries exhausted. Last failure: ", e.getFailure()));
+            }
+        }
+        return this.retryPolicy;
     }
 }

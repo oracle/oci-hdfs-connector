@@ -87,4 +87,14 @@ public class BmcContract extends AbstractBondedFSContract {
             this.addConfResource(STATS_MON_STREAM_XML);
         }
     }
+
+    public static class ChecksumWrite extends BmcContract {
+        public static final String CONTRACT_CHECKSUM_WRITE_XML =
+                "contract/oci-checksumwrite.xml";
+
+        public ChecksumWrite(Configuration conf) {
+            super(conf);
+            this.addConfResource(CONTRACT_CHECKSUM_WRITE_XML);
+        }
+    }
 }
