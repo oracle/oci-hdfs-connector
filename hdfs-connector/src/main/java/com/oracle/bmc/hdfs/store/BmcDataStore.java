@@ -798,6 +798,10 @@ public class BmcDataStore implements AutoCloseable{
     }
 
     private void closeExecutorService(ExecutorService executorService,long timeOut,TimeUnit timeUnitOfTimeout) {
+        if (executorService == null) {
+            LOG.debug("ExecutorService is null, skipping shutdown");
+            return;
+        }
         executorService.shutdown();
         try {
             if (!executorService.awaitTermination(timeOut, timeUnitOfTimeout)) {
