@@ -98,7 +98,7 @@ import org.apache.hadoop.util.Progressable;
  * Statistics are updated only on successful operations, and not on attempted operations.
  */
 @Slf4j
-public class BmcDataStore {
+public class BmcDataStore implements AutoCloseable{
     private static final int ERROR_CODE_FILE_EXISTS = 412;
 
     private static final int MiB = 1024 * 1024;
@@ -109,7 +109,11 @@ public class BmcDataStore {
     // TODO: need to get last modified date (creation date for objects) in some missing cases
     private static final long LAST_MODIFICATION_TIME = 0L;
 
+    private static final long TIMEOUT_EXECUTOR_SHUTDOWN = 600L ;
+
     private static final TimeUnit THREAD_KEEP_ALIVE_TIME_UNIT = TimeUnit.SECONDS;
+
+    private static final TimeUnit TIME_UNIT_EXECUTOR_SHUTDOWN = TimeUnit.SECONDS;
 
     private final ObjectStorage objectStorage;
     private final Statistics statistics;
@@ -780,6 +784,41 @@ public class BmcDataStore {
             renameResponses.add(new RenameResponse(objectToRename, newObjectName, futureResponse));
         }
         awaitRenameOperationTermination(renameResponses);
+    }
+
+    @Override
+    public void close() {
+        /*
+        To close the executor Services to avoid thread leaking causing OOM
+         */
+        closeExecutorService(this.parallelDownloadExecutor, TIMEOUT_EXECUTOR_SHUTDOWN, TIME_UNIT_EXECUTOR_SHUTDOWN);
+        closeExecutorService(this.parallelUploadExecutor, TIMEOUT_EXECUTOR_SHUTDOWN, TIME_UNIT_EXECUTOR_SHUTDOWN);
+        closeExecutorService(this.parallelRenameExecutor, TIMEOUT_EXECUTOR_SHUTDOWN, TIME_UNIT_EXECUTOR_SHUTDOWN);
+        closeExecutorService(this.parallelMd5executor, TIMEOUT_EXECUTOR_SHUTDOWN, TIME_UNIT_EXECUTOR_SHUTDOWN);
+    }
+
+    private void closeExecutorService(ExecutorService executorService,long timeOut,TimeUnit timeUnitOfTimeout) {
+        if (executorService == null) {
+            LOG.debug("ExecutorService is null, skipping shutdown");
+            return;
+        }
+        executorService.shutdown();
+        try {
+            if (!executorService.awaitTermination(timeOut, timeUnitOfTimeout)) {
+                LOG.warn("ExecutorService did not terminate within the specified timeout {} {}",timeOut,timeUnitOfTimeout);
+            }
+        } catch (InterruptedException e) {
+            LOG.error("Current Thread was interrupted while awaiting termination of ExecutorService.", e);
+            /* set back the interrupt status .
+            Ref : https://docs.oracle.com/javase/tutorial/essential/concurrency/interrupt.html */
+            Thread.currentThread().interrupt();
+        } finally {
+            // In both cases (timeout or interrupted), force shutdown
+            if (!executorService.isTerminated()) {
+                LOG.warn("Forcing shutdown of ExecutorService by sending interrupt to threads in Exec service ");
+                executorService.shutdownNow();
+            }
+        }
     }
 
     @RequiredArgsConstructor
