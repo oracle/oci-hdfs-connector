@@ -914,6 +914,9 @@ class BmcFilesystemImpl extends FileSystem {
         try {
             super.close();
             isClosed = true;
+            if (dataStore != null) {
+                dataStore.close();
+            }
         } catch (Exception e) {
             LOG.warn("Caught exception while closing filesystem", e);
         }
@@ -980,7 +983,6 @@ class BmcFilesystemImpl extends FileSystem {
             if (resultList.size() > 0) {
                 return true;
             }
-            dataStore.close();
             if (fetchComplete) {
                 return false;
             } else {
