@@ -56,7 +56,7 @@ public class UPSTManagerTest {
         manager.getUPSTToken("spnegoToken");
     }
 
-    @Test(expected = NoSuchAlgorithmException.class)
+    @Test(expected = RuntimeException.class)
     public void testGenerateRSAKeyPairError() throws NoSuchAlgorithmException, UnsupportedEncodingException {
         when(rsaKeyPairGenerator.generateKeyPair()).thenThrow(new NoSuchAlgorithmException("RSA algorithm not found"));
         manager.getUPSTToken("spnegoToken");

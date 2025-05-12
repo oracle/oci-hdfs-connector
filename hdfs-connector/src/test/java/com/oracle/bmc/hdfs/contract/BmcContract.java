@@ -5,6 +5,7 @@
  */
 package com.oracle.bmc.hdfs.contract;
 
+import com.oracle.bmc.hdfs.GlobalConfigHolder;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.contract.AbstractBondedFSContract;
 
@@ -15,7 +16,13 @@ public class BmcContract extends AbstractBondedFSContract {
     public BmcContract(final Configuration conf) {
         super(conf);
         this.addConfResource(CONTRACT_XML);
-        this.addConfResource(CREDENTIALS_XML);
+
+        Configuration injected = GlobalConfigHolder.getConf();
+        if (injected != null) {
+            conf.addResource(injected);
+        } else {
+            this.addConfResource(CREDENTIALS_XML);
+        }
     }
 
     @Override

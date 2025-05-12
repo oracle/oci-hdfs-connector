@@ -1,6 +1,5 @@
-package com.oracle.bmc.hdfs;
+package com.oracle.bmc.hdfs.contract;
 
-import com.oracle.bmc.hdfs.contract.BmcContract;
 import com.oracle.bmc.objectstorage.transfer.internal.ChecksumUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;

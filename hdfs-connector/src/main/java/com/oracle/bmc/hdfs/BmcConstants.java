@@ -55,6 +55,9 @@ public final class BmcConstants {
     public static final String OBJECT_STORE_AUTHENTICATOR_CLASS_KEY =
             "fs.oci.client.custom.authenticator";
 
+    public static final String OBJECT_STORE_SESSION_AUTHENTICATOR_ENABLE_KEY =
+            "fs.oci.client.auth.sessiontoken.enable";
+
     public static final String HOST_NAME_KEY = "fs.oci.client.hostname";
 
     public static final String TENANT_ID_KEY = "fs.oci.client.auth.tenantId";
@@ -216,6 +219,8 @@ public final class BmcConstants {
             "fs.oci.delegation.token.filepath";
 
     public static final String RECURSIVE_DIR_LISTING_FETCH_SIZE_KEY = "fs.oci.dir.recursive.list.fetch.size";
+
+    public static final String SESSION_TOKEN_FILE_PATH_KEY = "fs.oci.client.auth.sessiontoken";
 
     /**
      * Following are the properties related to OCI monitoring for the connector

@@ -50,7 +50,7 @@ import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.caching.CachingObjectStorage;
 import com.oracle.bmc.hdfs.caching.ConsistencyPolicy;
 import com.oracle.bmc.hdfs.monitoring.OCIMetricKeys;
-import com.oracle.bmc.hdfs.monitoring.OCIMonitorPlugin;
+import com.oracle.bmc.hdfs.monitoring.OCIMonitorConsumerPlugin;
 import com.oracle.bmc.hdfs.monitoring.OCIMonitorPluginHandler;
 import com.oracle.bmc.hdfs.monitoring.StatsMonitorInputStream;
 import com.oracle.bmc.hdfs.monitoring.StatsMonitorOutputStream;
@@ -100,6 +100,7 @@ import org.apache.hadoop.util.Progressable;
 @Slf4j
 public class BmcDataStore implements AutoCloseable{
     private static final int ERROR_CODE_FILE_EXISTS = 412;
+    private static final int ERROR_CONCURRENT_UPDATE = 409;
 
     private static final int MiB = 1024 * 1024;
 
@@ -795,6 +796,23 @@ public class BmcDataStore implements AutoCloseable{
         closeExecutorService(this.parallelUploadExecutor, TIMEOUT_EXECUTOR_SHUTDOWN, TIME_UNIT_EXECUTOR_SHUTDOWN);
         closeExecutorService(this.parallelRenameExecutor, TIMEOUT_EXECUTOR_SHUTDOWN, TIME_UNIT_EXECUTOR_SHUTDOWN);
         closeExecutorService(this.parallelMd5executor, TIMEOUT_EXECUTOR_SHUTDOWN, TIME_UNIT_EXECUTOR_SHUTDOWN);
+
+        // Shutdown OCI Monitor Plugin Executor
+        if (ociMonitorPluginHandler != null) {
+            closeExecutorService(
+                    ociMonitorPluginHandler.getExecutorService(),
+                    TIMEOUT_EXECUTOR_SHUTDOWN,
+                    TIME_UNIT_EXECUTOR_SHUTDOWN
+            );
+
+            List<OCIMonitorConsumerPlugin> plugins = ociMonitorPluginHandler.getListOfPlugins();
+            if (plugins != null) {
+                for (OCIMonitorConsumerPlugin plugin : plugins) {
+                    plugin.shutdown();
+                }
+            }
+        }
+
     }
 
     private void closeExecutorService(ExecutorService executorService,long timeOut,TimeUnit timeUnitOfTimeout) {
@@ -851,7 +869,11 @@ public class BmcDataStore implements AutoCloseable{
             } catch (ExecutionException e) {
                 if (e.getCause() instanceof BmcException) {
                     BmcException bmcException = (BmcException) e.getCause();
-                    if (bmcException.getStatusCode() == ERROR_CODE_FILE_EXISTS) {
+                    // if running jobs in parallel, it's possible multiple threads try to run rename
+                    // operation on same file at the same time, which might lead to 409 conflicts.
+
+                    if (bmcException.getStatusCode() == ERROR_CODE_FILE_EXISTS
+                            || bmcException.getStatusCode() == ERROR_CONCURRENT_UPDATE) {
                         LOG.debug(
                                 "Failed to rename {} to {}",
                                 renameResponse.getOldName(),

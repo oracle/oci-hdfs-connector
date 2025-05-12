@@ -20,7 +20,7 @@ public class UPSTAuthenticationDetailsProviderTest {
         upstManagerFactory = mock(UPSTManagerFactory.class);
         upstManager = mock(UPSTManager.class);
 
-        when(upstManagerFactory.createUPSTManager(anyInt())).thenReturn(upstManager);
+        when(upstManagerFactory.createUPSTManager()).thenReturn(upstManager);
 
         provider = new UPSTAuthenticationDetailsProvider(configuration, upstManagerFactory);
     }

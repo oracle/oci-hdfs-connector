@@ -325,7 +325,12 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
         }
 
         private void cancel() {
-            future.cancel(true);
+            // Do not interrupt the ongoing tasks that have active connections to Object Storage by calling
+            // future.cancel(true). Doing so results in hung connections/threads, likely because the underlying SDK
+            // or the http connector (apache/jersy), do not handle this scenario well.
+            // Not interrupting ongoing tasks will not cause any other side effects, it's just that the read continues
+            // even after the stream has been closed and hence the data read will just be discarded eventually.
+            future.cancel(false);
         }
     }
 }

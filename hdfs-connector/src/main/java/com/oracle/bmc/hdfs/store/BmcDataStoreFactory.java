@@ -32,6 +32,7 @@ import com.oracle.bmc.ClientConfiguration;
 import com.oracle.bmc.ClientRuntime;
 import com.oracle.bmc.Region;
 import com.oracle.bmc.auth.BasicAuthenticationDetailsProvider;
+import com.oracle.bmc.auth.SessionTokenAuthenticationDetailsProvider;
 import com.oracle.bmc.auth.SimpleAuthenticationDetailsProvider;
 import com.oracle.bmc.auth.SimplePrivateKeySupplier;
 import com.oracle.bmc.auth.internal.DelegationTokenConfigurator;
@@ -797,6 +798,28 @@ public class BmcDataStoreFactory {
 
         final Supplier<InputStream> supplier = new SimplePrivateKeySupplier(pemFilePath);
         final char[] passPhrase = propertyAccessor.asPassword().get(BmcProperties.PASS_PHRASE);
+
+        if (propertyAccessor.asBoolean().get(BmcProperties.OBJECT_STORE_SESSION_AUTHENTICATOR_ENABLE)) {
+            String regionId = propertyAccessor.asString().get(BmcProperties.REGION_CODE_OR_ID);
+            if (regionId == null) {
+                throw new IllegalArgumentException("Missing required property 'fs.oci.client.regionCodeOrId' when session authentication is enabled");
+            }
+
+            Region region = Region.fromRegionCodeOrId(regionId);
+
+            try {
+                return SessionTokenAuthenticationDetailsProvider.builder()
+                        .fingerprint(fingerprint)
+                        .region(region)
+                        .tenantId(tenantId)
+                        .privateKeyFilePath(pemFilePath)
+                        .userId(userId)
+                        .sessionTokenFilePath(propertyAccessor.asString().get(BmcProperties.SESSION_TOKEN_FILE_PATH))
+                        .build();
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to build SessionTokenAuthenticationDetailsProvider", e);
+            }
+        }
 
         return SimpleAuthenticationDetailsProvider.builder()
                 .tenantId(tenantId)

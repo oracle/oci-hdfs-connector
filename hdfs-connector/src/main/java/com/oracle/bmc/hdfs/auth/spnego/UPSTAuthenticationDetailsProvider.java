@@ -16,12 +16,11 @@ import java.util.Date;
 public class UPSTAuthenticationDetailsProvider implements BasicAuthenticationDetailsProvider, RefreshableOnNotAuthenticatedProvider<String> {
 
     private final UPSTManager upstManager;
-    private UPSTResponse upstResponse;
+    private volatile UPSTResponse upstResponse;
+    private final Object refreshLock = new Object();
     private final Configuration conf;
     private static final SimpleDateFormat SDF = new SimpleDateFormat("E, dd MMM yyyy HH:mm:ss z");
-    private static final int RSA_KEY_SIZE = 2048;
     private static final long TOKEN_REFRESH_ADVANCE_PERIOD = 5 * 60 * 1000;
-
 
     public UPSTAuthenticationDetailsProvider(Configuration conf) {
         this(conf, new UPSTManagerFactory(conf));
@@ -30,7 +29,7 @@ public class UPSTAuthenticationDetailsProvider implements BasicAuthenticationDet
 
     protected UPSTAuthenticationDetailsProvider(Configuration conf, UPSTManagerFactory upstManagerFactory) {
         this.conf = conf;
-        this.upstManager = upstManagerFactory.createUPSTManager(RSA_KEY_SIZE);
+        this.upstManager = upstManagerFactory.createUPSTManager();
     }
 
     private void init() {
@@ -40,11 +39,14 @@ public class UPSTAuthenticationDetailsProvider implements BasicAuthenticationDet
 
     @Override
     public String getKeyId() {
-        return this.upstResponse.getUpstToken();
+        String keyId = this.upstResponse.getUpstToken();
+        LOG.trace("getKeyId() called. Returning UPST token: {}", keyId);
+        return keyId;
     }
 
     @Override
     public InputStream getPrivateKey() {
+        LOG.trace("getPrivateKey() called. Returning private key stream.");
         return new ByteArrayInputStream(this.upstResponse.getPrivateKeyInPEM());
     }
 
@@ -61,13 +63,17 @@ public class UPSTAuthenticationDetailsProvider implements BasicAuthenticationDet
 
     @Override
     public String refresh() {
-        try {
-            String spnegoToken = upstManager.generateSpnegoToken();
-            this.upstResponse = upstManager.getUPSTToken(spnegoToken);
-            return this.upstResponse.getUpstToken();
-        } catch (Exception e) {
-            LOG.error("Error while refreshing the token", e);
-            return null;
+        synchronized (refreshLock) {
+            try {
+                String spnegoToken = upstManager.generateSpnegoToken();
+                UPSTResponse newResponse = upstManager.getUPSTToken(spnegoToken);
+                this.upstResponse = newResponse;
+                LOG.info("Successfully refreshed UPST token.");
+                return newResponse.getUpstToken();
+            } catch (Exception e) {
+                LOG.error("Error while refreshing the token", e);
+                return null;
+            }
         }
     }
 

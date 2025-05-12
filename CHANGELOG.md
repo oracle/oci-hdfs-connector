@@ -17,7 +17,21 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 ### Fixed
 - Addressed potential issues with internal retries in the HDFS Connector's output stream. The new retrier ensures that retries do not result in a `412 Precondition Failed` error when the application assumes the object does not already exist.
 - Retrier behavior is now aligned with the `allowoverwrite` property passed from the `OpenOutputStream` method to API calls.
-  
+
+## 3.4.1.0.0.2 - 2025-05-12
+
+### Added
+- Added support for Security Token authentication.
+
+### Changed
+- Updated `mkdirs()` logic to create directories in root-to-leaf order. This avoids cases where child directories may exist without their parent, which can cause failures during access or listing.
+- Modified `cancel()` behavior to prevent interrupting in-flight read operations. This avoids hung connections caused by abrupt thread interruption during active I/O.
+- Updated RSA key generation flow for UPST authentication. Reuses the same RSA KeyPair across the lifetime of the token manager to prevent signing mismatches across refresh boundaries.
+
+### Fixed
+- Ensured proper shutdown of OCI Monitoring plugin and handler executors inside `BmcDataStore.close()` to prevent thread leaks.
+- Fixed premature shutdown of executor services in `BmcFileSystemImpl.close()` caused by cache invalidation behavior when caching is disabled.
+- Improved rename behavior by throwing `FileAlreadyExistsException` when rename fails due to concurrent writes, specifically on receiving `409 ConcurrentObjectUpdate` from the backend.
 
 ## 3.4.1.0.0.0 - 2024-12-13
 ### Changed
