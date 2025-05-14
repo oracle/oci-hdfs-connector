@@ -3,9 +3,8 @@
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
-package com.oracle.bmc.hdfs;
+package com.oracle.bmc.hdfs.contract;
 
-import com.oracle.bmc.hdfs.contract.BmcContract;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.junit.Before;

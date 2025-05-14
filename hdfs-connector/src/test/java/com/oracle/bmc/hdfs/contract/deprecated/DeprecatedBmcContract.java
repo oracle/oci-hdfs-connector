@@ -6,11 +6,11 @@
 package com.oracle.bmc.hdfs.contract.deprecated;
 
 import com.oracle.bmc.hdfs.BmcConstants;
+import com.oracle.bmc.hdfs.GlobalConfigHolder;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.contract.AbstractBondedFSContract;
 
 import java.util.Map;
-import java.util.regex.Pattern;
 
 public class DeprecatedBmcContract extends AbstractBondedFSContract {
     public static final String CONTRACT_XML = "contract/oci.xml";
@@ -19,8 +19,13 @@ public class DeprecatedBmcContract extends AbstractBondedFSContract {
     public DeprecatedBmcContract(final Configuration conf) {
         super(conf);
         this.addConfResource(CONTRACT_XML);
-        this.addConfResource(CREDENTIALS_XML);
 
+        Configuration injected = GlobalConfigHolder.getConf();
+        if (injected != null) {
+            conf.addResource(injected);
+        } else {
+            this.addConfResource(CREDENTIALS_XML);
+        }
         // convertToDeprecatedConfiguration(conf);
     }
 

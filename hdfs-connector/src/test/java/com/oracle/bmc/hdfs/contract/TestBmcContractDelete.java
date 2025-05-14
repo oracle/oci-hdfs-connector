@@ -5,12 +5,11 @@
  */
 package com.oracle.bmc.hdfs.contract;
 
+import com.oracle.bmc.hdfs.IntegrationTestCategory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.contract.AbstractContractDeleteTest;
 import org.apache.hadoop.fs.contract.AbstractFSContract;
 import org.junit.experimental.categories.Category;
-
-import com.oracle.bmc.hdfs.IntegrationTestCategory;
 
 @Category({IntegrationTestCategory.class})
 public class TestBmcContractDelete extends AbstractContractDeleteTest {

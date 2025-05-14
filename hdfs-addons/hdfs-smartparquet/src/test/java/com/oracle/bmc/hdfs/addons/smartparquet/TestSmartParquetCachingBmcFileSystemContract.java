@@ -6,7 +6,7 @@
 package com.oracle.bmc.hdfs.addons.smartparquet;
 
 import com.oracle.bmc.hdfs.IntegrationTestCategory;
-import com.oracle.bmc.hdfs.TestBmcFileSystemContract;
+import com.oracle.bmc.hdfs.contract.TestBmcFileSystemContract;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.junit.Before;

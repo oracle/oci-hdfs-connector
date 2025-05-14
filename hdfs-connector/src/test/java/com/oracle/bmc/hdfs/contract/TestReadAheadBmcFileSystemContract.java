@@ -3,22 +3,21 @@
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
-package com.oracle.bmc.hdfs;
+package com.oracle.bmc.hdfs.contract;
 
-import com.oracle.bmc.hdfs.contract.BmcContract;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.junit.Before;
 import org.junit.BeforeClass;
 
-public class TestMultipartInMemoryWriteBmcFileSystemContract extends TestBmcFileSystemContract {
+public class TestReadAheadBmcFileSystemContract extends TestBmcFileSystemContract {
 
     public static Path INITIAL_WORKING_DIRECTORY;
 
     @BeforeClass
     public static void setUpStatic() throws Exception {
         final Configuration configuration = new Configuration();
-        final BmcContract.InMemory contract = new BmcContract.InMemory(configuration);
+        final BmcContract.ReadAhead contract = new BmcContract.ReadAhead(configuration);
         contract.init();
         INITIAL_WORKING_DIRECTORY = contract.getTestFileSystem().getWorkingDirectory();
     }
@@ -27,8 +26,7 @@ public class TestMultipartInMemoryWriteBmcFileSystemContract extends TestBmcFile
     @Override
     public void setUp() throws Exception {
         final Configuration configuration = new Configuration();
-        final BmcContract.MultipartInMemoryWrite contract =
-                new BmcContract.MultipartInMemoryWrite(configuration);
+        final BmcContract.ReadAhead contract = new BmcContract.ReadAhead(configuration);
         contract.init();
         super.fs = contract.getTestFileSystem();
 

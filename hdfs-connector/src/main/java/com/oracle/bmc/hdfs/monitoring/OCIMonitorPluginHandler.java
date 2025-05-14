@@ -124,4 +124,12 @@ public class OCIMonitorPluginHandler {
                 }
             }));
     }
+
+    public ThreadPoolExecutor getExecutorService() {
+        return fixedSizeES;
+    }
+
+    public List<OCIMonitorConsumerPlugin> getListOfPlugins() {
+        return listOfPlugins;
+    }
 }

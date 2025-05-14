@@ -5,15 +5,24 @@ import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
 
 public class RSAKeyPairGenerator {
-    private final int keySize;
 
-    public RSAKeyPairGenerator(int keySize) {
-        this.keySize = keySize;
+    private final KeyPair keyPair;
+
+    public RSAKeyPairGenerator() {
+        this.keyPair = generateNewKeyPair();
     }
 
-    public KeyPair generateKeyPair() throws NoSuchAlgorithmException {
-        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
-        keyPairGenerator.initialize(keySize);
-        return keyPairGenerator.generateKeyPair();
+    public KeyPair generateKeyPair() {
+        return keyPair;
+    }
+
+    private KeyPair generateNewKeyPair() {
+        try {
+            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+            keyPairGenerator.initialize(2048);
+            return keyPairGenerator.generateKeyPair();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("Unable to generate RSA KeyPair", e);
+        }
     }
 }

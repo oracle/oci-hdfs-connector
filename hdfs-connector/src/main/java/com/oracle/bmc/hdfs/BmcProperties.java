@@ -677,8 +677,21 @@ public enum BmcProperties {
      * (Integer, optional) The maximum backlog that will be allowed in the list before no-admit.
      * See {@link BmcConstants#OCI_MON_MAX_BACKLOG_BEFORE_DROP_KEY} for config key name.
      */
-    OCI_MON_MAX_BACKLOG_BEFORE_DROP(OCI_MON_MAX_BACKLOG_BEFORE_DROP_KEY, 100000)
-    ;
+    OCI_MON_MAX_BACKLOG_BEFORE_DROP(OCI_MON_MAX_BACKLOG_BEFORE_DROP_KEY, 100000),
+
+    /**
+     * (boolean, optional) Enables or disables session token authentication for Object Store.
+     * If set to `true`, the application will use session token authentication.
+     * See {@link BmcConstants#OBJECT_STORE_SESSION_AUTHENTICATOR_ENABLE_KEY} for the configuration key name.
+     */
+    OBJECT_STORE_SESSION_AUTHENTICATOR_ENABLE(OBJECT_STORE_SESSION_AUTHENTICATOR_ENABLE_KEY, false),
+
+    /**
+     * (String, optional) The file path where the OCI session authentication token is stored.
+     * Default location: ~/.oci/sessions/DEFAULT/security_token.
+     * See {@link BmcConstants#SESSION_TOKEN_FILE_PATH_KEY} for the configuration key name.
+     */
+    SESSION_TOKEN_FILE_PATH(SESSION_TOKEN_FILE_PATH_KEY, "~/.oci/sessions/DEFAULT/security_token");
 
     @Getter private final String propertyName;
     @Getter private final Object defaultValue;

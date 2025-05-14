@@ -13,9 +13,9 @@ public class UPSTManagerFactory {
         this.configuration = configuration;
     }
 
-    public UPSTManager createUPSTManager(int rsaKeySize) {
+    public UPSTManager createUPSTManager() {
         UPSTManager.Builder builder = new UPSTManager.Builder()
-                .rsaKeyPairGenerator(new RSAKeyPairGenerator(rsaKeySize))
+                .rsaKeyPairGenerator(new RSAKeyPairGenerator())
                 .tokenGenerator(new SpnegoGenerator(configuration))
                 .tokenExchangeClient(new IAMTokenExchangeClient(configuration));
 

@@ -7,6 +7,7 @@ package com.oracle.bmc.hdfs.contract;
 
 import static org.apache.hadoop.fs.contract.ContractTestUtils.skip;
 
+import com.oracle.bmc.hdfs.IntegrationTestCategory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.Path;
@@ -15,8 +16,6 @@ import org.apache.hadoop.fs.contract.AbstractFSContract;
 import org.apache.hadoop.io.IOUtils;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
-import com.oracle.bmc.hdfs.IntegrationTestCategory;
 
 @Category({IntegrationTestCategory.class})
 public class TestBmcContractCreate extends AbstractContractCreateTest {

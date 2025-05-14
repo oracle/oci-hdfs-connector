@@ -733,6 +733,7 @@ class BmcFilesystemImpl extends FileSystem {
                     "Found a parent path that is not a directory: " + status.getPath());
         }
 
+        Collections.reverse(directoriesToCreate);
         LOG.debug("Attempting to create directories: {}", directoriesToCreate);
         for (final Path directoryToCreate : directoriesToCreate) {
             this.dataStore.createDirectory(directoryToCreate);
@@ -983,6 +984,7 @@ class BmcFilesystemImpl extends FileSystem {
             if (resultList.size() > 0) {
                 return true;
             }
+
             if (fetchComplete) {
                 return false;
             } else {

@@ -3,20 +3,20 @@
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl
  * or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
-package com.oracle.bmc.hdfs;
+package com.oracle.bmc.hdfs.contract;
 
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-import com.oracle.bmc.hdfs.contract.BmcContract;
+import com.oracle.bmc.hdfs.BmcFilesystem;
+import com.oracle.bmc.hdfs.IntegrationTestCategory;
 import com.oracle.bmc.hdfs.contract.deprecated.DeprecatedBmcContract;
 import com.oracle.bmc.hdfs.store.BmcDataStore;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystemContractBaseTest;
 import org.apache.hadoop.fs.Path;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
