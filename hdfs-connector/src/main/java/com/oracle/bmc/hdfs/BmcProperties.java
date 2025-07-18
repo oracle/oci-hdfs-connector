@@ -189,16 +189,16 @@ public enum BmcProperties {
     /**
      * (int, optional) The maximum number of retries if data reading fails. See
      * {@link BmcConstants#READ_MAX_RETRIES_KEY}
-     * default 3, retry once if the initial read attempt failed.
+     * default 10, retry once if the initial read attempt failed.
      */
-    READ_MAX_RETRIES(READ_MAX_RETRIES_KEY, 3),
+    READ_MAX_RETRIES(READ_MAX_RETRIES_KEY, 10),
 
     /**
      * (int, optional) The maximum number of retries if data writing fails. See
      * {@link BmcConstants#WRITE_MAX_RETRIES_KEY}
-     * default 3, retry once if the initial write attempt failed.
+     * default 10, retry once if the initial write attempt failed.
      */
-    WRITE_MAX_RETRIES(WRITE_MAX_RETRIES_KEY, 3),
+    WRITE_MAX_RETRIES(WRITE_MAX_RETRIES_KEY, 10),
 
     /**
      * (boolean, optional) Flag for whether or not multi-part uploads are allowed at all. See
@@ -259,16 +259,24 @@ public enum BmcProperties {
     /**
      * (long, optional) The timeout to use for exponential delay retries for retryable service errors. This value is
      * ignored if {@link BmcProperties#OBJECT_STORE_CLIENT_CLASS} is specified. See
-     * {@link BmcConstants#RETRY_TIMEOUT_IN_SECONDS_KEY} for config key name. Default is 30.
+     * {@link BmcConstants#RETRY_TIMEOUT_IN_SECONDS_KEY} for config key name. Default is 90.
      */
-    RETRY_TIMEOUT_IN_SECONDS(RETRY_TIMEOUT_IN_SECONDS_KEY, 30L),
+    RETRY_TIMEOUT_IN_SECONDS(RETRY_TIMEOUT_IN_SECONDS_KEY, 90L),
+    /**
+     * (long, optional) The jitter on top of a delay for retryable service errors. Negative value or 0 means jitter is
+     * disabled. When enabled, the jitter is a randomly selected value in the range (-RETRY_JITTER_IN_MILLIS,
+     * RETRY_JITTER_IN_MILLIS - 1) milliseconds.
+     * This value is ignored if {@link BmcProperties#OBJECT_STORE_CLIENT_CLASS} is specified. See
+     * {@link BmcConstants#RETRY_JITTER_IN_MILLIS_KEY} for config key name. Default is 200 milliseconds.
+     */
+    RETRY_JITTER_IN_MILLIS(RETRY_JITTER_IN_MILLIS_KEY, 200L),
     /**
      * (long, optional) The max sleep for delays in between retries for retryable service errors.
      * If the exponential delay crosses this threshold, then the delay time is reset to initial delay. This value is
      * ignored if {@link BmcProperties#OBJECT_STORE_CLIENT_CLASS} is specified. See
-     * {@link BmcConstants#RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS_KEY} for config key name. Default is 0.
+     * {@link BmcConstants#RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS_KEY} for config key name. Default is 16.
      */
-    RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS(RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS_KEY, 0L),
+    RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS(RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS_KEY, 16L),
 
     /**
      * (boolean, optional) Flag to enable object metadata caching. See
@@ -278,6 +286,22 @@ public enum BmcProperties {
      * reflect the actual data in Object Storage.
      */
     OBJECT_METADATA_CACHING_ENABLED(OBJECT_METADATA_CACHING_ENABLED_KEY, false),
+
+    /**
+     * (boolean, optional) Flag to enable headobject request coalescing. Head request coalescing guarantees that only
+     * one headObject request per key is in-flight at any given time (except in cases of failure or timeout).
+     * Requests for the same key, coming from multiple threads, are organized into sequential groups based
+     * on their arrival order. See
+     * {@link BmcConstants#HEADOBJECT_REQUEST_COALESCING_ENABLED_KEY} for config key name. Default is false.
+     */
+    HEADOBJECT_REQUEST_COALESCING_ENABLED(HEADOBJECT_REQUEST_COALESCING_ENABLED_KEY, false),
+
+    /**
+     * Maximum duration, in millisecond to wait for previous request to finish before executing a new request if current
+     * request is coalesced.
+     * {@link BmcConstants#REQUEST_COALESCING_WAIT_TIME_IN_MILLIS_KEY} for config key name. Default is 200.
+     */
+    REQUEST_COALESCING_WAIT_TIME_IN_MILLIS(REQUEST_COALESCING_WAIT_TIME_IN_MILLIS_KEY, 200L),
 
     /**
      * (string, optional) Controls object metadata caching and eviction. See Guava's CacheBuilderSpec for details.
@@ -671,13 +695,13 @@ public enum BmcProperties {
      * (Integer, optional) The sleep time for the monitor thread in between runs.
      * See {@link BmcConstants#OCI_MON_EMIT_THREAD_POLL_INTERVAL_SECONDS_KEY} for config key name.
      */
-    OCI_MON_EMIT_THREAD_POLL_INTERVAL_SECONDS(OCI_MON_EMIT_THREAD_POLL_INTERVAL_SECONDS_KEY, 2),
+    OCI_MON_EMIT_THREAD_POLL_INTERVAL_SECONDS(OCI_MON_EMIT_THREAD_POLL_INTERVAL_SECONDS_KEY, 1),
 
     /**
      * (Integer, optional) The maximum backlog that will be allowed in the list before no-admit.
      * See {@link BmcConstants#OCI_MON_MAX_BACKLOG_BEFORE_DROP_KEY} for config key name.
      */
-    OCI_MON_MAX_BACKLOG_BEFORE_DROP(OCI_MON_MAX_BACKLOG_BEFORE_DROP_KEY, 100000),
+    OCI_MON_MAX_BACKLOG_BEFORE_DROP(OCI_MON_MAX_BACKLOG_BEFORE_DROP_KEY, 150000),
 
     /**
      * (boolean, optional) Enables or disables session token authentication for Object Store.
@@ -691,7 +715,22 @@ public enum BmcProperties {
      * Default location: ~/.oci/sessions/DEFAULT/security_token.
      * See {@link BmcConstants#SESSION_TOKEN_FILE_PATH_KEY} for the configuration key name.
      */
-    SESSION_TOKEN_FILE_PATH(SESSION_TOKEN_FILE_PATH_KEY, "~/.oci/sessions/DEFAULT/security_token");
+    SESSION_TOKEN_FILE_PATH(SESSION_TOKEN_FILE_PATH_KEY, "~/.oci/sessions/DEFAULT/security_token"),
+
+    /**
+     * (int, optional) The number of threads to use for parallel delete operations. Whenever delete with recursive flag
+     * being true is invoked, the leaf objects are deleted in parallel, followed by directories in reverse order
+     * of their level.
+     * See {@link BmcConstants#NUM_DELETE_THREADS_KEY} for config key name. Note, any value
+     * smaller than 0 is interpreted as using the default value. Default is 4.
+     */
+    NUM_DELETE_THREADS(NUM_DELETE_THREADS_KEY, 4),
+    /**
+     * (boolean, optional) This boolean determines if a first 1MB chunk is read to minimize the time to first
+     * byte time, in case of read ahead input streams. Default will be set to false.
+     * See {@link BmcConstants#OCI_FIRST_READ_OPTIMIZATION_FOR_TTFB_KEY} for the configuration key name.
+     */
+    OCI_FIRST_READ_OPTIMIZATION_FOR_TTFB(OCI_FIRST_READ_OPTIMIZATION_FOR_TTFB_KEY, false);
 
     @Getter private final String propertyName;
     @Getter private final Object defaultValue;

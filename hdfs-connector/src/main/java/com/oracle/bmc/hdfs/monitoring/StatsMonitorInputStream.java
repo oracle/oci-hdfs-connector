@@ -15,6 +15,7 @@ public class StatsMonitorInputStream extends FSInputStream {
     private boolean firstReadFinished = false;
     private boolean metricEmitted = false;
     private OCIMonitorPluginHandler ociMonitorPluginHandler;
+    private final RetryMetricsCollector retryMetricsCollector;
 
     private Stopwatch sw = Stopwatch.createUnstarted();
 
@@ -23,9 +24,11 @@ public class StatsMonitorInputStream extends FSInputStream {
      */
     private static final int FIRST_BYTE_LATENCY_BUFFER_SIZE = 1 * 1024 * 1024;
 
-    public StatsMonitorInputStream(FSInputStream sourceStream, OCIMonitorPluginHandler ociMonitorPluginHandler) {
+    public StatsMonitorInputStream(FSInputStream sourceStream, OCIMonitorPluginHandler ociMonitorPluginHandler,
+                                   RetryMetricsCollector retryMetricsCollector) {
         this.sourceStream = sourceStream;
         this.ociMonitorPluginHandler = ociMonitorPluginHandler;
+        this.retryMetricsCollector = retryMetricsCollector;
     }
 
     public int available() throws IOException {
@@ -115,8 +118,13 @@ public class StatsMonitorInputStream extends FSInputStream {
                 throughput = totalBytesRead / (totalElapsedTime / 1000.0);
             }
 
-            ociMonitorPluginHandler.recordStats(OCIMetricKeys.READ, totalElapsedTime, ttfb, throughput,
-                    e, totalBytesRead);
+            int retryAttempts = retryMetricsCollector != null ? retryMetricsCollector.getAttemptCount() : 0;
+            int retry503Count = retryMetricsCollector != null ? retryMetricsCollector.getRetry503Count() : 0;
+            int retry429Count = retryMetricsCollector != null ? retryMetricsCollector.getRetry429Count() : 0;
+            ociMonitorPluginHandler.recordStats(
+                    OCIMetricKeys.READ, totalElapsedTime, ttfb, throughput, e, totalBytesRead,
+                    retryAttempts, retry503Count, retry429Count);
+            retryMetricsCollector.close();
             metricEmitted = true;
         }
     }

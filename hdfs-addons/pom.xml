@@ -12,7 +12,7 @@
     <parent>
         <artifactId>oci-hdfs</artifactId>
         <groupId>com.oracle.oci.sdk</groupId>
-        <version>3.4.1.0.0.2</version>
+        <version>3.4.1.0.0.3</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 

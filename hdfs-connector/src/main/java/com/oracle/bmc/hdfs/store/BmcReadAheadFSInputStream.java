@@ -6,15 +6,14 @@
 package com.oracle.bmc.hdfs.store;
 
 import java.io.IOException;
-import java.io.InputStream;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheBuilderSpec;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
+import com.oracle.bmc.hdfs.monitoring.RetryMetricsCollector;
 import lombok.extern.slf4j.Slf4j;
-import net.jodah.failsafe.RetryPolicy;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem.Statistics;
@@ -23,9 +22,10 @@ import java.util.function.Supplier;
 import com.oracle.bmc.model.Range;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.requests.GetObjectRequest;
-import com.oracle.bmc.objectstorage.responses.GetObjectResponse;
 
 import java.util.concurrent.ExecutionException;
+
+import static com.oracle.bmc.hdfs.BmcConstants.FIRST_READ_WINDOW_SIZE;
 
 /**
  * {@link FSInputStream} implementation that reads ahead to cache chunks of
@@ -41,6 +41,13 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
     private final int ociReadAheadBlockSize;
     private final Cache<String, ParquetFooterInfo> parquetCache;
 
+    // If first read optimization for ttfb is enabled, then 1MB is read as the first chunk in order to get as
+    // accurate time-to-first-byte metric as possible. This feature is disabled by default.
+    private boolean firstRead = true;
+    private final boolean firstReadOptimizationForTTFBEnabled;
+
+    private final boolean parquetCacheEnabled;
+
     public BmcReadAheadFSInputStream(
             final ObjectStorage objectStorage,
             final FileStatus status,
@@ -48,11 +55,16 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
             final int readMaxRetries,
             final Statistics statistics,
             final int ociReadAheadBlockSize,
-            final Cache<String, ParquetFooterInfo> parquetCache) {
-        super(objectStorage, status, requestBuilder, readMaxRetries, statistics);
+            final Cache<String, ParquetFooterInfo> parquetCache,
+            final RetryMetricsCollector retryMetricsCollector,
+            final boolean firstReadOptimizationForTTFBEnabled,
+            final boolean parquetCacheEnabled) {
+        super(objectStorage, status, requestBuilder, readMaxRetries, statistics, retryMetricsCollector);
         this.ociReadAheadBlockSize = ociReadAheadBlockSize;
         LOG.info("ReadAhead block size is " + ociReadAheadBlockSize);
         this.parquetCache = parquetCache;
+        this.firstReadOptimizationForTTFBEnabled = firstReadOptimizationForTTFBEnabled;
+        this.parquetCacheEnabled = parquetCacheEnabled;
     }
 
     public BmcReadAheadFSInputStream(
@@ -62,11 +74,16 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
             final int readMaxRetries,
             final Statistics statistics,
             final int ociReadAheadBlockSize,
-            final String parquetCacheString) {
-        super(objectStorage, status, requestBuilder, readMaxRetries, statistics);
+            final String parquetCacheString,
+            final RetryMetricsCollector retryMetricsCollector,
+            final boolean firstReadOptimizationForTTFBEnabled,
+            final boolean parquetCacheEnabled) {
+        super(objectStorage, status, requestBuilder, readMaxRetries, statistics, retryMetricsCollector);
         this.ociReadAheadBlockSize = ociReadAheadBlockSize;
         LOG.info("ReadAhead block size is " + ociReadAheadBlockSize);
         this.parquetCache = configureParquetCache(parquetCacheString);
+        this.firstReadOptimizationForTTFBEnabled = firstReadOptimizationForTTFBEnabled;
+        this.parquetCacheEnabled = parquetCacheEnabled;
     }
 
     private Cache<String, ParquetFooterInfo> configureParquetCache(String spec) {
@@ -209,7 +226,7 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
         LOG.debug("{}: Filling buffer at {} length {}", this, this.currentPosition, status.getLen());
         long start = this.currentPosition;
         long end;
-        if (firstRead) {
+        if (firstReadOptimizationForTTFBEnabled && firstRead) {
             firstRead = false;
             end = Math.min(this.currentPosition + FIRST_READ_WINDOW_SIZE, status.getLen());
         } else {
@@ -229,57 +246,59 @@ public class BmcReadAheadFSInputStream extends BmcFSInputStream {
         Range range = new Range(start, end);
         GetObjectRequest request = requestBuilder.get().range(range).build();
         String key = request.getObjectName();
-        if (len == 8) {
-            LOG.debug("{}: Detected footer read", this);
-            // Parquet footer. Load from cache (side effect: will load info)
-            ParquetFooterInfo fi;
-            final Range fRange = range;
-            try {
-                fi =
-                        parquetCache.get(
-                                key,
-                                () -> {
-                                    LOG.debug("Loading parquet cache for {}", key);
-                                    ParquetFooterInfo ret = new ParquetFooterInfo();
-                                    ret.footer = new byte[8];
-                                    readAllBytes(fRange, ret.footer);
-                                    ret.metadataLen =
-                                            Byte.toUnsignedInt(ret.footer[3]) << 24
-                                                    | Byte.toUnsignedInt(ret.footer[2]) << 16
-                                                    | Byte.toUnsignedInt(ret.footer[1]) << 8
-                                                    | Byte.toUnsignedInt(ret.footer[0]) << 0;
-                                    long metaEnd = status.getLen() - 8;
-                                    long metaStart = metaEnd - ret.metadataLen;
-                                    ret.metadataStart = metaStart;
-                                    Range mdRange = new Range(metaStart, metaEnd);
-                                    ret.metadata = new byte[ret.metadataLen];
-                                    readAllBytes(mdRange, ret.metadata);
-                                    return ret;
-                                });
-            } catch (ExecutionException ex) {
-                throw new IOException("Error getting file", ex);
-            }
-            dataPos = start;
-            dataMax = len;
-            dataCurOffset = 0;
-            data = fi.footer;
-            return;
-        }
-        ParquetFooterInfo fi = parquetCache.getIfPresent(key);
-        if (fi != null) {
-            if (start == fi.metadataStart) {
-                LOG.debug("{}: Detected metadata read", this);
+        if (parquetCacheEnabled) {
+            if (len == 8) {
+                LOG.debug("{}: Detected footer read", this);
+                // Parquet footer. Load from cache (side effect: will load info)
+                ParquetFooterInfo fi;
+                final Range fRange = range;
+                try {
+                    fi =
+                            parquetCache.get(
+                                    key,
+                                    () -> {
+                                        LOG.debug("Loading parquet cache for {}", key);
+                                        ParquetFooterInfo ret = new ParquetFooterInfo();
+                                        ret.footer = new byte[8];
+                                        readAllBytes(fRange, ret.footer);
+                                        ret.metadataLen =
+                                                Byte.toUnsignedInt(ret.footer[3]) << 24
+                                                        | Byte.toUnsignedInt(ret.footer[2]) << 16
+                                                        | Byte.toUnsignedInt(ret.footer[1]) << 8
+                                                        | Byte.toUnsignedInt(ret.footer[0]) << 0;
+                                        long metaEnd = status.getLen() - 8;
+                                        long metaStart = metaEnd - ret.metadataLen;
+                                        ret.metadataStart = metaStart;
+                                        Range mdRange = new Range(metaStart, metaEnd);
+                                        ret.metadata = new byte[ret.metadataLen];
+                                        readAllBytes(mdRange, ret.metadata);
+                                        return ret;
+                                    });
+                } catch (ExecutionException ex) {
+                    throw new IOException("Error getting file", ex);
+                }
                 dataPos = start;
-                dataMax = fi.metadataLen;
+                dataMax = len;
                 dataCurOffset = 0;
-                data = fi.metadata;
+                data = fi.footer;
                 return;
             }
-            // TODO: If we parsed the metadata, we could probably save the column sizes and adjust the range
-            // block to get entire column in subsequent reads
-        }
-        if (fi == null) {
-            LOG.debug("{}: Not using parquet semantics", this);
+            ParquetFooterInfo fi = parquetCache.getIfPresent(key);
+            if (fi != null) {
+                if (start == fi.metadataStart) {
+                    LOG.debug("{}: Detected metadata read", this);
+                    dataPos = start;
+                    dataMax = fi.metadataLen;
+                    dataCurOffset = 0;
+                    data = fi.metadata;
+                    return;
+                }
+                // TODO: If we parsed the metadata, we could probably save the column sizes and adjust the range
+                // block to get entire column in subsequent reads
+            }
+            if (fi == null) {
+                LOG.debug("{}: Not using parquet semantics", this);
+            }
         }
         // Not a parquet file, or column data; just read normally
         data = new byte[len];

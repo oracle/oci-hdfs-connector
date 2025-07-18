@@ -48,36 +48,44 @@ public class OCIMonitorPluginHandler {
         this.awaitingShutdown = awaitingShutdown;
     }
 
-    public void recordStats(String key, double elapsedTime, Exception e) {
+    public void recordStats(String key, double elapsedTime, Exception e, int retryAttempts, int retry503Count,
+                            int retry429Count, boolean isCoalesced) {
 
         if (!enabled) {
             return;
         }
 
-        OCIMetric metric = new OCIMetric(elapsedTime, key, e, bucketName);
+        OCIMetric metric = new OCIMetric(elapsedTime, key, e, bucketName, retryAttempts, retry503Count, retry429Count
+                , isCoalesced);
         handoff(metric);
     }
 
-    public void recordStats(String key, double elapsedTime, double throughput, Exception e, double bytesTransferred) {
+    public void recordStats(String key, double elapsedTime, Exception e, int retryAttempts, int retry503Count,
+                            int retry429Count) {
+        recordStats(key, elapsedTime, e, retryAttempts, retry503Count, retry429Count, false);
+    }
+
+    public void recordStats(String key, double elapsedTime, double throughput, Exception e,
+                            double bytesTransferred, int retryAttempts, int retry503Count, int retry429Count) {
 
         if (!enabled) {
             return;
         }
 
         OCIMetricWithThroughput metric = new OCIMetricWithThroughput(key, elapsedTime, throughput, e,
-                bytesTransferred, bucketName);
+                bytesTransferred, bucketName, retryAttempts, retry503Count, retry429Count);
         handoff(metric);
     }
 
     public void recordStats(String key, double elapsedTime, double ttfb, double throughput, Exception e,
-                            double bytesTransferred) {
+                            double bytesTransferred, int retryAttempts, int retry503Count, int retry429Count) {
 
         if (!enabled) {
             return;
         }
 
         OCIMetricWithFBLatency metric = new OCIMetricWithFBLatency(key, elapsedTime, ttfb, throughput, e,
-                bytesTransferred, bucketName);
+                bytesTransferred, bucketName, retryAttempts, retry503Count, retry429Count);
         handoff(metric);
     }
 

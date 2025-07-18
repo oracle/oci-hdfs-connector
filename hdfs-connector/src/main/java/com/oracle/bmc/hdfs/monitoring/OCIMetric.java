@@ -24,16 +24,45 @@ public class OCIMetric {
      * error when communicating with OCI.
      */
     private final int errorStatusCode;
+    /*
+     * If this operation is coalesced.
+     */
+    private final boolean isCoalesced;
     /**
      * The target OCI bucket where the operation was attempted to.
      */
     private final String bucketName;
+    /**
+     * The number of retry attempts made for the operation.
+     * This is non-zero if the operation was retried due to a transient failure.
+     */
+    private final int retryAttempts;
 
-    public OCIMetric(double overallTime, String key, Exception e, String bucketName) {
+    /**
+     * The number of retry attempts specifically for 503 status code.
+     */
+    private final int retry503Count;
+
+    /**
+     * The number of retry attempts specifically for 429 status code.
+     */
+    private final int retry429Count;
+
+
+    public OCIMetric(double overallTime, String key, Exception e, String bucketName, int retryAttempts,
+                     int retry503Count, int retry429Count) {
+        this(overallTime, key, e, bucketName, retryAttempts, retry503Count, retry429Count, false);
+    }
+
+    public OCIMetric(double overallTime, String key, Exception e, String bucketName, int retryAttempts,
+            int retry503Count, int retry429Count, boolean isCoalesced) {
         this.recordedTime = System.currentTimeMillis();
         this.overallTime = overallTime;
         this.key = key;
         this.bucketName = bucketName;
+        this.retryAttempts = retryAttempts;
+        this.retry503Count = retry503Count;
+        this.retry429Count = retry429Count;
 
         int errStatusCode = 0;
         if (e != null) {
@@ -45,8 +74,8 @@ public class OCIMetric {
             this.error = false;
         }
         this.errorStatusCode = errStatusCode;
+        this.isCoalesced = isCoalesced;
     }
-
     public String getKey() {
         return key;
     }
@@ -67,6 +96,13 @@ public class OCIMetric {
 
     public int getErrorStatusCode() { return errorStatusCode; }
 
+    public int getRetryAttempts() { return retryAttempts; }
+
+    public int getRetry503Count() { return retry503Count; }
+
+    public int getRetry429Count() { return retry429Count;}
+    public boolean getIsCoalesced() { return isCoalesced; }
+
     @Override
     public String toString() {
         return "OCIMetric{" +
@@ -76,6 +112,10 @@ public class OCIMetric {
                 ", error=" + error +
                 ", bucketName=" + bucketName +
                 ", errorStatusCode=" + errorStatusCode +
+                ", retryAttempts=" + retryAttempts +
+                ", retry503Count=" + retry503Count +
+                ", retry429Count=" + retry429Count +
+                ", isCoalesced=" + isCoalesced +
                 '}';
     }
 }

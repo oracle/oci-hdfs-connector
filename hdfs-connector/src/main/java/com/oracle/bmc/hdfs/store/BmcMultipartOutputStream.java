@@ -8,6 +8,8 @@ package com.oracle.bmc.hdfs.store;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.oracle.bmc.hdfs.BmcProperties;
+import com.oracle.bmc.hdfs.monitoring.OCIMetricKeys;
+import com.oracle.bmc.hdfs.monitoring.RetryMetricsCollector;
 import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
 import com.oracle.bmc.http.client.io.DuplicatableInputStream;
 import com.oracle.bmc.model.BmcException;
@@ -24,7 +26,9 @@ import com.oracle.bmc.objectstorage.responses.CommitMultipartUploadResponse;
 import com.oracle.bmc.objectstorage.responses.CreateMultipartUploadResponse;
 import com.oracle.bmc.objectstorage.responses.PutObjectResponse;
 import com.oracle.bmc.objectstorage.responses.UploadPartResponse;
+import com.oracle.bmc.objectstorage.transfer.UploadConfiguration;
 import com.oracle.bmc.objectstorage.transfer.internal.StreamHelper;
+import com.oracle.bmc.retrier.RetryConfiguration;
 import lombok.extern.slf4j.Slf4j;
 import net.jodah.failsafe.Failsafe;
 import org.apache.commons.lang3.ArrayUtils;
@@ -72,6 +76,11 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
     private boolean shutdownExecutor;
     private final BmcPropertyAccessor propertyAccessor;
     private final String additionalChecksumAlgorithm;
+    private final RetryMetricsCollector retryMetricsCollector;
+    protected final boolean isNewFlow;
+    protected final UploadConfiguration uploadConfiguration;
+    private final long retryTimeoutInSeconds;
+    private final long retryResetThresholdInSeconds;
 
     Map<Integer, CommitMultipartUploadPartDetails> partDetails = Collections.synchronizedMap(new HashMap<>());
 
@@ -179,8 +188,11 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
             final MultipartUploadRequest request,
             final int bufferSizeInBytes,
             final ExecutorService parallelMd5executor,
-            int writeMaxRetires) {
-        super(null, null, writeMaxRetires);
+            int writeMaxRetires,
+            RetryMetricsCollector retryMetricsCollector,
+            boolean isNewFlow,
+            UploadConfiguration uploadConfiguration) {
+        super(null, null, writeMaxRetires, isNewFlow, uploadConfiguration);
 
         // delay creation until called in createOutputBufferStream
         this.propertyAccessor = propertyAccessor;
@@ -194,6 +206,11 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         this.objectName = request.getMultipartUploadRequest().getCreateMultipartUploadDetails().getObject();
         String checksumCombineMode = propertyAccessor.getHadoopProperty(DFS_CHECKSUM_COMBINE_MODE_KEY,DEFAULT_CHECKSUM_COMBINE_MODE);
         this.additionalChecksumAlgorithm = CHECKSUM_COMBINE_MODE_CRC.equals(checksumCombineMode) ? ChecksumAlgorithm.Crc32C.getValue() : null;
+        this.retryMetricsCollector = retryMetricsCollector;
+        this.isNewFlow = isNewFlow;
+        this.uploadConfiguration = uploadConfiguration;
+        this.retryTimeoutInSeconds = propertyAccessor.asLong().get(BmcProperties.RETRY_TIMEOUT_IN_SECONDS);
+        this.retryResetThresholdInSeconds = propertyAccessor.asLong().get(BmcProperties.RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS);
     }
 
     /**
@@ -211,17 +228,11 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         // only attempting once
         this.closed = true;
 
-        if (exceptions.size() > 0) {
-            LOG.error("Fail-fast for {} ", uploadId);
-            abort();
-            cleanup();
-            return;
-        }
         if (this.uploadId == null) {
-            LOG.debug("Not enough data for a full part, uploading as regular PUT");
+            LOG.info("Not enough data for a full part, uploading as regular PUT");
             final byte[] bytesToWrite = bbos == null ?  new byte[0] : bbos.toByteArray();
 
-            try {
+            try (RetryMetricsCollector collector = this.retryMetricsCollector){
                 Failsafe.with(retryPolicy()).run(() -> {
                     try (InputStream bbis = new ByteArrayInputStream(bytesToWrite)) {
                         PutObjectRequest.Builder putFileRequestBuilder = PutObjectRequest.builder()
@@ -237,7 +248,8 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
                             putFileRequestBuilder.contentMD5(computeMd5(bytesToWrite, bytesToWrite.length));
                         }
                         PutObjectRequest putFileRequest = putFileRequestBuilder.buildWithoutInvocationCallback();
-                        PutObjectResponse response = request.getObjectStorage().putObject(putFileRequest);
+                        PutObjectResponse response = request.getObjectStorage().putObject(putFileRequest.toBuilder()
+                                .retryConfiguration(collector.getRetryConfiguration()).build());
                         LOG.debug("Put new file with etag {}", response.getETag());
                     }
                 });
@@ -265,6 +277,13 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
             // wait for all parts to be uploaded
             partUploadPhaser.arriveAndAwaitAdvance();
             // this will block until all transfers are complete
+
+            if (exceptions.size() > 0) {
+                LOG.error("Fail-fast for {} ", uploadId);
+                abort();
+                cleanup();
+                return;
+            }
             CommitMultipartUploadResponse r = commitMultipartUpload();
             LOG.info(
                     String.format(
@@ -292,13 +311,20 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
                 .objectName(objectName)
                 .uploadId(uploadId)
                 .build();
-        try {
-            objectStorage.abortMultipartUpload(abortMultipartUploadRequest);
-        }  catch (Exception e) {
+
+        try (RetryMetricsCollector collector = new RetryMetricsCollector(OCIMetricKeys.WRITE_ABORT_MULTIPART,
+                retryTimeoutInSeconds, retryResetThresholdInSeconds)) {
+            objectStorage.abortMultipartUpload(abortMultipartUploadRequest.toBuilder()
+                    .retryConfiguration(collector.getRetryConfiguration())
+                    .build());
+        } catch (Exception e) {
             // Abort operation is critical to clean up the uncommitted parts. Add one more attempt for this operation.
             if (!(e instanceof BmcException) || ((BmcException) e).getStatusCode() != 404) {
-                try {
-                    objectStorage.abortMultipartUpload(abortMultipartUploadRequest);
+                try (RetryMetricsCollector collector = new RetryMetricsCollector(OCIMetricKeys.WRITE_ABORT_MULTIPART,
+                        retryTimeoutInSeconds, retryResetThresholdInSeconds)) {
+                    objectStorage.abortMultipartUpload(abortMultipartUploadRequest.toBuilder()
+                            .retryConfiguration(collector.getRetryConfiguration())
+                            .build());
                 } catch (Exception ex) {
                     LOG.error("Retry failed to abort multipart upload with id {}", uploadId, ex);
                 }
@@ -348,7 +374,8 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         Random random = new Random();
         partUploadPhaser.register();
         parallelMd5executor.submit(() -> {
-            try {
+            try (RetryMetricsCollector collector = new RetryMetricsCollector(OCIMetricKeys.WRITE_PART,
+                    retryTimeoutInSeconds, retryResetThresholdInSeconds)){
                 Failsafe.with(retryPolicy()).run(() -> {
                     try (InputStream is =
                                  new WrappedFixedLengthByteArrayInputStream(bytesToWrite, 0, writeLength)) {
@@ -369,7 +396,9 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
                         }
 
                         final UploadPartRequest uploadPartRequest = uploadPartRequestBuilder.build();
-                        final UploadPartResponse uploadPartResponse = objectStorage.uploadPart(uploadPartRequest);
+                        final UploadPartResponse uploadPartResponse = objectStorage.uploadPart(uploadPartRequest.toBuilder()
+                                .retryConfiguration(collector.getRetryConfiguration()).build());
+
                         partDetails.put(partNumber, new CommitMultipartUploadPartDetails(partNumber,
                                 uploadPartResponse.getETag()));
                     }
@@ -509,13 +538,20 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
             createMultipartUploadRequestBuilder.opcChecksumAlgorithm(ChecksumAlgorithm.Crc32C);
         }
 
-        final CreateMultipartUploadRequest createMultipartUploadRequest = createMultipartUploadRequestBuilder.build();
-        final CreateMultipartUploadResponse createMultipartUploadResponse =
-                request.getObjectStorage().createMultipartUpload(createMultipartUploadRequest);
+        try (RetryMetricsCollector collector = new RetryMetricsCollector(OCIMetricKeys.WRITE_CREATE_MULTIPART,
+                retryTimeoutInSeconds, retryResetThresholdInSeconds)) {
+            final CreateMultipartUploadRequest createMultipartUploadRequest =
+                    createMultipartUploadRequestBuilder
+                            .retryConfiguration(collector.getRetryConfiguration())
+                            .build();
 
-        this.uploadId = createMultipartUploadResponse.getMultipartUpload().getUploadId();
-        this.nextPartNumber = new AtomicInteger(1);
-        this.partUploadPhaser = new Phaser(1);
+            final CreateMultipartUploadResponse createMultipartUploadResponse =
+                    request.getObjectStorage().createMultipartUpload(createMultipartUploadRequest);
+
+            this.uploadId = createMultipartUploadResponse.getMultipartUpload().getUploadId();
+            this.nextPartNumber = new AtomicInteger(1);
+            this.partUploadPhaser = new Phaser(1);
+        }
     }
 
     /**
@@ -527,13 +563,23 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
                 .partsToExclude(ImmutableList.of())
                 .partsToCommit(ImmutableList.copyOf(partDetails.values()))
                 .build();
-        final CommitMultipartUploadRequest commitMultipartUploadRequest = CommitMultipartUploadRequest.builder()
-                .namespaceName(namespaceName)
-                .bucketName(bucketName)
-                .objectName(objectName)
-                .uploadId(uploadId)
-                .commitMultipartUploadDetails(commitMultipartUploadDetails)
-                .build();
-        return objectStorage.commitMultipartUpload(commitMultipartUploadRequest);
+        try (RetryMetricsCollector collector = new RetryMetricsCollector(OCIMetricKeys.WRITE_COMMIT_MULTIPART,
+                retryTimeoutInSeconds, retryResetThresholdInSeconds)) {
+            final CommitMultipartUploadRequest commitMultipartUploadRequest = CommitMultipartUploadRequest.builder()
+                    .namespaceName(namespaceName)
+                    .bucketName(bucketName)
+                    .objectName(objectName)
+                    .uploadId(uploadId)
+                    .commitMultipartUploadDetails(commitMultipartUploadDetails)
+                    .retryConfiguration(collector.getRetryConfiguration())
+                    .build();
+            return objectStorage.commitMultipartUpload(commitMultipartUploadRequest);
+        }
     }
+
+    @Override
+    public boolean isMultipart() {
+        return uploadId != null;
+    }
+
 }

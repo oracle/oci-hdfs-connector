@@ -6,8 +6,8 @@ public class OCIMetricWithFBLatency extends OCIMetricWithThroughput {
      */
     private final double ttfb;
     public OCIMetricWithFBLatency(String key, double overallTime, double ttfb, double throughput, Exception e,
-                                  double bytesTransferred, String bucketName) {
-        super(key, overallTime, throughput, e, bytesTransferred, bucketName);
+                                  double bytesTransferred, String bucketName, int retryAttempts, int retry503Count, int retry429Count) {
+        super(key, overallTime, throughput, e, bytesTransferred, bucketName, retryAttempts, retry503Count, retry429Count);
         this.ttfb = ttfb;
     }
 

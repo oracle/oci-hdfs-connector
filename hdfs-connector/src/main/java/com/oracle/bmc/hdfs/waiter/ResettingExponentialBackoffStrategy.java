@@ -10,11 +10,18 @@ import com.oracle.bmc.waiter.WaiterConfiguration;
 
 public class ResettingExponentialBackoffStrategy implements DelayStrategy {
     private final long resetThresholdInSeconds;
+
+    final private long  jitterInMillis;
     private int maxAttemptsPossible;
 
     public ResettingExponentialBackoffStrategy(long resetThresholdInSeconds) {
+        this(resetThresholdInSeconds, 0);
+    }
+
+    public ResettingExponentialBackoffStrategy(long resetThresholdInSeconds, long jitterInMillis) {
         this.resetThresholdInSeconds = resetThresholdInSeconds;
         this.maxAttemptsPossible = (int) (Math.log(resetThresholdInSeconds) / Math.log(2)) + 1;
+        this.jitterInMillis = jitterInMillis < 0 ? 0 : jitterInMillis;
     }
 
     @Override
@@ -24,6 +31,13 @@ public class ResettingExponentialBackoffStrategy implements DelayStrategy {
         if (delay <= 0) {
             return resetThresholdInSeconds * 1000;
         }
-        return Math.min(delay, resetThresholdInSeconds * 1000);
+        long jitterValue = 0L;
+        if (jitterInMillis > 0) {
+            double random = Math.random();
+            jitterValue = Math.round(random) % (jitterInMillis * 2) - jitterInMillis;
+        }
+
+        delay = Math.min(delay, resetThresholdInSeconds * 1000);
+        return delay + jitterValue >= 0 ?  delay + jitterValue : delay - jitterValue;
     }
 }

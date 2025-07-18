@@ -79,6 +79,7 @@ public class BmcDataStoreFactoryTest {
 
         // Setup mockLongAccessor
         when(mockLongAccessor.get(eq(BmcProperties.RETRY_TIMEOUT_IN_SECONDS))).thenReturn(30L);
+        when(mockLongAccessor.get(eq(BmcProperties.RETRY_JITTER_IN_MILLIS))).thenReturn(200L);
         when(mockLongAccessor.get(eq(BmcProperties.RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS)))
                 .thenReturn(0L);
         when(mockStringAccessor.get(eq(BmcProperties.JERSEY_CLIENT_LOGGING_VERBOSITY)))

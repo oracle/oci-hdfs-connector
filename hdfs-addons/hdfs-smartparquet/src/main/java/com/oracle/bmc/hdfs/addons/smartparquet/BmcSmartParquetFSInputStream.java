@@ -15,6 +15,7 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheBuilderSpec;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
+import com.oracle.bmc.hdfs.monitoring.RetryMetricsCollector;
 import com.oracle.bmc.hdfs.store.AbstractBmcCustomFSInputStream;
 import com.oracle.bmc.hdfs.store.BmcDataStore;
 import com.oracle.bmc.hdfs.store.BmcPropertyAccessor;
@@ -56,8 +57,9 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
             final FileStatus status,
             final Supplier<GetObjectRequest.Builder> requestBuilder,
             final int readMaxRetries,
-            final Statistics statistics) {
-        super(propertyAccessor, objectStorage, status, requestBuilder, readMaxRetries, statistics);
+            final Statistics statistics,
+            final RetryMetricsCollector retryMetricsCollector) {
+        super(propertyAccessor, objectStorage, status, requestBuilder, readMaxRetries, statistics, retryMetricsCollector);
         this.ociReadAheadBlockSize = BmcDataStore.getReadAheadSizeInBytes(propertyAccessor);
         this.parquetCache =
                 configureParquetCache(BmcDataStore.configureParquetCacheString(propertyAccessor));

@@ -12,11 +12,14 @@ import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
 
+import com.oracle.bmc.hdfs.monitoring.OCIMetricKeys;
+import com.oracle.bmc.hdfs.monitoring.RetryMetricsCollector;
 import com.oracle.bmc.objectstorage.model.RenameObjectDetails;
 import com.oracle.bmc.objectstorage.requests.*;
 import com.oracle.bmc.objectstorage.transfer.ProgressReporter;
 import com.oracle.bmc.objectstorage.transfer.UploadManager.UploadRequest;
 
+import com.oracle.bmc.retrier.RetryConfiguration;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -76,6 +79,15 @@ class RequestBuilder {
                 .opcClientRequestId(createClientRequestId("getObject"));
     }
 
+    GetObjectRequest.Builder getObjectBuilder(final String objectName, final RetryMetricsCollector retryMetricsCollector) {
+        return GetObjectRequest.builder()
+                .namespaceName(this.namespace)
+                .bucketName(this.bucket)
+                .objectName(objectName)
+                .retryConfiguration(retryMetricsCollector.getRetryConfiguration())
+                .opcClientRequestId(createClientRequestId("getObject"));
+    }
+
     HeadObjectRequest headObject(final String objectName) {
         return HeadObjectRequest.builder()
                 .namespaceName(this.namespace)
@@ -85,14 +97,32 @@ class RequestBuilder {
                 .build();
     }
 
+    /**
+     * Builds a {@link HeadObjectRequest} with a deliberately non-matching If-Match ETag header.
+     * This technique enables a low-cost existence check for an object in OCI Object Storage.
+     * When an object exists and the provided If-Match value does not match the actual ETag,
+     * the server returns a 412 Precondition Failed response instead of a full object metadata response.
+     * This bypasses KMS-based metadata decryption, making it significantly cheaper and faster than a GET or a normal HEAD call.
+     */
+    HeadObjectRequest headObjectWithNonMatchingIfMatch(final String objectName) {
+        return HeadObjectRequest.builder()
+                .namespaceName(this.namespace)
+                .bucketName(this.bucket)
+                .objectName(objectName)
+                .ifMatch("non-matching-etag")
+                .opcClientRequestId(createClientRequestId("headObject"))
+                .build();
+    }
+
     PutObjectRequest putObject(
-            final String objectName, final InputStream input, final long contentLengthInBytes) {
+            final String objectName, final InputStream input, final long contentLengthInBytes,  final RetryMetricsCollector retryMetricsCollector) {
         return PutObjectRequest.builder()
                 .namespaceName(this.namespace)
                 .bucketName(this.bucket)
                 .objectName(objectName)
                 .putObjectBody(input)
                 .contentLength(contentLengthInBytes)
+                .retryConfiguration(retryMetricsCollector.getRetryConfiguration())
                 .opcClientRequestId(createClientRequestId("putObject"))
                 .build();
     }
@@ -101,7 +131,8 @@ class RequestBuilder {
             final String objectName,
             final InputStream input,
             final long contentLengthInBytes,
-            final String md5) {
+            final String md5,
+            final RetryMetricsCollector retryMetricsCollector) {
         return PutObjectRequest.builder()
                 .namespaceName(this.namespace)
                 .bucketName(this.bucket)
@@ -110,8 +141,25 @@ class RequestBuilder {
                 .contentLength(contentLengthInBytes)
                 .contentMD5(md5)
                 .opcClientRequestId(createClientRequestId("putObject"))
+                .retryConfiguration(retryMetricsCollector.getRetryConfiguration())
                 .build();
     }
+
+    PutObjectRequest putObjectWithIfNoneMatch(
+            final String objectName, final InputStream input, final long contentLengthInBytes,
+            final RetryMetricsCollector retryMetricsCollector) {
+        return PutObjectRequest.builder()
+                .namespaceName(this.namespace)
+                .bucketName(this.bucket)
+                .objectName(objectName)
+                .putObjectBody(input)
+                .contentLength(contentLengthInBytes)
+                .ifNoneMatch("*")
+                .retryConfiguration(retryMetricsCollector.getRetryConfiguration())
+                .opcClientRequestId(createClientRequestId("putObject"))
+                .build();
+    }
+
 
     RenameObjectRequest renameObject(final String sourceName, final String newName) {
         return RenameObjectRequest.builder()
@@ -133,14 +181,18 @@ class RequestBuilder {
             final long contentLengthInBytes,
             final Progressable progressable,
             final boolean allowOverwrite,
-            ExecutorService parallelUploadExecutor) {
+            ExecutorService parallelUploadExecutor,
+            final RetryMetricsCollector collector) {
+
         PutObjectRequest putObjectRequest =
                 PutObjectRequest.builder()
                         .namespaceName(this.namespace)
                         .bucketName(this.bucket)
                         .objectName(objectName)
                         .opcClientRequestId(createClientRequestId("uploadRequest"))
+                        .retryConfiguration(collector.getRetryConfiguration())
                         .build();
+
         UploadRequest.UploadRequestBuilder uploadRequestBuilder =
                 UploadRequest.builder(input, contentLengthInBytes)
                         .parallelUploadExecutorService(parallelUploadExecutor)

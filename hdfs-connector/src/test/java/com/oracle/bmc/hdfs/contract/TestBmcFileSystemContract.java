@@ -7,11 +7,16 @@ package com.oracle.bmc.hdfs.contract;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import com.oracle.bmc.hdfs.BmcFilesystem;
@@ -266,6 +271,58 @@ public class TestBmcFileSystemContract extends FileSystemContractBaseTest {
         }
     }
 
+    public void createLoadTestFiles(Path testDirPath) throws IOException {
+        ExecutorService es = Executors.newFixedThreadPool(2);
+        Random random = new Random();
+        List<Future<?>> futures = new ArrayList<>();
+        for (int m = 0; m < 2; m++) {
+            Future<?> t = es.submit(() -> {
+                String threadName = Thread.currentThread().getName();
+                for (int i = 0; i < 10; i++) {
+                    try {
+                        String iThreadName = threadName + "-" + i;
+                        fs.mkdirs(new Path(testDirPath.toString() + "/" + iThreadName));
+
+                        for (int j = 0; j < 10; j++) {
+                            String jThreadName = threadName + "-" + j;
+                            String randomName = jThreadName + random.nextInt(1000000) + "-" + random.nextInt(1000000);
+                            createAndUploadFile(
+                                    new Path(testDirPath.toString() + "/" + iThreadName + "/" + jThreadName), 1);
+                        }
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            });
+            futures.add(t);
+        }
+
+        for (Future<?> future : futures) {
+            try {
+                future.get();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    @Test
+    public void loadTestAsyncDelete() throws Exception {
+
+        Path testDirPath = new Path("/Top-Level");
+        if (fs.exists(testDirPath)) {
+            fs.delete(testDirPath, true);
+        }
+
+        createLoadTestFiles(testDirPath);
+        boolean deleted = fs.delete(testDirPath, true);
+
+        assertTrue(deleted);
+
+        boolean pathExists = fs.exists(testDirPath);
+        assertTrue(!pathExists);
+    }
+
     @Test
     public void testFlatListingOfFiles() throws Exception {
         Path homeDirPath = fs.getHomeDirectory();
@@ -362,14 +419,18 @@ public class TestBmcFileSystemContract extends FileSystemContractBaseTest {
         }
     }
 
-    private void createAndUploadFile(Path file, int sizeInKB) throws IOException {
+    private void createAndUploadObjectInBytes(Path file, int sizeInBytes) throws IOException {
         Random rand = new Random();
         try(FSDataOutputStream fos = fs.create(file)) {
-            byte[] buffer = new byte[sizeInKB * 1024];
+            byte[] buffer = new byte[sizeInBytes];
             rand.nextBytes(buffer);
             fos.write(buffer);
             fos.flush();
         }
+    }
+
+    private void createAndUploadFile(Path file, int sizeInKB) throws IOException {
+        createAndUploadObjectInBytes(file, sizeInKB * 1024);
     }
 
     @Test
