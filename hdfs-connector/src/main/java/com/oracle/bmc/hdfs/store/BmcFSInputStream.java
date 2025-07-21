@@ -6,6 +6,7 @@
 package com.oracle.bmc.hdfs.store;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.oracle.bmc.hdfs.monitoring.RetryMetricsCollector;
 import net.jodah.failsafe.Failsafe;
 import net.jodah.failsafe.RetryPolicy;
 import java.io.EOFException;
@@ -51,17 +52,14 @@ public abstract class BmcFSInputStream extends FSInputStream {
     @Getter(value = AccessLevel.PROTECTED)
     protected final Statistics statistics;
 
+    protected final RetryMetricsCollector retryMetricsCollector;
+
     @Setter(value = AccessLevel.PROTECTED)
     @Getter(value = AccessLevel.PROTECTED)
     protected InputStream sourceInputStream;
 
     protected long currentPosition = 0;
     protected boolean closed = false;
-
-    // The following two variables are used to track if it's the first time a read is being done,
-    // and reduce the length of the read to 1MB (if greater), in order to calculate the TTFB correctly.
-    protected boolean firstRead = true;
-    protected static final int FIRST_READ_WINDOW_SIZE = 1 * 1024 * 1024;
 
     @Override
     public long getPos() throws IOException {
@@ -242,18 +240,21 @@ public abstract class BmcFSInputStream extends FSInputStream {
 
         GetObjectRequest request = this.requestBuilder.get().range(range).build();
 
-        final GetObjectResponse response = this.objectStorage.getObject(request);
-        LOG.debug(
-                "New stream, opened object with etag {} and size {}",
-                response.getETag(),
-                response.getContentLength());
-        final InputStream dataStream = response.getInputStream();
-        this.sourceInputStream = this.wrap(dataStream);
-        // if range request, use the first byte returned, else it's just 0 (startPosition)
-        if (range != null) {
-            this.currentPosition = response.getContentRange().getStartByte();
-        } else {
-            this.currentPosition = startPosition;
+        try (RetryMetricsCollector collector = this.retryMetricsCollector) {
+            final GetObjectResponse response = this.objectStorage.getObject(request.toBuilder()
+                    .retryConfiguration(collector.getRetryConfiguration()).build());
+            LOG.debug(
+                    "New stream, opened object with etag {} and size {}",
+                    response.getETag(),
+                    response.getContentLength());
+            final InputStream dataStream = response.getInputStream();
+            this.sourceInputStream = this.wrap(dataStream);
+            // if range request, use the first byte returned, else it's just 0 (startPosition)
+            if (range != null) {
+                this.currentPosition = response.getContentRange().getStartByte();
+            } else {
+                this.currentPosition = startPosition;
+            }
         }
     }
 
@@ -288,10 +289,11 @@ public abstract class BmcFSInputStream extends FSInputStream {
     }
 
     protected void readAllBytes(Range range, byte[] b) throws IOException {
-        try {
+        try (RetryMetricsCollector collector = this.retryMetricsCollector){
             Failsafe.with(retryPolicy()).run(() -> {
                 GetObjectRequest request = this.requestBuilder.get().range(range).build();
-                GetObjectResponse response = objectStorage.getObject(request);
+                final GetObjectResponse response = this.objectStorage.getObject(request.toBuilder()
+                        .retryConfiguration(collector.getRetryConfiguration()).build());
                 try (final InputStream is = response.getInputStream()) {
                     readAllBytes(is, b);
                 }

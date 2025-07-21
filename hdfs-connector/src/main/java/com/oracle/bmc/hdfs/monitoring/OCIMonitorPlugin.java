@@ -14,18 +14,22 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
+import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class OCIMonitorPlugin extends OCIMonitorConsumerPlugin {
-    private final List<OCIMetric> metricsCache = new LinkedList<>();
+    /**
+     * Thread-safe queue used to store incoming metrics.
+     * Written by accept() (main thread) and drained by doOneRun() (background emitter thread).
+     */
+    private final Queue<OCIMetric> metricsCache = new ConcurrentLinkedQueue<>();
     private final ScheduledExecutorService handOffES;
     private final MonitoringClient monClient;
     private final String namespaceName;
@@ -75,7 +79,7 @@ public class OCIMonitorPlugin extends OCIMonitorConsumerPlugin {
         Map<String, List<OCIMetric>> bunchedMetrics = new HashMap<>();
 
         for (int i = 0; i < size; i++) {
-            OCIMetric m = metricsCache.remove(0);
+            OCIMetric m = metricsCache.poll();
 
             String bunchKey = null;
 
@@ -98,20 +102,28 @@ public class OCIMonitorPlugin extends OCIMonitorConsumerPlugin {
 
             long lastRecordedTime = 0l;
             int totalCount = 0;
+            int totalCoalescedCount = 0;
             int successCount = 0;
             double averageOverallTime = 0.0d;
             int errorCount = 0;
             double averageTTFB = 0.0d;
             double averageThroughput = 0.0d;
             double totalBytesTransferred = 0.0d;
+            int retryAttemptCount = 0;
+            int retry503Count = 0;
+            int retry429Count = 0;
+            int maxRetryCount = 0;
 
             List<OCIMetric> metricsList = bunchedMetrics.get(key);
             String actualKey = null;
 
             int bunchedErrorStatusCode = 0;
+
             for (OCIMetric om : metricsList) {
                 totalCount++;
                 actualKey = om.getKey();
+                int retryCount = om.getRetryAttempts();
+                maxRetryCount = Math.max(maxRetryCount, retryCount);
 
                 if (!om.isError()) {
                     successCount++;
@@ -131,12 +143,28 @@ public class OCIMonitorPlugin extends OCIMonitorConsumerPlugin {
                         totalBytesTransferred += ((OCIMetricWithThroughput) om).getBytesTransferred();
                     }
 
+                    if (retryCount > 0) {
+                        retryAttemptCount += retryCount;
+                    }
+
+                    retry503Count += om.getRetry503Count();
+                    retry429Count += om.getRetry429Count();
+
                 } else {
                     bunchedErrorStatusCode = om.getErrorStatusCode();
                     errorCount++;
                 }
+                if (om.getIsCoalesced()) {
+                    totalCoalescedCount++;
+                }
                 lastRecordedTime = om.getRecordedTime();
             }
+
+            LOG.debug("Emitting metric group: key={}, totalCount={}, retryAttempts={}, avgRetry={}, maxRetry={}, errorStatusCode={}",
+                    actualKey, totalCount, retryAttemptCount,
+                    retryAttemptCount > 0 ? String.format("%.2f", (double) retryAttemptCount / totalCount) : "0",
+                    maxRetryCount,
+                    bunchedErrorStatusCode > 0 ? bunchedErrorStatusCode : "none");
 
             if (successCount > 0) {
                 averageOverallTime = averageOverallTime / successCount;
@@ -153,6 +181,9 @@ public class OCIMonitorPlugin extends OCIMonitorConsumerPlugin {
             List<MetricDataDetails> mdList = new ArrayList<>();
             if (totalCount > 0) {
                 mdList.add(getMetricDataDetails(actualKey + "_COUNT", totalCount, lastRecordedTime));
+                if (actualKey.equals("HEAD")) {
+                    mdList.add(getMetricDataDetails(actualKey + "_COALESCED_COUNT", totalCoalescedCount, lastRecordedTime));
+                }
                 mdList.add(getMetricDataDetails(actualKey + "_OVERALL_LATENCY",
                         averageOverallTime, lastRecordedTime));
 
@@ -173,6 +204,41 @@ public class OCIMonitorPlugin extends OCIMonitorConsumerPlugin {
                     mdList.add(getMetricDataDetails(actualKey + "_BYTES", totalBytesTransferred, lastRecordedTime));
                 }
 
+                // A metric group is defined by a unique combination of:
+                // - OCIMetricKey (e.g., HEAD, WRITE, DELETE, etc.)
+                // - target bucket
+                // - and (if applicable) error status code
+                //
+                // All metrics in the same group are aggregated together during one emit cycle,
+                // which runs every N seconds (configurable via OCI_MON_EMIT_THREAD_POLL_INTERVAL_SECONDS, default: 2s).
+
+
+                // Total number of retry attempts across all requests (both successful and failed) in this metric group.
+                if (retryAttemptCount > 0) {
+                    mdList.add(getMetricDataDetails(actualKey + "_RETRY_ATTEMPT_COUNT", retryAttemptCount, lastRecordedTime));
+                }
+
+                // Total number of times a 429 response triggered a retry in this metric group.
+                if (retry429Count > 0) {
+                    mdList.add(getMetricDataDetails(actualKey + "_RETRY_429_COUNT", retry429Count, lastRecordedTime));
+                }
+
+                // Total number of times a 503 response triggered a retry in this metric group.
+                if (retry503Count > 0) {
+                    mdList.add(getMetricDataDetails(actualKey + "_RETRY_503_COUNT", retry503Count, lastRecordedTime));
+                }
+
+                // Average retry attempts per request (total retry attempts ÷ total requests in this metric group).
+                if (retryAttemptCount > 0) {
+                    double averageRetries = (double) retryAttemptCount / totalCount;
+                    mdList.add(getMetricDataDetails(actualKey + "_AVERAGE_RETRY_COUNT", averageRetries, lastRecordedTime));
+                }
+
+                // Highest retry count observed for a single request in this metric group.
+                if (maxRetryCount > 0) {
+                    mdList.add(getMetricDataDetails(actualKey + "_MAX_RETRY_COUNT", maxRetryCount, lastRecordedTime));
+                }
+
                 PostMetricDataDetails postMetricDataDetails = PostMetricDataDetails.builder()
                         .metricData(mdList).build();
 
@@ -181,29 +247,16 @@ public class OCIMonitorPlugin extends OCIMonitorConsumerPlugin {
                         .opcRequestId(UUID.randomUUID().toString())
                         .build();
 
-                int numRetries = 3;
-                Random randomBackoff = new Random();
-
-                while (numRetries > 0) {
-                    try {
-
-                        PostMetricDataResponse response = monClient.postMetricData(postMetricDataRequest);
-                        int statusCode = response.get__httpStatusCode__();
-
-                        if (statusCode == 429 || statusCode == 500) {
-                            numRetries--;
-                            Thread.sleep((randomBackoff.nextInt(2) + 1) * 1000);
-                        } else {
-                            break;
-                        }
-
-                    } catch (Exception e) {
-                        LOG.error("Unable to emit metrics: {}", e.toString());
-
-                        if (LOG.isDebugEnabled()) {
-                            LOG.error("Metrics emit failed! ", e);
-                        }
-                        break;
+                try {
+                    PostMetricDataResponse response = monClient.postMetricData(postMetricDataRequest);
+                    int statusCode = response.get__httpStatusCode__();
+                    if (statusCode == 429 || statusCode == 500) {
+                        LOG.warn("Received status code {} while emitting metrics", statusCode);
+                    }
+                } catch (Exception e) {
+                    LOG.error("Unable to emit metrics: {}", e.toString());
+                    if (LOG.isDebugEnabled()) {
+                        LOG.error("Metrics emit failed! ", e);
                     }
                 }
             }
@@ -242,9 +295,33 @@ public class OCIMonitorPlugin extends OCIMonitorConsumerPlugin {
     public void accept(OCIMetric ociMetric) {
         if (metricsCache.size() < maxBacklogBeforeDrop && !awaitingShutdown) {
             metricsCache.add(ociMetric);
+            // Per request logging
+            LOG.debug("Accepted OCIMetric: key={}, isError={}, retries={}, 503Retries={}, 429Retries={}, statusCode={}, time={}, latency={}ms",
+                        ociMetric.getKey(),
+                        ociMetric.isError(),
+                        ociMetric.getRetryAttempts(),
+                        ociMetric.getRetry503Count(),
+                        ociMetric.getRetry429Count(),
+                        ociMetric.getErrorStatusCode(),
+                        new Date(ociMetric.getRecordedTime()),
+                        ociMetric.getOverallTime()
+                );
         } else {
-            LOG.warn("Dropping metrics. Metrics cache size: {}, or Awaiting shutdown {}",
-                    metricsCache.size(), awaitingShutdown);
+            // Metrics are dropped when backlog exceeds limit.
+            // Drop Condition: R × T ≥ maxBacklog
+            //   R = metrics generated per second
+            //   T = emit thread interval (BmcProperties.OCI_MON_EMIT_THREAD_POLL_INTERVAL_SECONDS)
+            //   maxBacklog = backlog limit (BmcProperties.OCI_MON_MAX_BACKLOG_BEFORE_DROP)
+            // If drops occur frequently, consider tuning T or maxBacklog to match workload characteristics.
+
+            LOG.debug("Dropping metric: key={}, isError={}, retryAttempts={}, statusCode={}, time={}, cacheSize={}, shutdown={}",
+                    ociMetric.getKey(),
+                    ociMetric.isError(),
+                    ociMetric.getRetryAttempts(),
+                    ociMetric.getErrorStatusCode(),
+                    new Date(ociMetric.getRecordedTime()),
+                    metricsCache.size(),
+                    awaitingShutdown);
         }
     }
 

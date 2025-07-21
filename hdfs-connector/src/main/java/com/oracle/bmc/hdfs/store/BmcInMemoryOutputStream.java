@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 import com.oracle.bmc.hdfs.util.BiFunction;
+import com.oracle.bmc.objectstorage.transfer.UploadConfiguration;
 import com.oracle.bmc.objectstorage.transfer.UploadManager;
 import com.oracle.bmc.objectstorage.transfer.UploadManager.UploadRequest;
 import com.oracle.bmc.util.StreamUtils;
@@ -22,14 +23,20 @@ public class BmcInMemoryOutputStream extends BmcOutputStream {
     private final int bufferSizeInBytes;
 
     private ByteArrayOutputStream baos;
+    protected final boolean isNewFlow;
+    protected final UploadConfiguration uploadConfiguration;
 
     public BmcInMemoryOutputStream(
             final UploadManager uploadManager,
             final int bufferSizeInBytes,
             final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn,
-            int writeMaxRetires) {
-        super(uploadManager, requestBuilderFn, writeMaxRetires);
+            int writeMaxRetires,
+            boolean isNewFlow,
+            UploadConfiguration uploadConfiguration) {
+        super(uploadManager, requestBuilderFn, writeMaxRetires, isNewFlow, uploadConfiguration);
         this.bufferSizeInBytes = bufferSizeInBytes;
+        this.isNewFlow = isNewFlow;
+        this.uploadConfiguration = uploadConfiguration;
     }
 
     @Override

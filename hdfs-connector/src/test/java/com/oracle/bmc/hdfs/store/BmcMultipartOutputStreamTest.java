@@ -7,6 +7,8 @@ package com.oracle.bmc.hdfs.store;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.oracle.bmc.hdfs.BmcProperties;
+import com.oracle.bmc.hdfs.monitoring.OCIMetricKeys;
+import com.oracle.bmc.hdfs.monitoring.RetryMetricsCollector;
 import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
 import com.oracle.bmc.hdfs.util.DirectExecutorService;
 import com.oracle.bmc.model.BmcException;
@@ -19,6 +21,8 @@ import com.oracle.bmc.objectstorage.responses.CommitMultipartUploadResponse;
 import com.oracle.bmc.objectstorage.responses.CreateMultipartUploadResponse;
 import com.oracle.bmc.objectstorage.responses.PutObjectResponse;
 import com.oracle.bmc.objectstorage.responses.UploadPartResponse;
+import com.oracle.bmc.objectstorage.transfer.UploadConfiguration;
+import com.oracle.bmc.retrier.RetryConfiguration;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -45,6 +49,7 @@ public class BmcMultipartOutputStreamTest {
     @Mock private BmcPropertyAccessor mockPropAccessor;
     @Mock private BmcPropertyAccessor.Accessor<Integer> mockIntegerAccessor;
     @Mock private BmcPropertyAccessor.Accessor<Boolean> mockBooleanAccessor;
+    @Mock private BmcPropertyAccessor.Accessor<Long> mockLongAccessor;
 
     private static final Random randomGenerator = new Random();
 
@@ -64,9 +69,12 @@ public class BmcMultipartOutputStreamTest {
                                 eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS)))
                 .thenReturn(900);
         when(mockBooleanAccessor.get(eq(BmcProperties.OBJECT_ALLOW_OVERWRITE))).thenReturn(true);
+        when(mockLongAccessor.get(eq(BmcProperties.RETRY_TIMEOUT_IN_SECONDS))).thenReturn(30L);
+        when(mockLongAccessor.get(eq(BmcProperties.RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS))).thenReturn(0L);
 
         when(mockPropAccessor.asInteger()).thenReturn(mockIntegerAccessor);
         when(mockPropAccessor.asBoolean()).thenReturn(mockBooleanAccessor);
+        when(mockPropAccessor.asLong()).thenReturn(mockLongAccessor);
     }
 
     @Test
@@ -88,8 +96,13 @@ public class BmcMultipartOutputStreamTest {
                         .multipartUploadRequest(multipartUploadRequest)
                         .allowOverwrite(true)
                         .build();
+        RetryMetricsCollector retryMetricsCollector = new RetryMetricsCollector(RetryConfiguration.SDK_DEFAULT_RETRY_CONFIGURATION, OCIMetricKeys.WRITE);
+        UploadConfiguration uploadConfiguration = UploadConfiguration.builder()
+                .allowMultipartUploads(true)
+                .lengthPerUploadPart(128)
+                .build();
         BmcMultipartOutputStream bmos =
-                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService(), 2);
+                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService(), 2, retryMetricsCollector, true, uploadConfiguration);
 
         String uploadId = "TestRequest";
         MultipartUpload upload =
@@ -143,8 +156,13 @@ public class BmcMultipartOutputStreamTest {
                         .multipartUploadRequest(multipartUploadRequest)
                         .allowOverwrite(true)
                         .build();
+        RetryMetricsCollector retryMetricsCollector = new RetryMetricsCollector(RetryConfiguration.SDK_DEFAULT_RETRY_CONFIGURATION, OCIMetricKeys.WRITE);
+        UploadConfiguration uploadConfiguration = UploadConfiguration.builder()
+                .allowMultipartUploads(true)
+                .lengthPerUploadPart(128)
+                .build();
         BmcMultipartOutputStream bmos =
-                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService(), 2);
+                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService(), 2, retryMetricsCollector,true, uploadConfiguration);
 
         String uploadId = "TestRequest";
         MultipartUpload upload =
@@ -220,8 +238,13 @@ public class BmcMultipartOutputStreamTest {
                 .thenReturn(CommitMultipartUploadResponse.builder().eTag("testingEtag").build());
 
         Exception exception = null;
+        RetryMetricsCollector retryMetricsCollector = new RetryMetricsCollector(RetryConfiguration.SDK_DEFAULT_RETRY_CONFIGURATION, OCIMetricKeys.WRITE);
+        UploadConfiguration uploadConfiguration = UploadConfiguration.builder()
+                .allowMultipartUploads(true)
+                .lengthPerUploadPart(128)
+                .build();
         try (BmcMultipartOutputStream bmos =
-                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService(), 2)) {
+                new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService(), 2,retryMetricsCollector, true, uploadConfiguration)) {
             for (int parts = 0; parts < 1; ++parts) {
                 bmos.write(generateRandomBytes(1024));
             }
@@ -289,8 +312,13 @@ public class BmcMultipartOutputStreamTest {
         Mockito.when(objectStorage.putObject(any(PutObjectRequest.class))).thenReturn(putResponse);
         ExecutorService md5Executor = createExecutorService();
 
+        RetryMetricsCollector retryMetricsCollector = new RetryMetricsCollector(RetryConfiguration.SDK_DEFAULT_RETRY_CONFIGURATION, OCIMetricKeys.WRITE);
+        UploadConfiguration uploadConfiguration = UploadConfiguration.builder()
+                .allowMultipartUploads(true)
+                .lengthPerUploadPart(128)
+                .build();
         try (BmcMultipartOutputStream bmos =
-                     new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, md5Executor, 2)) {
+                     new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, md5Executor, 2, retryMetricsCollector, true, uploadConfiguration)) {
             bmos.write(new byte[0]);
             bmos.flush();
         } finally {
@@ -350,8 +378,13 @@ public class BmcMultipartOutputStreamTest {
                 .thenReturn(CommitMultipartUploadResponse.builder().eTag("testingEtag").build());
 
         Exception exception = null;
+        RetryMetricsCollector retryMetricsCollector = new RetryMetricsCollector(RetryConfiguration.SDK_DEFAULT_RETRY_CONFIGURATION, OCIMetricKeys.WRITE);
+        UploadConfiguration uploadConfiguration = UploadConfiguration.builder()
+                .allowMultipartUploads(true)
+                .lengthPerUploadPart(128)
+                .build();
         try (BmcMultipartOutputStream bmos =
-                     new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService(), 2)) {
+                     new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, createExecutorService(), 2, retryMetricsCollector, true, uploadConfiguration)) {
             // two parts, first part 1024, second part 2 bytes
             for (int parts = 0; parts < 2; ++parts) {
                 bmos.write(generateRandomBytes(512 + 1));
@@ -400,9 +433,13 @@ public class BmcMultipartOutputStreamTest {
                 .thenThrow(new BmcException(429, null, "Too many requests", null))
                 .thenReturn(putResponse);
         ExecutorService md5Executor = createExecutorService();
-
+        RetryMetricsCollector retryMetricsCollector = new RetryMetricsCollector(RetryConfiguration.SDK_DEFAULT_RETRY_CONFIGURATION, OCIMetricKeys.WRITE);
+        UploadConfiguration uploadConfiguration = UploadConfiguration.builder()
+                .allowMultipartUploads(true)
+                .lengthPerUploadPart(128)
+                .build();
         try (BmcMultipartOutputStream bmos =
-                     new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, md5Executor, 2)) {
+                     new BmcMultipartOutputStream(mockPropAccessor, uploadRequest, MAX_BUFFER_SIZE, md5Executor, 2, retryMetricsCollector, true, uploadConfiguration)) {
             bmos.write(new byte[0]);
             bmos.flush();
         } finally {

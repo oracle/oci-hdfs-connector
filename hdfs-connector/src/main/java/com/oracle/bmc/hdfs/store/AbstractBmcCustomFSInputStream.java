@@ -6,6 +6,7 @@
 package com.oracle.bmc.hdfs.store;
 
 import java.util.function.Supplier;
+import com.oracle.bmc.hdfs.monitoring.RetryMetricsCollector;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.requests.GetObjectRequest;
 import org.apache.hadoop.fs.FileStatus;
@@ -26,8 +27,9 @@ public abstract class AbstractBmcCustomFSInputStream extends BmcFSInputStream {
             FileStatus status,
             Supplier<GetObjectRequest.Builder> requestBuilder,
             int readMaxRetries,
-            FileSystem.Statistics statistics) {
-        super(objectStorage, status, requestBuilder, readMaxRetries, statistics);
+            FileSystem.Statistics statistics,
+            RetryMetricsCollector retryMetricsCollector) {
+        super(objectStorage, status, requestBuilder, readMaxRetries, statistics, retryMetricsCollector);
         this.propertyAccessor = propertyAccessor;
     }
 }

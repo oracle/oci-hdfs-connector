@@ -125,11 +125,20 @@ public final class BmcConstants {
 
     public static final String RETRY_TIMEOUT_IN_SECONDS_KEY = "fs.oci.client.retry.timeout.seconds";
 
+    public static final String RETRY_JITTER_IN_MILLIS_KEY = "fs.oci.client.retry.jitter.millis";
+
     public static final String RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS_KEY =
             "fs.oci.client.retry.reset.threshold.seconds";
 
     public static final String OBJECT_METADATA_CACHING_ENABLED_KEY =
             "fs.oci.caching.object.metadata.enabled";
+
+    public static final String HEADOBJECT_REQUEST_COALESCING_ENABLED_KEY =
+            "fs.oci.head.object.coalescing.enabled";
+
+    public static final String REQUEST_COALESCING_WAIT_TIME_IN_MILLIS_KEY =
+            "fs.oci.object.coalescing.waittime.millis";
+
 
     public static final String OBJECT_METADATA_CACHING_SPEC_KEY =
             "fs.oci.caching.object.metadata.spec";
@@ -222,6 +231,10 @@ public final class BmcConstants {
 
     public static final String SESSION_TOKEN_FILE_PATH_KEY = "fs.oci.client.auth.sessiontoken";
 
+    public static final String NUM_DELETE_THREADS_KEY = "fs.oci.client.num.delete.threads";
+
+    public static final String OCI_FIRST_READ_OPTIMIZATION_FOR_TTFB_KEY = "fs.oci.first.read.optimization.for.ttfb";
+
     /**
      * Following are the properties related to OCI monitoring for the connector
      */
@@ -242,6 +255,7 @@ public final class BmcConstants {
     public static final String DFS_CHECKSUM_COMBINE_MODE_KEY = "dfs.checksum.combine.mode";
     public static final String CHECKSUM_COMBINE_MODE_CRC = "COMPOSITE_CRC";
     public static final String DEFAULT_CHECKSUM_COMBINE_MODE = "MD5MD5CRC";
+    public static final int FIRST_READ_WINDOW_SIZE = 1 * 1024 * 1024;
 
     /**
      * This class contains constants with deprecated values. The HDFS connector will first try the current values

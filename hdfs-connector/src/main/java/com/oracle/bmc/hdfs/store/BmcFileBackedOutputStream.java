@@ -13,6 +13,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 import com.oracle.bmc.hdfs.util.BiFunction;
+import com.oracle.bmc.objectstorage.transfer.UploadConfiguration;
 import com.oracle.bmc.objectstorage.transfer.UploadManager;
 import com.oracle.bmc.objectstorage.transfer.UploadManager.UploadRequest;
 import com.oracle.bmc.util.StreamUtils;
@@ -29,14 +30,20 @@ public class BmcFileBackedOutputStream extends BmcOutputStream {
     private final BmcPropertyAccessor propertyAccessor;
 
     private File bufferFile;
+    protected final boolean isNewFlow;
+    protected final UploadConfiguration uploadConfiguration;
 
     public BmcFileBackedOutputStream(
             final BmcPropertyAccessor propertyAccessor,
             final UploadManager uploadManager,
             final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn,
-            int writeMaxRetires) {
-        super(uploadManager, requestBuilderFn, writeMaxRetires);
+            int writeMaxRetires,
+            boolean isNewFlow,
+            UploadConfiguration uploadConfiguration) {
+        super(uploadManager, requestBuilderFn, writeMaxRetires,isNewFlow, uploadConfiguration);
         this.propertyAccessor = propertyAccessor;
+        this.isNewFlow = isNewFlow;
+        this.uploadConfiguration = uploadConfiguration;
     }
 
     @Override
@@ -52,13 +59,17 @@ public class BmcFileBackedOutputStream extends BmcOutputStream {
 
     @Override
     protected long getInputStreamLengthInBytes() {
-        return this.bufferFile.length();
+        // bufferFile may be null if temp file creation failed (e.g., disk full)
+        return (this.bufferFile != null) ? this.bufferFile.length() : 0L;
     }
 
     @Override
     public void close() throws IOException {
         super.close();
-        this.bufferFile.delete();
+        // Avoid NullPointerException if bufferFile was never initialized
+        if (this.bufferFile != null) {
+            this.bufferFile.delete();
+        }
     }
 
     private File createBufferFile() throws IOException {

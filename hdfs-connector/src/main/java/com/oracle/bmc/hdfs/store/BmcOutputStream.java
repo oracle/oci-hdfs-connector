@@ -16,10 +16,12 @@ import org.apache.hadoop.fs.FSExceptionMessages;
 
 import com.oracle.bmc.hdfs.util.BiFunction;
 import com.oracle.bmc.model.BmcException;
+import com.oracle.bmc.objectstorage.transfer.UploadConfiguration;
 import com.oracle.bmc.objectstorage.transfer.UploadManager;
 import com.oracle.bmc.objectstorage.transfer.UploadManager.UploadRequest;
 import com.oracle.bmc.objectstorage.transfer.UploadManager.UploadResponse;
 
+import com.oracle.bmc.objectstorage.transfer.internal.MultipartUtils;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -29,7 +31,7 @@ import lombok.extern.slf4j.Slf4j;
  * contents to a location of its choice.
  */
 @Slf4j
-abstract class BmcOutputStream extends OutputStream {
+public abstract class BmcOutputStream extends OutputStream {
     private static final int ERROR_CODE_FILE_EXISTS = 412;
     private final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn;
     private final UploadManager uploadManager;
@@ -38,13 +40,21 @@ abstract class BmcOutputStream extends OutputStream {
 
     private OutputStream outputBufferStream;
     private boolean closed = false;
+    protected final boolean isNewFlow;
+    protected final UploadConfiguration uploadConfiguration;
+
 
     public BmcOutputStream(
             final UploadManager uploadManager,
-            final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn, int writeMaxRetries) {
+            final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn,
+            int writeMaxRetries,
+            boolean isNewFlow,
+            UploadConfiguration uploadConfiguration) {
         this.uploadManager = uploadManager;
         this.requestBuilderFn = requestBuilderFn;
         this.writeMaxRetries = writeMaxRetries;
+        this.isNewFlow = isNewFlow;
+        this.uploadConfiguration = uploadConfiguration;
     }
 
     @Override
@@ -94,7 +104,7 @@ abstract class BmcOutputStream extends OutputStream {
                             this.requestBuilderFn.apply(
                                     this.getInputStreamLengthInBytes(), fromBufferedStream);
                     final UploadResponse response = this.uploadManager.upload(request);
-                    LOG.debug("Put new file with etag {}", response.getETag());
+                    LOG.debug("Put new file with etag {}, opc-request-id {}", response.getETag(), response.getOpcRequestId());
                 }
             });
         } catch (final BmcException e) {
@@ -168,10 +178,23 @@ abstract class BmcOutputStream extends OutputStream {
                         .withDelay(Duration.ofSeconds(3))
                         .withJitter(Duration.ofMillis(200))
                         .onRetry(e -> LOG.info("Write failed, retrying. Message: {}, Retry count {}",
-                                    e.getLastFailure().getMessage(), e.getAttemptCount()))
+                                e.getLastFailure().getMessage(), e.getAttemptCount()))
                         .onRetriesExceeded(e -> LOG.error("Write retries exhausted. Last failure: ", e.getFailure()));
             }
         }
         return this.retryPolicy;
+    }
+
+    public boolean isNewFlow() {
+        return isNewFlow;
+    }
+
+    public boolean isMultipart() {
+        try {
+            long length = getInputStreamLengthInBytes();
+            return MultipartUtils.shouldUseMultipart(uploadConfiguration, length);
+        } catch (IOException e) {
+            return false;
+        }
     }
 }

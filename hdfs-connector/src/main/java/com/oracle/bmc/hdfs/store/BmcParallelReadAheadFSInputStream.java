@@ -5,10 +5,10 @@
  */
 package com.oracle.bmc.hdfs.store;
 
+import com.oracle.bmc.hdfs.monitoring.RetryMetricsCollector;
 import com.oracle.bmc.model.Range;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.requests.GetObjectRequest;
-import com.oracle.bmc.objectstorage.responses.GetObjectResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.hadoop.fs.FSInputStream;
@@ -16,7 +16,6 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -25,6 +24,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.function.Supplier;
+
+import static com.oracle.bmc.hdfs.BmcConstants.FIRST_READ_WINDOW_SIZE;
 
 /**
  * {@link FSInputStream} implementation that reads ahead to cache chunks of
@@ -38,6 +39,11 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
     private final int ociReadAheadBlockSize;
     private final int readAheadBlockCount;
 
+    // If first read optimization is enabled, then 1MB is read as the first chunk in order to get as
+    // accurate time-to-first-byte metric as possible. This feature is disabled by default.
+    private boolean firstRead = true;
+    private final boolean firstReadOptimizationForTTFBEnabled;
+
     public BmcParallelReadAheadFSInputStream(
             final ObjectStorage objectStorage,
             final FileStatus status,
@@ -46,8 +52,10 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
             final FileSystem.Statistics statistics,
             ExecutorService executor,
             int ociReadAheadBlockSize,
-            int readAheadBlockCount) {
-        super(objectStorage, status, requestBuilder, readMaxRetries, statistics);
+            int readAheadBlockCount,
+            final RetryMetricsCollector retryMetricsCollector,
+            final boolean firstReadOptimizationForTTFBEnabled) {
+        super(objectStorage, status, requestBuilder, readMaxRetries, statistics, retryMetricsCollector);
 
         this.executor = executor;
         this.cachedData = new TreeMap<>();
@@ -55,6 +63,7 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
         LOG.info("ReadAhead block size is " + ociReadAheadBlockSize);
         this.readAheadBlockCount = readAheadBlockCount;
         LOG.info("ReadAhead block count is " + readAheadBlockCount);
+        this.firstReadOptimizationForTTFBEnabled = firstReadOptimizationForTTFBEnabled;
     }
 
 
@@ -268,7 +277,7 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
                    This improves performance and reduces the likelihood of issues related to partial block reads
                  */
                 int readLength;
-                if (firstRead) {
+                if (firstReadOptimizationForTTFBEnabled && firstRead) {
                     // Only for first read make the readLength lesser so that we can get as near to an accurate
                     // ttfb for reads as possible.
                     firstRead = false;

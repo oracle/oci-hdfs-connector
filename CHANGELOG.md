@@ -2,6 +2,42 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
+## 3.4.1.0.0.3- 2025-07-17
+### Added
+- Introduced `RetryMetricsCollector` to emit retry-related metrics for Object Storage operations. This enables better visibility into transient failures and recovered errors, improving monitoring and alerting accuracy.
+
+### Changed
+- Removed pre-delete logic from `create(path, true)` to rely on Object Storage’s native overwrite, avoiding data loss and redundant delete markers.
+- Upgraded OCI SDK to version `3.55.3` to resolve a retry handling issue in `PutObject` and `PutPart` operations. The updated SDK correctly resets internal   input streams during retries, improving reliability of multipart uploads under transient network failures.
+- Optimized recursive delete performance by introducing parallelism using a thread pool. The number of delete threads is now configurable.
+- Added request coalescing for `headObject` operations to avoid issuing repeated calls for the same object during concurrent access.
+- Added a 200-millisecond jitter to retry backoff logic for API calls to help reduce simultaneous retries.
+- Delayed error validation in multipart uploads to ensure that failed parts are properly handled before committing the object. This prevents premature completion in the presence of part-level failures.
+- Updated default retry configurations to improve connector resilience:
+  - `fs.oci.client.http.writemaxretries` and `fs.oci.client.http.readmaxretries`: increased from 3 to 10.
+  - `fs.oci.client.retry.timeout.seconds`: increased from 30s to 90s to handle longer backend recovery scenarios.
+  - `fs.oci.client.retry.reset.threshold.seconds`: added with a default of 16s to cap exponential backoff intervals.
+- Optimized internal object existence checks by using `HEAD` with `If-Match` header, avoiding full metadata decryption. This improves performance for operations like `create`, `delete`, and `mkdirs`.
+- Improved directory creation by using `If-None-Match: "*"` header to avoid redundant PUT requests. This ensures only one marker is created during concurrent `mkdirs` calls, reducing conflicts and unnecessary writes.
+
+### Fixed
+- Fixed a bug in `BmcReadAheadFSInputStream` that misinterpreted 8-byte tail reads as Parquet footers, leading to invalid byte ranges and `416 InvalidRange` errors. This fix prevents incorrect metadata parsing when non-Parquet files are read.
+- Fixed a `NullPointerException` in `BmcFileBackedOutputStream` during metric emission when the internal buffer file fails to initialize (e.g., due to disk full). Added null checks to ensure upload cleanup and metrics handling do not crash on partial failures.
+
+## 3.4.1.0.0.2 - 2025-05-12
+### Added
+- Added support for Security Token authentication.
+
+### Changed
+- Updated `mkdirs()` logic to create directories in root-to-leaf order. This avoids cases where child directories may exist without their parent, which can cause failures during access or listing.
+- Modified `cancel()` behavior to prevent interrupting in-flight read operations. This avoids hung connections caused by abrupt thread interruption during active I/O.
+- Updated RSA key generation flow for UPST authentication. Reuses the same RSA KeyPair across the lifetime of the token manager to prevent signing mismatches across refresh boundaries.
+
+### Fixed
+- Ensured proper shutdown of OCI Monitoring plugin and handler executors inside `BmcDataStore.close()` to prevent thread leaks.
+- Fixed premature shutdown of executor services in `BmcFileSystemImpl.close()` caused by cache invalidation behavior when caching is disabled.
+- Improved rename behavior by throwing `FileAlreadyExistsException` when rename fails due to concurrent writes, specifically on receiving `409 ConcurrentObjectUpdate` from the backend.
+
 ## 3.4.1.0.0.1 - 2025-01-23
 ### Added
 - Introduced `fs.oci.io.write.allow.overwrite` property to manage overwrite behavior during write operations.
@@ -17,21 +53,6 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 ### Fixed
 - Addressed potential issues with internal retries in the HDFS Connector's output stream. The new retrier ensures that retries do not result in a `412 Precondition Failed` error when the application assumes the object does not already exist.
 - Retrier behavior is now aligned with the `allowoverwrite` property passed from the `OpenOutputStream` method to API calls.
-
-## 3.4.1.0.0.2 - 2025-05-12
-
-### Added
-- Added support for Security Token authentication.
-
-### Changed
-- Updated `mkdirs()` logic to create directories in root-to-leaf order. This avoids cases where child directories may exist without their parent, which can cause failures during access or listing.
-- Modified `cancel()` behavior to prevent interrupting in-flight read operations. This avoids hung connections caused by abrupt thread interruption during active I/O.
-- Updated RSA key generation flow for UPST authentication. Reuses the same RSA KeyPair across the lifetime of the token manager to prevent signing mismatches across refresh boundaries.
-
-### Fixed
-- Ensured proper shutdown of OCI Monitoring plugin and handler executors inside `BmcDataStore.close()` to prevent thread leaks.
-- Fixed premature shutdown of executor services in `BmcFileSystemImpl.close()` caused by cache invalidation behavior when caching is disabled.
-- Improved rename behavior by throwing `FileAlreadyExistsException` when rename fails due to concurrent writes, specifically on receiving `409 ConcurrentObjectUpdate` from the backend.
 
 ## 3.4.1.0.0.0 - 2024-12-13
 ### Changed

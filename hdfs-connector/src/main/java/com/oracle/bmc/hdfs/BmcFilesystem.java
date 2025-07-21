@@ -12,11 +12,15 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -523,7 +527,7 @@ class BmcFilesystemImpl extends FileSystem {
                 path,
                 overwrite,
                 bufferSize);
-        final FileStatus existingFile = this.getNullableFileStatus(path);
+        final FileStatus existingFile = this.getInternalFileStatus(path, true);
         if (existingFile != null) {
             // if there is an existing file, assuming all of the parent
             // directories correctly exist
@@ -537,8 +541,7 @@ class BmcFilesystemImpl extends FileSystem {
                         "Path already exists, and no overwrite allowed: " + path);
             }
 
-            LOG.debug("Found existing file at path, deleting");
-            this.dataStore.delete(path);
+            LOG.debug("Overwriting existing file at path: {}", path);
         } else {
             if (isRecursive) {
                 LOG.debug(
@@ -547,7 +550,7 @@ class BmcFilesystemImpl extends FileSystem {
                 // no existing file, so make sure all of the parent "directories" are created
                 this.mkdirs(path.getParent(), permission);
             } else {
-                if (!dataStore.isDirectory(path.getParent())) {
+                if (!dataStore.isDirectory(path.getParent(), true)) {
                     throw new FileNotFoundException(
                             "Cannot create file " + path + ", the parent directory does not exist");
                 }
@@ -582,7 +585,7 @@ class BmcFilesystemImpl extends FileSystem {
     @Override
     public boolean delete(final Path path, final boolean recursive) throws IOException {
         LOG.debug("Requested to delete {}, recursive {}", path, recursive);
-        final FileStatus status = this.getNullableFileStatus(path);
+        final FileStatus status = this.getInternalFileStatus(path, true);
         if (status == null) {
             LOG.debug("No file at path {} found, nothing to delete", path);
             return false;
@@ -590,7 +593,7 @@ class BmcFilesystemImpl extends FileSystem {
 
         // if it's a file, just delete, nothing to do with recursive
         if (status.isFile()) {
-            LOG.info("Deleting file");
+            LOG.info("Deleting file {}", path);
             this.dataStore.delete(path);
             return true;
         }
@@ -629,6 +632,11 @@ class BmcFilesystemImpl extends FileSystem {
 
         List<Path> zeroByteDirsToDelete = new ArrayList<>();
         RemoteIterator<LocatedFileStatus> iter = listFilesAndZeroByteDirs(path);
+
+        // Use directoryListingSize to wait on delete tasks that have been submitted to a threadpool
+        int directoryListingSize = dataStore.getRecursiveDirListingFetchSize();
+        List<Future<?>> deleteFutures = new ArrayList<>();
+
         while (iter.hasNext()) {
             LocatedFileStatus lfs = iter.next();
             Path absPath = ensureAbsolutePath(lfs.getPath());
@@ -640,17 +648,66 @@ class BmcFilesystemImpl extends FileSystem {
                 // of this delete is interrupted somehow.
                 zeroByteDirsToDelete.add(absPath);
             } else {
-                dataStore.delete(absPath);
+                deleteFutures.add(dataStore.deleteFileAsync(absPath));
+            }
+
+            // Wait until all the deletes of one batch finish.
+            if (deleteFutures.size() == directoryListingSize) {
+                LOG.debug("Dealing with one batch of delete tasks having size: {}", deleteFutures.size());
+                dealWithDeleteFutures(deleteFutures, path);
             }
         }
 
-        // Delete the longest paths first to retain structure in case of interruptions.
-        Collections.sort(zeroByteDirsToDelete, PATH_LENGTH_COMPARATOR);
-        for (Path dir : zeroByteDirsToDelete) {
-            dataStore.deleteDirectory(dir);
+        // Final batch of deletes.
+        if (deleteFutures.size() > 0) {
+            LOG.debug("Dealing with last batch of delete tasks having size: {}", deleteFutures.size());
+            dealWithDeleteFutures(deleteFutures, path);
+        }
+
+        // Sort the directories in descending order of their level. Example if you have the following directories:
+        // "test/12345/asdasdasd/", "test/1234/123123/", "a/b/c/d/e/", "a/b/c/d/e/f/", "a/b/c/d/", "a/"
+        // the sorted result would look like this:
+        // {6=[a/b/c/d/e/f/], 5=[a/b/c/d/e/], 4=[a/b/c/d/], 3=[test/12345/asdasdasd/, test/1234/123123/], 1=[a/]}
+
+        Map<Integer, List<Path>> zeroByteDirsByLevel = new HashMap<>();
+        // Accumulate the zero byte objects (directories) indexed by their level.
+        for (Path zeroByteDir : zeroByteDirsToDelete) {
+            int length = zeroByteDir.toUri().toString().split("/").length;
+
+            List<Path> zeroBytePaths;
+            if (zeroByteDirsByLevel.containsKey(length)) {
+                zeroBytePaths = zeroByteDirsByLevel.get(length);
+            } else {
+                zeroBytePaths = new ArrayList<>();
+                zeroByteDirsByLevel.put(length, zeroBytePaths);
+            }
+            zeroBytePaths.add(zeroByteDir);
+        }
+
+        List<Map.Entry<Integer, List<Path>>> entries = new ArrayList<>(zeroByteDirsByLevel.entrySet());
+        entries.sort((e1, e2) -> e2.getKey().compareTo(e1.getKey()));
+
+        // Delete the directories which are of same level and wait for the async jobs to complete.
+        for (Map.Entry<Integer, List<Path>> entry : entries) {
+            List<Path> dirsToDelete = entry.getValue();
+            for (Path zd : dirsToDelete) {
+                deleteFutures.add(dataStore.deleteDirAsync(zd));
+            }
+            dealWithDeleteFutures(deleteFutures, path);
         }
 
         return true;
+    }
+
+    private void dealWithDeleteFutures(List<Future<?>> deleteFutures, Path path) throws IOException {
+        for (Future<?> future : deleteFutures) {
+            try {
+                future.get();
+            } catch (Exception e) {
+                throw new IOException("Exception while deleting directory: " + path, e);
+            }
+        }
+        deleteFutures.clear();
     }
 
     @Override
@@ -668,6 +725,32 @@ class BmcFilesystemImpl extends FileSystem {
             throw new FileNotFoundException("No file found at path: " + path);
         }
         return fileStatus;
+    }
+
+    /**
+     * Used by callers where we only care about file/directory existence.
+     * Uses a HEAD request with an intentionally incorrect If-Match ETag to avoid decrypting metadata.
+     * Returns the file status if the object exists, or null/throws based on returnNullIfNotFound.
+     */
+    public FileStatus getInternalFileStatus(final Path path, final boolean returnNullIfNotFound) throws IOException {
+        LOG.debug("Checking file existence for path: {}", path);
+        final Path absolutePath = this.ensureAbsolutePath(path);
+
+        try {
+            FileStatus fileStatus = this.dataStore.getFileStatus(absolutePath, true);
+            if (fileStatus == null) {
+                if (returnNullIfNotFound) {
+                    return null;
+                }
+                throw new FileNotFoundException("No file found at path: " + path);
+            }
+            return fileStatus;
+        } catch (FileNotFoundException e) {
+            if (returnNullIfNotFound) {
+                return null;
+            }
+            throw e;
+        }
     }
 
     // helper method that returns null when a file doesn't exist
@@ -700,12 +783,13 @@ class BmcFilesystemImpl extends FileSystem {
     public boolean mkdirs(final Path path, final FsPermission permission) throws IOException {
         LOG.debug("Requested mkdirs on path {}", path);
         Path currentPath = path;
-        if (this.dataStore.isDirectory(path)) {
+
+        if (this.dataStore.isDirectory(path, true)) {
             LOG.debug("Path already exists, nothing to create");
             return true;
         }
 
-        FileStatus status = this.getNullableFileStatus(currentPath);
+        FileStatus status = getInternalFileStatus(path, true);
 
         if (status != null) {
             // path exists, and is not a directory, throw exception. else, it
@@ -725,7 +809,7 @@ class BmcFilesystemImpl extends FileSystem {
             directoriesToCreate.add(currentPath);
             currentPath = currentPath.getParent();
 
-            status = this.getNullableFileStatus(currentPath);
+            status = getInternalFileStatus(currentPath, true);
         }
 
         if (!status.isDirectory()) {

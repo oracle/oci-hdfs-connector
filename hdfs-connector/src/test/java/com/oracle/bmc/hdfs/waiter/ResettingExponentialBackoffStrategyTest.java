@@ -10,6 +10,7 @@ import static org.junit.Assert.assertTrue;
 import static org.powermock.api.mockito.PowerMockito.when;
 
 import com.oracle.bmc.waiter.WaiterConfiguration;
+import org.junit.Assert;
 import org.junit.Test;
 
 import com.oracle.bmc.waiter.WaiterConfiguration.WaitContext;
@@ -45,5 +46,53 @@ public class ResettingExponentialBackoffStrategyTest {
         assertEquals(8000L, strategy.nextDelay(wc));
         assertEquals(16000L, strategy.nextDelay(wc));
         assertEquals(1000L, strategy.nextDelay(wc));
+
+        strategy = new ResettingExponentialBackoffStrategy(30L, 10);
+        when(wc.getAttemptsMade())
+                .thenReturn(0)
+                .thenReturn(1)
+                .thenReturn(2)
+                .thenReturn(3)
+                .thenReturn(4)
+                .thenReturn(5)
+                .thenReturn(6)
+                .thenReturn(7)
+                .thenReturn(8)
+                .thenReturn(9)
+                .thenReturn(10)
+                .thenReturn(11);
+        long delay = strategy.nextDelay(wc);
+        Assert.assertTrue(delay >= 1000L - 10L);
+        Assert.assertTrue(delay < 1000L + 10L);
+        delay = strategy.nextDelay(wc);
+        Assert.assertTrue(delay >= 2000L - 10L);
+        Assert.assertTrue(delay < 2000L + 10L);
+        delay = strategy.nextDelay(wc);
+        Assert.assertTrue(delay >= 4000L - 10L);
+        Assert.assertTrue(delay < 4000L + 10L);
+        delay = strategy.nextDelay(wc);
+        Assert.assertTrue(delay >= 8000L - 10L);
+        Assert.assertTrue(delay < 8000L + 10L);
+        delay = strategy.nextDelay(wc);
+        Assert.assertTrue(delay >= 16000L - 10L);
+        Assert.assertTrue(delay < 16000L + 10L);
+        delay = strategy.nextDelay(wc);
+        Assert.assertTrue(delay >= 1000L - 10L);
+        Assert.assertTrue(delay < 1000L + 10L);
+        delay = strategy.nextDelay(wc);
+        Assert.assertTrue(delay >= 2000L - 10L);
+        Assert.assertTrue(delay < 2000L + 10L);
+        delay = strategy.nextDelay(wc);
+        Assert.assertTrue(delay >= 4000L - 10L);
+        Assert.assertTrue(delay < 4000L + 10L);
+        delay = strategy.nextDelay(wc);
+        Assert.assertTrue(delay >= 8000L - 10L);
+        Assert.assertTrue(delay < 8000L + 10L);
+        delay = strategy.nextDelay(wc);
+        Assert.assertTrue(delay >= 16000L - 10L);
+        Assert.assertTrue(delay < 16000L + 10L);
+        delay = strategy.nextDelay(wc);
+        Assert.assertTrue(delay >= 1000L - 10L);
+        Assert.assertTrue(delay < 1000L + 10L);
     }
 }

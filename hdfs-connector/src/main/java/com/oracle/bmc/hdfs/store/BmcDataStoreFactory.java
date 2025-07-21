@@ -300,19 +300,35 @@ public class BmcDataStoreFactory {
                 CircuitBreakerUtils.getNoCircuitBreakerConfiguration());
         }
 
-        ClientConfiguration clientConfig = clientConfigurationBuilder.build();
+        // Retry configuration
+        final long retryTimeoutInSeconds =
+                propertyAccessor.asLong().get(BmcProperties.RETRY_TIMEOUT_IN_SECONDS);
+        final long resetThresholdInSeconds =
+                propertyAccessor.asLong().get(BmcProperties.RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS);
+
+        LOG.info("Setting retry timeout to {} seconds", retryTimeoutInSeconds);
+        clientConfigurationBuilder.retryConfiguration(
+                RetryConfiguration.builder()
+                        .terminationStrategy(MaxTimeTerminationStrategy.ofSeconds(retryTimeoutInSeconds))
+                        .delayStrategy(
+                                resetThresholdInSeconds <= 0
+                                        ? new ExponentialBackoffDelayStrategy(Duration.ofSeconds(retryTimeoutInSeconds).toMillis())
+                                        : new ResettingExponentialBackoffStrategy(resetThresholdInSeconds))
+                        .build()
+        );
+
+        final ClientConfiguration clientConfig = clientConfigurationBuilder.build();
         BasicAuthenticationDetailsProvider authDetailsProvider = this.createAuthenticator(propertyAccessor);
 
-        MonitoringClient.Builder monitoringClientBuilder = MonitoringClient.builder().configuration(clientConfig);
+        MonitoringClient.Builder monitoringClientBuilder = MonitoringClient.builder()
+                .configuration(clientConfig);
 
-        // TODO: There seems to be an existing bug where, if proxy is enabled the delegation token configurator
-        // is never used in @createClient method down below. For now reusing the code as is.
+        // Delegation Token Configurator (optional)
         String delegationTokenFilePath =
                 System.getenv(OCI_DELEGATION_TOKEN_FILE) != null
                         ? System.getenv(OCI_DELEGATION_TOKEN_FILE)
-                        : propertyAccessor
-                        .asString()
-                        .get(BmcProperties.OCI_DELEGATION_TOKEN_FILEPATH);
+                        : propertyAccessor.asString().get(BmcProperties.OCI_DELEGATION_TOKEN_FILEPATH);
+
         LOG.info("Monitoring delegation token file path: {}", delegationTokenFilePath);
         if (delegationTokenFilePath != null) {
             StringBuilder tokenBuilder = new StringBuilder();
@@ -320,7 +336,7 @@ public class BmcDataStoreFactory {
                          Files.lines(
                                  Paths.get(FileUtils.expandUserHome(delegationTokenFilePath)),
                                  StandardCharsets.UTF_8)) {
-                stream.forEach(s -> tokenBuilder.append(s));
+                stream.forEach(tokenBuilder::append);
             } catch (IOException e) {
                 LOG.warn("Exception in reading or parsing delegation token file", e);
             }
@@ -328,8 +344,8 @@ public class BmcDataStoreFactory {
             monitoringClientBuilder.additionalClientConfigurator(new DelegationTokenConfigurator(delegationToken));
         }
 
+        // Handle proxy
         String httpProxyUri = propertyAccessor.asString().get(BmcProperties.HTTP_PROXY_URI);
-
         if (StringUtils.isEmpty(httpProxyUri)) {
             return monitoringClientBuilder.build(authDetailsProvider);
         } else {
@@ -527,6 +543,10 @@ public class BmcDataStoreFactory {
                 propertyAccessor
                         .asLong()
                         .get(BmcProperties.RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS);
+        final long retryJitterInMillis =
+                propertyAccessor
+                        .asLong()
+                        .get(BmcProperties.RETRY_JITTER_IN_MILLIS);
 
         LOG.info("Setting retry timeout to {} seconds", retryTimeoutInSeconds);
         clientConfigurationBuilder.retryConfiguration(
@@ -539,7 +559,7 @@ public class BmcDataStoreFactory {
                                                 Duration.ofSeconds(retryTimeoutInSeconds)
                                                         .toMillis())
                                         : new ResettingExponentialBackoffStrategy(
-                                                resetThresholdInSeconds))
+                                                resetThresholdInSeconds, retryJitterInMillis))
                         .build());
 
         final ClientConfiguration clientConfig = clientConfigurationBuilder.build();

@@ -7,12 +7,18 @@ package com.oracle.bmc.hdfs.store;
 
 import java.time.Duration;
 import java.util.function.Supplier;
+
+import com.oracle.bmc.hdfs.BmcProperties;
+import com.oracle.bmc.hdfs.monitoring.OCIMetricKeys;
+import com.oracle.bmc.hdfs.monitoring.RetryMetricsCollector;
 import com.oracle.bmc.model.Range;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.requests.GetObjectRequest;
 import com.oracle.bmc.objectstorage.responses.GetObjectResponse;
+import com.oracle.bmc.retrier.RetryConfiguration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -31,6 +37,7 @@ import java.util.Random;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
+import static org.powermock.api.mockito.PowerMockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
 public class BmcDirectFSInputStreamTest {
@@ -42,6 +49,16 @@ public class BmcDirectFSInputStreamTest {
 
     private static final FileSystem.Statistics statistics = new FileSystem.Statistics("ocitest");
     private static final Random randomGenerator = new Random();
+
+    @Mock private BmcPropertyAccessor mockPropAccessor;
+    @Mock private BmcPropertyAccessor.Accessor<Long> mockLongAccessor;
+
+    @Before
+    public void setUp() {
+        when(mockLongAccessor.get(eq(BmcProperties.RETRY_TIMEOUT_IN_SECONDS))).thenReturn(30L);
+        when(mockLongAccessor.get(eq(BmcProperties.RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS))).thenReturn(0L);
+        when(mockPropAccessor.asLong()).thenReturn(mockLongAccessor);
+    }
 
     private static final Supplier<GetObjectRequest.Builder> getObjectRequestBuilderSupplier =
             new Supplier<GetObjectRequest.Builder>() {
@@ -59,9 +76,10 @@ public class BmcDirectFSInputStreamTest {
         when(objectStorage.getObject(any(GetObjectRequest.class)))
                 .thenReturn(GetObjectResponse.builder().inputStream(inputStream).build());
 
+        RetryMetricsCollector retryMetricsCollector = new RetryMetricsCollector(OCIMetricKeys.READ , mockPropAccessor);
         BmcDirectFSInputStream directFSInputStream =
                 new BmcDirectFSInputStream(
-                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 0, statistics);
+                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 0, statistics, retryMetricsCollector);
 
         for (int i = 0; i < READ_COUNT; i++) {
             directFSInputStream.read();
@@ -124,10 +142,10 @@ public class BmcDirectFSInputStreamTest {
                                         .build();
                             }
                         });
-
+        RetryMetricsCollector retryMetricsCollector = new RetryMetricsCollector(OCIMetricKeys.READ , mockPropAccessor);
         final BmcDirectFSInputStream directFSInputStream =
                 new BmcDirectFSInputStream(
-                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 1, statistics);
+                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 1, statistics, retryMetricsCollector);
 
         for (int i = 0; i < READ_COUNT; i++) {
             directFSInputStream.read();
@@ -173,9 +191,10 @@ public class BmcDirectFSInputStreamTest {
                 .thenReturn(GetObjectResponse.builder().inputStream(mockStreamFailed).build())
                 .thenReturn(GetObjectResponse.builder().inputStream(mockStreamSucceeded).build());
 
+        RetryMetricsCollector retryMetricsCollector = new RetryMetricsCollector(OCIMetricKeys.READ , mockPropAccessor);
         BmcDirectFSInputStream underTest =
                 new BmcDirectFSInputStream(
-                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 1, statistics);
+                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 1, statistics, retryMetricsCollector);
         underTest.retryPolicy().withDelay(Duration.ofMillis(200));
 
         // First read, initial ObjectStorage stream read would fail, retry triggered.
@@ -213,8 +232,9 @@ public class BmcDirectFSInputStreamTest {
                 .thenReturn(GetObjectResponse.builder().inputStream(mockStreamFailed).build())
                 .thenReturn(GetObjectResponse.builder().inputStream(mockStreamSucceeded).build());
 
+        RetryMetricsCollector retryMetricsCollector = new RetryMetricsCollector(OCIMetricKeys.READ , mockPropAccessor);
         BmcDirectFSInputStream underTest = new BmcDirectFSInputStream(
-                objectStorage, fileStatus, requestBuilder, 1, statistics);
+                objectStorage, fileStatus, requestBuilder, 1, statistics, retryMetricsCollector);
         underTest.retryPolicy().withDelay(Duration.ofMillis(200));
 
         // Byte array to read into
@@ -247,9 +267,10 @@ public class BmcDirectFSInputStreamTest {
                 .thenReturn(GetObjectResponse.builder().inputStream(mockStreamSucceeded).build())
                 .thenReturn(GetObjectResponse.builder().inputStream(mockDummyStream).build());
 
+        RetryMetricsCollector retryMetricsCollector = new RetryMetricsCollector(OCIMetricKeys.READ , mockPropAccessor);
         BmcDirectFSInputStream underTest =
                 new BmcDirectFSInputStream(
-                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 1, statistics);
+                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 1, statistics, retryMetricsCollector);
 
         // First read, initial ObjectStorage stream read would fail, retry triggered.
         assertEquals(32, underTest.read());
@@ -282,8 +303,9 @@ public class BmcDirectFSInputStreamTest {
                 .thenReturn(GetObjectResponse.builder().inputStream(mockStreamSucceeded).build())
                 .thenReturn(GetObjectResponse.builder().inputStream(mockDummyStream).build());
 
+        RetryMetricsCollector retryMetricsCollector = new RetryMetricsCollector(OCIMetricKeys.READ , mockPropAccessor);
         BmcDirectFSInputStream underTest = new BmcDirectFSInputStream(
-                objectStorage, fileStatus, requestBuilder, 1, statistics);
+                objectStorage, fileStatus, requestBuilder, 1, statistics, retryMetricsCollector);
         underTest.retryPolicy().withDelay(Duration.ofMillis(200));
 
         // Byte array to read into
@@ -316,9 +338,10 @@ public class BmcDirectFSInputStreamTest {
         when(objectStorage.getObject(any(GetObjectRequest.class)))
                 .thenReturn(GetObjectResponse.builder().inputStream(mockStreamFailed).build());
 
+        RetryMetricsCollector retryMetricsCollector = new RetryMetricsCollector(OCIMetricKeys.READ , mockPropAccessor);
         BmcDirectFSInputStream underTest =
                 new BmcDirectFSInputStream(
-                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 3, statistics);
+                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 3, statistics, retryMetricsCollector);
         underTest.retryPolicy().withDelay(Duration.ofMillis(200));
 
         // First read, initial ObjectStorage stream read would fail, retry triggered.
@@ -354,9 +377,10 @@ public class BmcDirectFSInputStreamTest {
                 .thenReturn(GetObjectResponse.builder().inputStream(mockStreamFailed).build())
                 .thenReturn(GetObjectResponse.builder().inputStream(mockStreamSucceeded).build());
 
+        RetryMetricsCollector retryMetricsCollector = new RetryMetricsCollector(OCIMetricKeys.READ , mockPropAccessor);
         BmcDirectFSInputStream underTest =
                 new BmcDirectFSInputStream(
-                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 3, statistics);
+                        objectStorage, fileStatus, getObjectRequestBuilderSupplier, 3, statistics, retryMetricsCollector);
         underTest.retryPolicy().withDelay(Duration.ofMillis(200));
 
         // First read, initial ObjectStorage stream read would fail, retry triggered.

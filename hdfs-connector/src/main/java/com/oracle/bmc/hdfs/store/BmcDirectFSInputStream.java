@@ -7,6 +7,7 @@ package com.oracle.bmc.hdfs.store;
 
 import java.io.IOException;
 
+import com.oracle.bmc.hdfs.monitoring.RetryMetricsCollector;
 import com.oracle.bmc.hdfs.util.FSStreamUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
@@ -29,8 +30,9 @@ public class BmcDirectFSInputStream extends BmcFSInputStream {
             final FileStatus status,
             final Supplier<GetObjectRequest.Builder> requestBuilder,
             final int readMaxRetries,
-            final Statistics statistics) {
-        super(objectStorage, status, requestBuilder, readMaxRetries, statistics);
+            final Statistics statistics,
+            final RetryMetricsCollector retryMetricsCollector) {
+        super(objectStorage, status, requestBuilder, readMaxRetries, statistics, retryMetricsCollector);
     }
 
     @Override

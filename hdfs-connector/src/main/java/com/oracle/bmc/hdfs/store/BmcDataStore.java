@@ -19,8 +19,10 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,6 +33,7 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -49,11 +52,7 @@ import com.oracle.bmc.hdfs.BmcConstants;
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.caching.CachingObjectStorage;
 import com.oracle.bmc.hdfs.caching.ConsistencyPolicy;
-import com.oracle.bmc.hdfs.monitoring.OCIMetricKeys;
-import com.oracle.bmc.hdfs.monitoring.OCIMonitorConsumerPlugin;
-import com.oracle.bmc.hdfs.monitoring.OCIMonitorPluginHandler;
-import com.oracle.bmc.hdfs.monitoring.StatsMonitorInputStream;
-import com.oracle.bmc.hdfs.monitoring.StatsMonitorOutputStream;
+import com.oracle.bmc.hdfs.monitoring.*;
 import com.oracle.bmc.hdfs.util.BiFunction;
 import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
 import com.oracle.bmc.hdfs.util.DirectExecutorService;
@@ -127,6 +126,7 @@ public class BmcDataStore implements AutoCloseable{
     private final ExecutorService parallelRenameExecutor;
     private final ExecutorService parallelMd5executor;
     private final ExecutorService parallelDownloadExecutor;
+    private final ExecutorService parallelDeleteExecutor;
     private final RequestBuilder requestBuilder;
     private final long blockSizeInBytes;
     private final boolean useInMemoryReadBuffer;
@@ -146,6 +146,16 @@ public class BmcDataStore implements AutoCloseable{
 
     private OCIMonitorPluginHandler ociMonitorPluginHandler;
 
+    private final UploadConfiguration uploadConfiguration;
+
+    private final long retryTimeoutInSeconds;
+    private final long retryResetThresholdInSeconds;
+    private final long requestCoalescingWaitTimeInmillis;
+    private RequestCoalescer<String, HeadObjectResponse> headObjectRequestCoalescer;
+
+    private final boolean firstReadOptimizationForTTFBEnabled;
+    private final boolean parquetCacheEnabled;
+
     public BmcDataStore(
             final BmcPropertyAccessor propertyAccessor,
             final ObjectStorage objectStorage,
@@ -160,6 +170,7 @@ public class BmcDataStore implements AutoCloseable{
         this.namespace = namespace;
 
         this.parallelDownloadExecutor = this.createParallelDownloadExecutor(propertyAccessor);
+        this.parallelDeleteExecutor = this.createParallelDeleteExecutor(propertyAccessor);
         final UploadConfigurationBuilder uploadConfigurationBuilder =
                 createUploadConfiguration(propertyAccessor);
         this.parallelUploadExecutor =
@@ -171,7 +182,7 @@ public class BmcDataStore implements AutoCloseable{
         } else {
             this.additionalChecksumAlgorithm = null;
         }
-        final UploadConfiguration uploadConfiguration = uploadConfigurationBuilder.build();
+        this.uploadConfiguration = uploadConfigurationBuilder.build();
         LOG.info("Using upload configuration: {}", uploadConfiguration);
         this.uploadManager =
                 new UploadManager(
@@ -187,6 +198,18 @@ public class BmcDataStore implements AutoCloseable{
                 propertyAccessor
                         .asBoolean()
                         .get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED);
+        boolean useHeadObjectRequestCoalescing =
+                propertyAccessor
+                        .asBoolean()
+                        .get(BmcProperties.HEADOBJECT_REQUEST_COALESCING_ENABLED);
+        this.requestCoalescingWaitTimeInmillis =
+                propertyAccessor
+                        .asLong()
+                        .get(BmcProperties.REQUEST_COALESCING_WAIT_TIME_IN_MILLIS);
+        if (useHeadObjectRequestCoalescing) {
+            LOG.info("HeadObject request coalescing enabled");
+            this.headObjectRequestCoalescer = new RequestCoalescer<>(Duration.ofMillis(requestCoalescingWaitTimeInmillis));
+        }
         this.useReadAhead = propertyAccessor.asBoolean().get(BmcProperties.READ_AHEAD);
         this.readAheadSizeInBytes = getReadAheadSizeInBytes(propertyAccessor);
         this.readAheadBlockCount =
@@ -220,10 +243,36 @@ public class BmcDataStore implements AutoCloseable{
         this.recursiveDirListingFetchSize =
                 propertyAccessor.asInteger().get(BmcProperties.RECURSIVE_DIR_LISTING_FETCH_SIZE);
         this.ociMonitorPluginHandler = ociMonitorPluginHandler;
+        this.retryTimeoutInSeconds = propertyAccessor.asLong().get(BmcProperties.RETRY_TIMEOUT_IN_SECONDS);
+        this.retryResetThresholdInSeconds = propertyAccessor.asLong().get(BmcProperties.RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS);
+        this.firstReadOptimizationForTTFBEnabled = propertyAccessor.asBoolean().get(BmcProperties.OCI_FIRST_READ_OPTIMIZATION_FOR_TTFB);
+
+        this.parquetCacheEnabled = propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PARQUET_CACHING_ENABLED);
     }
 
     public static int getReadAheadSizeInBytes(BmcPropertyAccessor propertyAccessor) {
         return propertyAccessor.asInteger().get(BmcProperties.READ_AHEAD_BLOCK_SIZE);
+    }
+
+    private ExecutorService createParallelDeleteExecutor(final BmcPropertyAccessor propertyAccessor) {
+        Integer numThreadsForDelete =
+                propertyAccessor.asInteger().get(BmcProperties.NUM_DELETE_THREADS);
+        final long threadsTimeoutInSeconds = getThreadsTimeoutInSeconds(propertyAccessor);
+
+        if (numThreadsForDelete <= 1) {
+            numThreadsForDelete = 1;
+        }
+
+        final ExecutorService executorService =
+                    newSwingFixedThreadPool(
+                            numThreadsForDelete,
+                            new ThreadFactoryBuilder()
+                                    .setDaemon(true)
+                                    .setNameFormat("bmcs-hdfs-delete-%d")
+                                    .build(),
+                            threadsTimeoutInSeconds);
+
+        return executorService;
     }
 
     private ExecutorService createParallelDownloadExecutor(final BmcPropertyAccessor propertyAccessor) {
@@ -715,37 +764,83 @@ public class BmcDataStore implements AutoCloseable{
 
     private ListObjectsResponse getListObjectsResponse(ListObjectsRequest request) {
         Stopwatch sw = Stopwatch.createStarted();
-        ListObjectsResponse response;
+        ListObjectsResponse response = null;
+        RetryMetricsCollector collector = new RetryMetricsCollector(OCIMetricKeys.LIST, retryTimeoutInSeconds, retryResetThresholdInSeconds);
+
         try {
+            request = ListObjectsRequest.builder()
+                    .copy(request)
+                    .retryConfiguration(collector.getRetryConfiguration())
+                    .build();
+
             response = this.objectStorage.listObjects(request);
+
             sw.stop();
-            recordOCIStats(OCIMetricKeys.LIST, sw.elapsed(TimeUnit.MILLISECONDS), null);
+            recordOCIStats(OCIMetricKeys.LIST, sw.elapsed(TimeUnit.MILLISECONDS), null, collector.getAttemptCount(),
+                    collector.getRetry503Count(), collector.getRetry429Count());
         } catch (Exception e) {
             sw.stop();
-            recordOCIStats(OCIMetricKeys.LIST, sw.elapsed(TimeUnit.MILLISECONDS), e);
+            recordOCIStats(OCIMetricKeys.LIST, sw.elapsed(TimeUnit.MILLISECONDS), e, collector.getAttemptCount(),
+                    collector.getRetry503Count(), collector.getRetry429Count());
             throw e;
+        } finally {
+            collector.close();
         }
+
         return response;
     }
 
     private HeadObjectResponse getHeadObjectResponse(HeadObjectRequest request) {
         Stopwatch sw = Stopwatch.createStarted();
         HeadObjectResponse response;
+        final AtomicBoolean isCoalesced = new AtomicBoolean(false);
+        RetryMetricsCollector collector = new RetryMetricsCollector(OCIMetricKeys.HEAD, retryTimeoutInSeconds, retryResetThresholdInSeconds);
+
         try {
-            response = this.objectStorage.headObject(request);
+            final HeadObjectRequest requestWithCollector = HeadObjectRequest.builder()
+                    .copy(request)
+                    .retryConfiguration(collector.getRetryConfiguration())
+                    .build();
+
+            LOG.debug("headObject called {} ", requestWithCollector.getObjectName());
+
+            if (headObjectRequestCoalescer != null) {
+                StringBuilder keyBuilder = new StringBuilder(request.getObjectName());
+                String ifMatch = request.getIfMatch();
+                if (ifMatch != null) {
+                    keyBuilder.append(ifMatch);
+                }
+                String ifNoneMatch = request.getIfNoneMatch();
+                if (ifNoneMatch != null) {
+                    keyBuilder.append(ifNoneMatch);
+                }
+                String key = keyBuilder.toString();
+                LOG.debug("Starting head object coalescing process for key {}", key);
+                response = this.headObjectRequestCoalescer.performRequest(key,
+                        () -> this.objectStorage.headObject(requestWithCollector),
+                        isCoalesced);
+            } else {
+                response = this.objectStorage.headObject(requestWithCollector);
+            }
             sw.stop();
-            recordOCIStats(OCIMetricKeys.HEAD, sw.elapsed(TimeUnit.MILLISECONDS), null);
+            recordOCIStats(OCIMetricKeys.HEAD, sw.elapsed(TimeUnit.MILLISECONDS), null, collector.getAttemptCount(),
+                    collector.getRetry503Count(), collector.getRetry429Count(), isCoalesced.get());
         } catch (Exception e) {
             sw.stop();
             if (e instanceof BmcException) {
-                if (((BmcException) e).getStatusCode() == 404) {
-                    // Don't record 404 status code as an error. But it should go as a success metric.
-                    recordOCIStats(OCIMetricKeys.HEAD, sw.elapsed(TimeUnit.MILLISECONDS), null);
+                int status = ((BmcException) e).getStatusCode();
+                if (status == 404 || status == 412) {
+                    // Don't record 404/412 status code as an error. But it should go as a success metric.
+                    recordOCIStats(OCIMetricKeys.HEAD, sw.elapsed(TimeUnit.MILLISECONDS), null, collector.getAttemptCount(),
+                            collector.getRetry503Count(), collector.getRetry429Count(), isCoalesced.get());
                 } else {
-                    recordOCIStats(OCIMetricKeys.HEAD, sw.elapsed(TimeUnit.MILLISECONDS), e);
+                    recordOCIStats(OCIMetricKeys.HEAD, sw.elapsed(TimeUnit.MILLISECONDS), e, collector.getAttemptCount(),
+                            collector.getRetry503Count(), collector.getRetry429Count(), isCoalesced.get());
                 }
             }
             throw e;
+        } finally {
+            collector.close();
         }
         return response;
     }
@@ -753,15 +848,27 @@ public class BmcDataStore implements AutoCloseable{
     private DeleteObjectResponse getDeleteObjectResponse(DeleteObjectRequest request) {
         Stopwatch sw = Stopwatch.createStarted();
         DeleteObjectResponse response;
+        RetryMetricsCollector collector = new RetryMetricsCollector(OCIMetricKeys.DELETE, retryTimeoutInSeconds, retryResetThresholdInSeconds);
+
         try {
+            request = DeleteObjectRequest.builder()
+                    .copy(request)
+                    .retryConfiguration(collector.getRetryConfiguration())
+                    .build();
+
             response = this.objectStorage.deleteObject(request);
             sw.stop();
-            recordOCIStats(OCIMetricKeys.DELETE, sw.elapsed(TimeUnit.MILLISECONDS), null);
+            recordOCIStats(OCIMetricKeys.DELETE, sw.elapsed(TimeUnit.MILLISECONDS), null, collector.getAttemptCount(),
+                    collector.getRetry503Count(), collector.getRetry429Count());
         } catch (Exception e) {
             sw.stop();
-            recordOCIStats(OCIMetricKeys.DELETE, sw.elapsed(TimeUnit.MILLISECONDS), e);
+            recordOCIStats(OCIMetricKeys.DELETE, sw.elapsed(TimeUnit.MILLISECONDS), e, collector.getAttemptCount(),
+                    collector.getRetry503Count(), collector.getRetry429Count());
             throw e;
+        } finally {
+            collector.close();
         }
+
         return response;
     }
 
@@ -781,7 +888,7 @@ public class BmcDataStore implements AutoCloseable{
                             new RenameOperation(
                                     this.objectStorage,
                                     this.requestBuilder.renameObject(
-                                            objectToRename, newObjectName), ociMonitorPluginHandler));
+                                            objectToRename, newObjectName), ociMonitorPluginHandler, propertyAccessor));
             renameResponses.add(new RenameResponse(objectToRename, newObjectName, futureResponse));
         }
         awaitRenameOperationTermination(renameResponses);
@@ -796,6 +903,7 @@ public class BmcDataStore implements AutoCloseable{
         closeExecutorService(this.parallelUploadExecutor, TIMEOUT_EXECUTOR_SHUTDOWN, TIME_UNIT_EXECUTOR_SHUTDOWN);
         closeExecutorService(this.parallelRenameExecutor, TIMEOUT_EXECUTOR_SHUTDOWN, TIME_UNIT_EXECUTOR_SHUTDOWN);
         closeExecutorService(this.parallelMd5executor, TIMEOUT_EXECUTOR_SHUTDOWN, TIME_UNIT_EXECUTOR_SHUTDOWN);
+        closeExecutorService(this.parallelDeleteExecutor, TIMEOUT_EXECUTOR_SHUTDOWN, TIME_UNIT_EXECUTOR_SHUTDOWN);
 
         // Shutdown OCI Monitor Plugin Executor
         if (ociMonitorPluginHandler != null) {
@@ -812,7 +920,6 @@ public class BmcDataStore implements AutoCloseable{
                 }
             }
         }
-
     }
 
     private void closeExecutorService(ExecutorService executorService,long timeOut,TimeUnit timeUnitOfTimeout) {
@@ -903,7 +1010,7 @@ public class BmcDataStore implements AutoCloseable{
                     new RenameOperation(
                             this.objectStorage,
                             this.requestBuilder.renameObject(
-                                    sourceObject, destinationObject), ociMonitorPluginHandler)
+                                    sourceObject, destinationObject), ociMonitorPluginHandler, propertyAccessor)
                             .call();
             this.statistics.incrementWriteOps(1); // 1 put
             LOG.debug("Newly renamed object has eTag {}", newEntityTag);
@@ -945,6 +1052,42 @@ public class BmcDataStore implements AutoCloseable{
     }
 
     /**
+     * Delete an object using the common delete threadpool and return a future.
+     * @param path Path of the object to delete asynchronously.
+     * @throws IOException
+     */
+    public Future<?> deleteFileAsync(final Path path) throws IOException {
+        Runnable deleteRunnable = () -> {
+            try {
+                delete(path);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        };
+        return this.parallelDeleteExecutor.submit(deleteRunnable);
+    }
+
+    /**
+     * Delete an directory using the common delete threadpool and return a future.
+     * @param dir Path of the directory to delete asynchronously.
+     * @throws IOException
+     */
+    public Future<?> deleteDirAsync(final Path dir) throws IOException {
+        Runnable deleteRunnable = () -> {
+            try {
+                deleteDirectory(dir);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        };
+        return this.parallelDeleteExecutor.submit(deleteRunnable);
+    }
+
+    public int getRecursiveDirListingFetchSize() {
+        return recursiveDirListingFetchSize;
+    }
+
+    /**
      * Deletes the directory at the given path.
      *
      * @param path Path of object to delete.
@@ -980,6 +1123,7 @@ public class BmcDataStore implements AutoCloseable{
      * @throws IOException if the operation cannot be completed.
      */
     public void createDirectory(final Path path) throws IOException {
+        Stopwatch sw = Stopwatch.createStarted();
         // nothing to do for the "root" directory
         if (this.isRootDirectory(path)) {
             LOG.debug("Root directory specified, nothing to create");
@@ -992,11 +1136,20 @@ public class BmcDataStore implements AutoCloseable{
 
         final ByteArrayInputStream bais = new ByteArrayInputStream(new byte[0]);
         final PutObjectResponse response;
+        RetryMetricsCollector collector = new RetryMetricsCollector(OCIMetricKeys.WRITE, retryTimeoutInSeconds, retryResetThresholdInSeconds);
+
         try {
-            response = this.objectStorage.putObject(this.requestBuilder.putObject(key, bais, 0L));
+            response = this.objectStorage.putObject(this.requestBuilder.putObjectWithIfNoneMatch(key, bais, 0L, collector));
+            sw.stop();
+            recordOCIStats(OCIMetricKeys.WRITE, sw.elapsed(TimeUnit.MILLISECONDS), null, collector.getAttemptCount(),
+                    collector.getRetry503Count(), collector.getRetry429Count());
+
             this.statistics.incrementWriteOps(1);
             LOG.debug("Created directory at {} with etag {}", path, response.getETag());
         } catch (final BmcException e) {
+            sw.stop();
+            recordOCIStats(OCIMetricKeys.WRITE, sw.elapsed(TimeUnit.MILLISECONDS), e, collector.getAttemptCount(),
+                    collector.getRetry503Count(), collector.getRetry429Count());
             // if running jobs in parallel, it's possible multiple threads try to
             // create the directory at the same time, which might lead to 409 conflicts.
             // also allowing 412 (even though we don't set im/inm headers) as we
@@ -1009,6 +1162,8 @@ public class BmcDataStore implements AutoCloseable{
                     "Exception while creating directory, ignoring {} {}",
                     e.getStatusCode(),
                     e.getMessage());
+        } finally {
+            collector.close();
         }
     }
 
@@ -1104,10 +1259,13 @@ public class BmcDataStore implements AutoCloseable{
         return entries;
     }
 
-    private void recordOCIStats(String key, long overallTime, Exception e) {
-        ociMonitorPluginHandler.recordStats(key, overallTime, e);
+    private void recordOCIStats(String key, long overallTime, Exception e, int retryAttempts, int retry503Count, int retry429Count) {
+        ociMonitorPluginHandler.recordStats(key, overallTime, e, retryAttempts, retry503Count, retry429Count);
     }
 
+    private void recordOCIStats(String key, long overallTime, Exception e, int retryAttempts, int retry503Count, int retry429Count, boolean isCoalesced) {
+        ociMonitorPluginHandler.recordStats(key, overallTime, e, retryAttempts, retry503Count, retry429Count, isCoalesced);
+    }
     /**
      * A method to list all files/dirs in a given directory in a flat manner. This is done without using any
      * delimiters in the OSS list objects API.
@@ -1288,6 +1446,10 @@ public class BmcDataStore implements AutoCloseable{
      * @throws IOException if the operation could not be completed.
      */
     public FileStatus getFileStatus(final Path path) throws IOException {
+        return getFileStatus(path, false);
+    }
+
+    public FileStatus getFileStatus(final Path path, boolean checkOnlyExists) throws IOException {
         // base case, root directory always exists, nothing to create
         if (this.isRootDirectory(path)) {
             LOG.debug("Requested file status for root directory");
@@ -1304,7 +1466,13 @@ public class BmcDataStore implements AutoCloseable{
         LOG.debug("Getting file status for path {}, object {}", path, key);
 
         try {
-            FileStatusInfo fileStatusInfo = objectMetadataCache.getUnchecked(key);
+            FileStatusInfo fileStatusInfo = checkOnlyExists
+                    ? this.getFileStatusUncached(key, true)
+                    : objectMetadataCache.getUnchecked(key);
+
+            if (fileStatusInfo == null && checkOnlyExists) {
+                return null;
+            }
             return new FileStatus(fileStatusInfo.contentLength,
                     fileStatusInfo.isDirectory,
                     BLOCK_REPLICATION,
@@ -1337,8 +1505,12 @@ public class BmcDataStore implements AutoCloseable{
      * @throws ObjectMetadataNotFoundException if neither the object metadata nor directory are found.
      */
     private FileStatusInfo getFileStatusUncached(final String key) throws IOException {
+        return getFileStatusUncached(key, false);
+    }
+
+    private FileStatusInfo getFileStatusUncached(final String key, final boolean checkOnlyExists) throws IOException {
         if (key.endsWith("/")) {
-            FileStatusInfo directoryStatus = getDirectoryStatus(key);
+            FileStatusInfo directoryStatus = getDirectoryStatus(key, checkOnlyExists);
             if (directoryStatus == null) {
                 throw new ObjectMetadataNotFoundException(key);
             }
@@ -1346,17 +1518,23 @@ public class BmcDataStore implements AutoCloseable{
         }
 
         try {
-            HeadObjectResponse response = getHeadObjectResponse(this.requestBuilder.headObject(key));
+            HeadObjectResponse response = checkOnlyExists
+                    ? getHeadObjectResponse(this.requestBuilder.headObjectWithNonMatchingIfMatch(key))
+                    : getHeadObjectResponse(this.requestBuilder.headObject(key));
             return new FileStatusInfo(response.getContentLength(),
                     false,
                     response.getLastModified().getTime());
         } catch (final BmcException e) {
             // also try to query for a directory with this key name
             if (e.getStatusCode() == 404) {
-                FileStatusInfo directoryStatus = getDirectoryStatus(key + "/");
+                FileStatusInfo directoryStatus = getDirectoryStatus(key + "/", checkOnlyExists);
                 if (directoryStatus != null) {
                     return directoryStatus;
                 }
+            } else if (e.getStatusCode() == 412) {
+                // Optimization: file exists but ETag didn't match : treat as valid case
+                // Passing contentLength = -1L for file
+                return new FileStatusInfo(-1L, false, System.currentTimeMillis());
             } else {
                 LOG.debug("Failed to get object metadata for {}", key, e);
                 throw new IOException("Unable to fetch file status for: " + key, e);
@@ -1366,6 +1544,9 @@ public class BmcDataStore implements AutoCloseable{
         }
 
         // nothing left, return null
+        if (checkOnlyExists) {
+            return null;
+        }
         throw new ObjectMetadataNotFoundException(key);
     }
 
@@ -1375,19 +1556,22 @@ public class BmcDataStore implements AutoCloseable{
      * @param path
      * @return true if path exists and is a directory, false otherwise.
      */
-    public boolean isDirectory(Path path) throws IOException {
+    public boolean isDirectory(Path path, boolean checkOnlyExists) throws IOException {
+
         if (this.isRootDirectory(path)) {
             return true;
         }
 
         final String dirKey = this.pathToDirectory(path);
-        FileStatusInfo fileStatus = this.objectMetadataCache.getIfPresent(dirKey);
-        if (fileStatus != null) {
-            return fileStatus.isDirectory;
+
+        FileStatusInfo fileStatus = null;
+        if (!checkOnlyExists) {
+            fileStatus = this.objectMetadataCache.getIfPresent(dirKey);
+            if (fileStatus != null) {
+                return fileStatus.isDirectory;
+            }
         }
-
-        fileStatus = this.getDirectoryStatus(dirKey);
-
+        fileStatus = this.getDirectoryStatus(dirKey, true);
         return fileStatus != null && fileStatus.isDirectory;
     }
 
@@ -1407,11 +1591,17 @@ public class BmcDataStore implements AutoCloseable{
      * @throws IOException if the operation could not be completed.
      */
     private FileStatusInfo getDirectoryStatus(String key) throws IOException {
+        return getDirectoryStatus(key, false);
+    }
+
+    private FileStatusInfo getDirectoryStatus(String key, boolean checkOnlyExists) throws IOException {
         LOG.debug("Getting directory status for object key {}", key);
         if (propertyAccessor.asBoolean().get(BmcProperties.REQUIRE_DIRECTORY_MARKER)) {
             // The property is true, so we assume if the directory exists it has a placeholder object.
             try {
-                HeadObjectResponse response = getHeadObjectResponse(this.requestBuilder.headObject(key));
+                HeadObjectResponse response = checkOnlyExists
+                        ? getHeadObjectResponse(this.requestBuilder.headObjectWithNonMatchingIfMatch(key))
+                        : getHeadObjectResponse(this.requestBuilder.headObject(key));
                 return new FileStatusInfo(0L,
                         true,
                         response.getLastModified().getTime());
@@ -1419,6 +1609,10 @@ public class BmcDataStore implements AutoCloseable{
                 // If the marker object is missing, assume the directory does not exist
                 if (e.getStatusCode() == 404) {
                     return null;
+                } else if (e.getStatusCode() == 412){
+                    // Optimization: directory exists but ETag didn't match : treat as valid case
+                    // Passing contentLength = 0L for directory
+                    return new FileStatusInfo(0L, true, System.currentTimeMillis());
                 } else {
                     LOG.debug("Failed to get object metadata for {}", key, e);
                     throw new IOException("Unable to fetch file status for: " + key, e);
@@ -1485,8 +1679,9 @@ public class BmcDataStore implements AutoCloseable{
             final int bufferSizeInBytes,
             final Statistics statistics) {
         LOG.debug("Opening read stream for {}", path);
+        RetryMetricsCollector collector = new RetryMetricsCollector(OCIMetricKeys.READ, retryTimeoutInSeconds, retryResetThresholdInSeconds);
         final Supplier<GetObjectRequest.Builder> requestBuilder =
-                new GetObjectRequestFunction(path);
+                new GetObjectRequestFunction(path, collector);
 
         if (!StringUtils.isBlank(this.customReadStreamClass)) {
             FSInputStream readStreamInstance =
@@ -1504,8 +1699,9 @@ public class BmcDataStore implements AutoCloseable{
                     status,
                     requestBuilder,
                     this.propertyAccessor.asInteger().get(BmcProperties.READ_MAX_RETRIES),
-                    this.statistics),
-                    ociMonitorPluginHandler);
+                    this.statistics,
+                    collector),
+                    ociMonitorPluginHandler, collector);
         }
         if (this.useReadAhead) {
             if (this.readAheadBlockCount > 1) {
@@ -1518,7 +1714,8 @@ public class BmcDataStore implements AutoCloseable{
                                 this.statistics,
                                 this.parallelDownloadExecutor,
                                 this.readAheadSizeInBytes,
-                                this.readAheadBlockCount), ociMonitorPluginHandler);
+                                this.readAheadBlockCount,
+                                collector, firstReadOptimizationForTTFBEnabled), ociMonitorPluginHandler, collector);
             }
             return new StatsMonitorInputStream(
                     new BmcReadAheadFSInputStream(
@@ -1528,7 +1725,7 @@ public class BmcDataStore implements AutoCloseable{
                             this.propertyAccessor.asInteger().get(BmcProperties.READ_MAX_RETRIES),
                             this.statistics,
                             this.readAheadSizeInBytes,
-                            this.parquetCacheString), ociMonitorPluginHandler);
+                            this.parquetCacheString, collector, firstReadOptimizationForTTFBEnabled, parquetCacheEnabled), ociMonitorPluginHandler, collector);
         } else {
             return new StatsMonitorInputStream(
                     new BmcDirectFSInputStream(
@@ -1536,7 +1733,7 @@ public class BmcDataStore implements AutoCloseable{
                             status,
                             requestBuilder,
                             this.propertyAccessor.asInteger().get(BmcProperties.READ_MAX_RETRIES),
-                            this.statistics),ociMonitorPluginHandler);
+                            this.statistics, collector),ociMonitorPluginHandler, collector);
         }
     }
 
@@ -1545,7 +1742,7 @@ public class BmcDataStore implements AutoCloseable{
      *
      * @param path              The path for the new file.
      * @param bufferSizeInBytes The buffer size in bytes can be configured by setting the config key {@link BmcConstants#MULTIPART_PART_SIZE_IN_MB_KEY}.
-     *                          Default value is 128MiB which comes from OCI Java SDK {@link com.oracle.bmc.objectstorage.transfer.UploadConfiguration}
+     *                          Default value is 128MiB which comes from OCI Java SDK {@link UploadConfiguration}
      * @param progress          {@link Progressable} instance to report progress updates to.
      * @return A new output stream to write to.
      */
@@ -1563,9 +1760,10 @@ public class BmcDataStore implements AutoCloseable{
             bufferSizeInBytes = lengthPerUploadPart * MiB;
             LOG.debug("Buffer size in bytes: {}", bufferSizeInBytes);
         }
+        RetryMetricsCollector collector = new RetryMetricsCollector(OCIMetricKeys.WRITE_PART, retryTimeoutInSeconds, retryResetThresholdInSeconds);
 
         final BiFunction<Long, InputStream, UploadRequest> requestBuilderFn =
-                new UploadDetailsFunction(this.pathToObject(path), allowOverwrite, progress);
+                new UploadDetailsFunction(this.pathToObject(path), allowOverwrite, progress, collector);
 
         if (!StringUtils.isBlank(this.customWriteStreamClass)) {
             LOG.debug("Using custom write stream class: {}", customWriteStreamClass);
@@ -1605,18 +1803,21 @@ public class BmcDataStore implements AutoCloseable{
                     multipartUploadRequest,
                     bufferSizeInBytes,
                     this.parallelMd5executor,
-                    this.propertyAccessor.asInteger().get(BmcProperties.WRITE_MAX_RETRIES)),
-                    ociMonitorPluginHandler);
+                    this.propertyAccessor.asInteger().get(BmcProperties.WRITE_MAX_RETRIES),
+                    new RetryMetricsCollector(OCIMetricKeys.WRITE, retryTimeoutInSeconds, retryResetThresholdInSeconds),
+                    true, uploadConfiguration),
+                    ociMonitorPluginHandler,
+                    collector);
         } else if (this.useInMemoryWriteBuffer) {
             return new StatsMonitorOutputStream(new BmcInMemoryOutputStream(
                     this.uploadManager, bufferSizeInBytes, requestBuilderFn,
-                    this.propertyAccessor.asInteger().get(BmcProperties.WRITE_MAX_RETRIES)),
-                    ociMonitorPluginHandler);
+                    this.propertyAccessor.asInteger().get(BmcProperties.WRITE_MAX_RETRIES), false, uploadConfiguration),
+                    ociMonitorPluginHandler, collector);
         } else {
             return new StatsMonitorOutputStream(new BmcFileBackedOutputStream(
                     this.propertyAccessor, this.uploadManager, requestBuilderFn,
-                    this.propertyAccessor.asInteger().get(BmcProperties.WRITE_MAX_RETRIES)),
-                    ociMonitorPluginHandler);
+                    this.propertyAccessor.asInteger().get(BmcProperties.WRITE_MAX_RETRIES), false, uploadConfiguration),
+                    ociMonitorPluginHandler, collector);
         }
     }
 
@@ -1633,15 +1834,16 @@ public class BmcDataStore implements AutoCloseable{
         String objectName = pathToObject(path);
         LOG.debug("Get Checksum for objectName : {}", objectName);
 
-        HeadObjectRequest headObjectRequest = HeadObjectRequest.builder()
-                .bucketName(this.bucket)
-                .namespaceName(this.namespace)
-                .objectName(objectName)
-                .build();
-
         HeadObjectResponse headObjectResponse;
-        try {
-            headObjectResponse = objectStorage.headObject(headObjectRequest);
+        try (RetryMetricsCollector collector = new RetryMetricsCollector(OCIMetricKeys.HEAD, retryTimeoutInSeconds, retryResetThresholdInSeconds)) {
+            HeadObjectRequest headObjectRequest = HeadObjectRequest.builder()
+                    .bucketName(this.bucket)
+                    .namespaceName(this.namespace)
+                    .objectName(objectName)
+                    .retryConfiguration(collector.getRetryConfiguration())
+                    .build();
+            headObjectResponse = getHeadObjectResponse(headObjectRequest);
+            this.statistics.incrementReadOps(1);
         } catch (Exception e) {
             throw new IOException("Failed to get object metadata", e);
         }
@@ -1662,6 +1864,8 @@ public class BmcDataStore implements AutoCloseable{
         public CRC32CFileChecksum(String checksum) {
             this.checksum = checksum;
         }
+
+        public String getBase64Encode() { return checksum; }
 
         @Override
         public String getAlgorithmName() {
@@ -1732,11 +1936,12 @@ public class BmcDataStore implements AutoCloseable{
     @RequiredArgsConstructor
     private final class GetObjectRequestFunction implements Supplier<GetObjectRequest.Builder> {
         private final Path path;
+        private final RetryMetricsCollector retryMetricsCollector;
 
         @Override
         public GetObjectRequest.Builder get() {
             return BmcDataStore.this.requestBuilder.getObjectBuilder(
-                    BmcDataStore.this.pathToObject(path));
+                    BmcDataStore.this.pathToObject(path), retryMetricsCollector);
         }
     }
 
@@ -1745,6 +1950,8 @@ public class BmcDataStore implements AutoCloseable{
             implements Function<GetObjectResponse, PutObjectRequest> {
         private final String objectName;
 
+        private final RetryMetricsCollector collector;
+
         @Override
         public PutObjectRequest apply(GetObjectResponse getResponse) {
             // always pass MD5 when we start with a GetObjectResponse
@@ -1752,7 +1959,8 @@ public class BmcDataStore implements AutoCloseable{
                     objectName,
                     getResponse.getInputStream(),
                     getResponse.getContentLength(),
-                    getResponse.getContentMd5());
+                    getResponse.getContentMd5(),
+                    collector);
         }
     }
 
@@ -1762,6 +1970,7 @@ public class BmcDataStore implements AutoCloseable{
         private final String objectName;
         private final boolean allowOverwrite;
         private final Progressable progressable;
+        private final RetryMetricsCollector collector;
 
         @Override
         public UploadRequest apply(Long contentLengthInBytes, InputStream inputStream) {
@@ -1771,7 +1980,8 @@ public class BmcDataStore implements AutoCloseable{
                     contentLengthInBytes,
                     progressable,
                     allowOverwrite,
-                    BmcDataStore.this.parallelUploadExecutor);
+                    BmcDataStore.this.parallelUploadExecutor,
+                    collector);
         }
     }
 

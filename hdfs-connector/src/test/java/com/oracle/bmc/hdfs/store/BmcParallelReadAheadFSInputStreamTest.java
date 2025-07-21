@@ -2,9 +2,12 @@ package com.oracle.bmc.hdfs.store;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.oracle.bmc.hdfs.BmcProperties;
+import com.oracle.bmc.hdfs.monitoring.OCIMetricKeys;
+import com.oracle.bmc.hdfs.monitoring.RetryMetricsCollector;
 import com.oracle.bmc.objectstorage.ObjectStorage;
 import com.oracle.bmc.objectstorage.requests.GetObjectRequest;
 import com.oracle.bmc.objectstorage.responses.GetObjectResponse;
+import com.oracle.bmc.retrier.RetryConfiguration;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -42,12 +45,16 @@ public class BmcParallelReadAheadFSInputStreamTest {
     @Mock private BmcPropertyAccessor mockPropAccessor;
     @Mock private BmcPropertyAccessor.Accessor<Integer> mockIntegerAccessor;
     private FileSystem.Statistics statistics;
+    @Mock private BmcPropertyAccessor.Accessor<Long> mockLongAccessor;
 
     @Before
     public void setup() {
         when(mockIntegerAccessor.get(eq(BmcProperties.NUM_READ_AHEAD_THREADS))).thenReturn(10);
         when(mockPropAccessor.asInteger()).thenReturn(mockIntegerAccessor);
         statistics = new FileSystem.Statistics("oci");
+        when(mockLongAccessor.get(eq(BmcProperties.RETRY_TIMEOUT_IN_SECONDS))).thenReturn(30L);
+        when(mockLongAccessor.get(eq(BmcProperties.RETRY_TIMEOUT_RESET_THRESHOLD_IN_SECONDS))).thenReturn(0L);
+        when(mockPropAccessor.asLong()).thenReturn(mockLongAccessor);
     }
 
     @Test
@@ -342,9 +349,9 @@ public class BmcParallelReadAheadFSInputStreamTest {
 
         Supplier<GetObjectRequest.Builder> requestBuilder = () ->
                 GetObjectRequest.builder().objectName("testObject");
-
+        RetryMetricsCollector retryMetricsCollector = new RetryMetricsCollector(OCIMetricKeys.READ , mockPropAccessor);
         return new BmcParallelReadAheadFSInputStream(
-                objectStorage, status, requestBuilder, 0, statistics, createExecutorService(), blockSize, blockCount);
+                objectStorage, status, requestBuilder, 0, statistics, createExecutorService(), blockSize, blockCount, retryMetricsCollector, false);
     }
 
     private ByteArrayInputStream createInputStream(byte[] contents, int startByte, int endByte) {
