@@ -17,6 +17,9 @@
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>oci-hdfs-addons-smartparquet</artifactId>
+    <name>Oracle Cloud Infrastructure HDFS Connector - Smart Parquet Addon</name>
+    <description>Provides Parquet format support with footer caching for the OCI HDFS Connector.</description>
+
 
     <properties>
         <apache.parquet.version>1.11.1</apache.parquet.version>
