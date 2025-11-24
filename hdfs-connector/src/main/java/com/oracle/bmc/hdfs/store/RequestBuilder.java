@@ -14,6 +14,7 @@ import javax.annotation.Nullable;
 
 import com.oracle.bmc.hdfs.monitoring.OCIMetricKeys;
 import com.oracle.bmc.hdfs.monitoring.RetryMetricsCollector;
+import com.oracle.bmc.objectstorage.model.BatchDeleteObjectsDetails;
 import com.oracle.bmc.objectstorage.model.RenameObjectDetails;
 import com.oracle.bmc.objectstorage.requests.*;
 import com.oracle.bmc.objectstorage.transfer.ProgressReporter;
@@ -213,6 +214,16 @@ class RequestBuilder {
                 .bucketName(this.bucket)
                 .objectName(objectName)
                 .opcClientRequestId(createClientRequestId("deleteObject"))
+                .build();
+    }
+
+    BatchDeleteObjectsRequest batchDeleteObjects(
+            final BatchDeleteObjectsDetails details) {
+        return BatchDeleteObjectsRequest.builder()
+                .namespaceName(this.namespace)
+                .bucketName(this.bucket)
+                .batchDeleteObjectsDetails(details)
+                .opcClientRequestId(createClientRequestId("batchDeleteObjects"))
                 .build();
     }
 

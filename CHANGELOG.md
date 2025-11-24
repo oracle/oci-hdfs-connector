@@ -2,6 +2,15 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
+# 3.4.1.0.0.4- 2025-11-24
+### Added
+- Added support for Batch Delete API to optimize recursive delete operations.
+- This feature can be enabled by setting `fs.oci.client.batch.delete.enabled` to true.
+- When enabled, the connector groups up to 1,000 objects per batch delete request, significantly improving performance for large directory deletions.
+- The batch size can be configured using `fs.oci.client.batch.delete.size` (default: 1000).
+- Added dual-level metrics emission for batch delete operations. Metrics are emitted at both the batch level (using BATCH_DELETE metric key) and per-object level (using DELETE metric key).
+- Batch-level metrics capture overall batch request count, latency, errors, and retry attempts. Per-object metrics track individual object metrics within each batch.
+
 ## 3.4.1.0.0.3- 2025-07-17
 ### Added
 - Introduced `RetryMetricsCollector` to emit retry-related metrics for Object Storage operations. This enables better visibility into transient failures and recovered errors, improving monitoring and alerting accuracy.

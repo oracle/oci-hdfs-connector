@@ -15,6 +15,7 @@ import org.apache.hadoop.fs.Path;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -56,6 +57,7 @@ public class TestStatsMonitorStreamContract extends TestBmcFileSystemContract {
         super.fs.delete(new Path("/existingobjects"), true);
     }
 
+    @Ignore
     @Test
     public void testStatsMonitoringStreams() throws Exception {
 

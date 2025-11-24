@@ -17,12 +17,14 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -58,9 +60,13 @@ import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
 import com.oracle.bmc.hdfs.util.DirectExecutorService;
 import com.oracle.bmc.model.BmcException;
 import com.oracle.bmc.objectstorage.ObjectStorage;
+import com.oracle.bmc.objectstorage.model.BatchDeleteObjectsResult;
 import com.oracle.bmc.objectstorage.model.ChecksumAlgorithm;
 import com.oracle.bmc.objectstorage.model.CreateMultipartUploadDetails;
+import com.oracle.bmc.objectstorage.model.DeletedObjectResult;
+import com.oracle.bmc.objectstorage.model.FailedObjectResult;
 import com.oracle.bmc.objectstorage.model.ObjectSummary;
+import com.oracle.bmc.retrier.DefaultRetryCondition;
 import com.oracle.bmc.objectstorage.requests.CreateMultipartUploadRequest;
 import com.oracle.bmc.objectstorage.requests.DeleteObjectRequest;
 import com.oracle.bmc.objectstorage.requests.GetObjectRequest;
@@ -124,7 +130,6 @@ public class BmcDataStore implements AutoCloseable{
     private final UploadManager uploadManager;
     private final ExecutorService parallelUploadExecutor;
     private final ExecutorService parallelRenameExecutor;
-    private final ExecutorService parallelMd5executor;
     private final ExecutorService parallelDownloadExecutor;
     private final ExecutorService parallelDeleteExecutor;
     private final RequestBuilder requestBuilder;
@@ -156,6 +161,9 @@ public class BmcDataStore implements AutoCloseable{
     private final boolean firstReadOptimizationForTTFBEnabled;
     private final boolean parquetCacheEnabled;
 
+    private final boolean batchDeleteEnabled;
+    private final int batchDeleteSize;
+
     public BmcDataStore(
             final BmcPropertyAccessor propertyAccessor,
             final ObjectStorage objectStorage,
@@ -174,7 +182,7 @@ public class BmcDataStore implements AutoCloseable{
         final UploadConfigurationBuilder uploadConfigurationBuilder =
                 createUploadConfiguration(propertyAccessor);
         this.parallelUploadExecutor =
-                this.createExecutor(propertyAccessor, uploadConfigurationBuilder);
+                this.createParallelUploadExecutor(propertyAccessor, uploadConfigurationBuilder);
         String checksumCombineMode = propertyAccessor.getHadoopProperty(BmcConstants.DFS_CHECKSUM_COMBINE_MODE_KEY,BmcConstants.DEFAULT_CHECKSUM_COMBINE_MODE);
         if (BmcConstants.CHECKSUM_COMBINE_MODE_CRC.equalsIgnoreCase(checksumCombineMode)) {
             this.additionalChecksumAlgorithm = ChecksumAlgorithm.Crc32C.getValue();
@@ -239,7 +247,6 @@ public class BmcDataStore implements AutoCloseable{
         this.objectMetadataCache = configureHeadObjectCache(propertyAccessor);
         this.parquetCacheString = configureParquetCacheString(propertyAccessor);
         this.parallelRenameExecutor = this.createParallelRenameExecutor(propertyAccessor);
-        this.parallelMd5executor = this.createParallelMd5Executor(propertyAccessor);
         this.recursiveDirListingFetchSize =
                 propertyAccessor.asInteger().get(BmcProperties.RECURSIVE_DIR_LISTING_FETCH_SIZE);
         this.ociMonitorPluginHandler = ociMonitorPluginHandler;
@@ -248,6 +255,9 @@ public class BmcDataStore implements AutoCloseable{
         this.firstReadOptimizationForTTFBEnabled = propertyAccessor.asBoolean().get(BmcProperties.OCI_FIRST_READ_OPTIMIZATION_FOR_TTFB);
 
         this.parquetCacheEnabled = propertyAccessor.asBoolean().get(BmcProperties.OBJECT_PARQUET_CACHING_ENABLED);
+
+        this.batchDeleteEnabled = propertyAccessor.asBoolean().get(BmcProperties.BATCH_DELETE_ENABLED);
+        this.batchDeleteSize = propertyAccessor.asInteger().get(BmcProperties.BATCH_DELETE_SIZE);
     }
 
     public static int getReadAheadSizeInBytes(BmcPropertyAccessor propertyAccessor) {
@@ -355,38 +365,6 @@ public class BmcDataStore implements AutoCloseable{
                                     .setDaemon(true)
                                     .setNameFormat("bmcs-hdfs-rename-%d")
                                     .build(),threadsTimeoutInSeconds);
-        }
-        return executorService;
-    }
-
-    private ExecutorService createParallelMd5Executor(BmcPropertyAccessor propertyAccessor) {
-        final Integer numThreadsForParallelMd5Operation =
-                propertyAccessor.asInteger().get(BmcProperties.MD5_NUM_THREADS);
-        final long threadsTimeoutInSeconds = getThreadsTimeoutInSeconds(propertyAccessor);
-        final int taskTimeout =
-                propertyAccessor
-                        .asInteger()
-                        .get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS);
-        final BlockingRejectionHandler rejectedExecutionHandler =
-                new BlockingRejectionHandler(taskTimeout);
-        final ExecutorService executorService;
-        if (numThreadsForParallelMd5Operation == null
-                || numThreadsForParallelMd5Operation <= 1) {
-            executorService = new DirectExecutorService();
-        } else {
-            ThreadPoolExecutor tp = new ThreadPoolExecutor(
-                    numThreadsForParallelMd5Operation,
-                    numThreadsForParallelMd5Operation,
-                    threadsTimeoutInSeconds,
-                    THREAD_KEEP_ALIVE_TIME_UNIT,
-                    new SynchronousQueue<>(),
-                    new ThreadFactoryBuilder()
-                            .setDaemon(true)
-                            .setNameFormat("bmcs-hdfs-multipart-md5-%d")
-                            .build(),
-                    rejectedExecutionHandler);
-            tp.allowCoreThreadTimeOut(true);
-            executorService = tp;
         }
         return executorService;
     }
@@ -623,7 +601,7 @@ public class BmcDataStore implements AutoCloseable{
         return uploadConfigurationBuilder;
     }
 
-    private ExecutorService createExecutor(
+    private ExecutorService createParallelUploadExecutor(
             final BmcPropertyAccessor propertyAccessor,
             final UploadConfigurationBuilder uploadConfigurationBuilder) {
         final Integer numThreadsForParallelUpload =
@@ -902,7 +880,6 @@ public class BmcDataStore implements AutoCloseable{
         closeExecutorService(this.parallelDownloadExecutor, TIMEOUT_EXECUTOR_SHUTDOWN, TIME_UNIT_EXECUTOR_SHUTDOWN);
         closeExecutorService(this.parallelUploadExecutor, TIMEOUT_EXECUTOR_SHUTDOWN, TIME_UNIT_EXECUTOR_SHUTDOWN);
         closeExecutorService(this.parallelRenameExecutor, TIMEOUT_EXECUTOR_SHUTDOWN, TIME_UNIT_EXECUTOR_SHUTDOWN);
-        closeExecutorService(this.parallelMd5executor, TIMEOUT_EXECUTOR_SHUTDOWN, TIME_UNIT_EXECUTOR_SHUTDOWN);
         closeExecutorService(this.parallelDeleteExecutor, TIMEOUT_EXECUTOR_SHUTDOWN, TIME_UNIT_EXECUTOR_SHUTDOWN);
 
         // Shutdown OCI Monitor Plugin Executor
@@ -1087,6 +1064,14 @@ public class BmcDataStore implements AutoCloseable{
         return recursiveDirListingFetchSize;
     }
 
+    public boolean isBatchDeleteEnabled() {
+        return batchDeleteEnabled;
+    }
+
+    public int getBatchDeleteSize() {
+        return batchDeleteSize;
+    }
+
     /**
      * Deletes the directory at the given path.
      *
@@ -1114,6 +1099,292 @@ public class BmcDataStore implements AutoCloseable{
                 throw new IOException("Error attempting to delete directory", e);
             }
         }
+    }
+
+    /**
+     * Deletes multiple files using the Batch Delete API with incremental retry strategy.
+     * Uses DeletionEntry pattern for per-object retry tracking. Only retries failed objects.
+     */
+    public void deleteFilesInBatches(final List<Path> filePaths) throws IOException {
+        if (filePaths == null || filePaths.isEmpty()) {
+            LOG.debug("No files to delete");
+            return;
+        }
+
+        LOG.info("Deleting {} files using batch delete API with incremental retry", filePaths.size());
+
+        // Convert to DeletionEntry for per-object retry tracking
+        final LinkedList<DeletionEntry> pendingDeletes = new LinkedList<>();
+        for (Path path : filePaths) {
+            pendingDeletes.add(new DeletionEntry(path));
+        }
+
+        final int maxRetries = propertyAccessor.asInteger().get(BmcProperties.WRITE_MAX_RETRIES);
+        final DefaultRetryCondition retryCondition = new DefaultRetryCondition();
+
+        // Process queue until empty
+        while (!pendingDeletes.isEmpty()) {
+            // Take next batch from queue (up to batchDeleteSize)
+            final List<DeletionEntry> currentBatch = takeNextBatch(pendingDeletes, batchDeleteSize);
+
+            final List<Path> batchPaths = currentBatch.stream()
+                    .map(DeletionEntry::getPath)
+                    .collect(Collectors.toList());
+
+            LOG.debug("Processing batch of {} objects", batchPaths.size());
+
+            final BatchDeleteObjectsResult result;
+            try {
+                result = executeBatchDeleteAndGetResult(batchPaths);
+            } catch (IOException e) {
+                // Handle 501
+                if (e.getCause() instanceof BmcException) {
+                    BmcException bmcEx = (BmcException) e.getCause();
+                    if (bmcEx.getStatusCode() == 501) {
+                        LOG.info("Batch delete not supported (501), switching to individual deletes");
+
+                        // Collect all remaining paths (current batch + pending queue)
+                        List<Path> allRemainingPaths = new ArrayList<>(batchPaths);
+                        for (DeletionEntry pending : pendingDeletes) {
+                            allRemainingPaths.add(pending.getPath());
+                        }
+
+                        // Fall back
+                        LOG.debug("Deleting {} files using individual async deletes", allRemainingPaths.size());
+                        final int batchSize = getRecursiveDirListingFetchSize();
+                        final List<Future<?>> deleteFutures = new ArrayList<>();
+
+                        for (Path path : allRemainingPaths) {
+                            deleteFutures.add(deleteFileAsync(path));
+
+                            // Wait for batch to complete
+                            if (deleteFutures.size() >= batchSize) {
+                                dealWithDeleteFutures(deleteFutures, path);
+                            }
+                        }
+
+                        // Wait for remaining futures
+                        if (!deleteFutures.isEmpty()) {
+                            dealWithDeleteFutures(deleteFutures, allRemainingPaths.get(allRemainingPaths.size() - 1));
+                        }
+
+                        LOG.debug("Successfully deleted all {} files using individual deletes", allRemainingPaths.size());
+                        return;
+                    }
+                }
+                // Not a 501
+                throw e;
+            }
+            
+            final Map<String, DeletionEntry> entryIndex = buildEntryIndex(currentBatch);
+
+            // Emit per-object DELETE metrics for successful deletions only
+            // Failed objects will emit metrics only when we decide NOT to retry them
+            emitSuccessMetrics(result, entryIndex);
+
+            // Process failures - add retryable ones back to queue
+            if (result.getFailed() != null) {
+                for (FailedObjectResult failure : result.getFailed()) {
+                    final DeletionEntry entry = entryIndex.get(failure.getObjectName());
+
+                    if (entry == null) {
+                        LOG.warn("Could not find DeletionEntry for failed object: {}", failure.getObjectName());
+                        continue;
+                    }
+
+                    // Skip 404s - object already deleted
+                    if (failure.getStatusCode() != null && failure.getStatusCode() == 404) {
+                        LOG.debug("Skipping 404 for object: {} (already deleted)", entry.getPath());
+                        continue;
+                    }
+
+                    // Check if retryable
+                    if (!isRetryableFailure(failure, retryCondition)) {
+                        // Non-retryable failure - emit failure metric
+                        emitFailureMetric(entry, failure);
+
+                        LOG.error("Non-retryable failure for object {}: status={}, message={}",
+                                entry.getPath(),
+                                failure.getStatusCode(),
+                                failure.getErrorMessage());
+                        throw new IOException(
+                                "Non-retryable failure for object " + entry.getPath() +
+                                ": " + failure.getErrorMessage());
+                    }
+                    entry.recordRetry(failure.getStatusCode() != null ? failure.getStatusCode() : 0);
+
+                    // Check if within retry limit
+                    if (entry.shouldRetry(maxRetries)) {
+                        LOG.debug("Adding object {} back to queue for retry (attempt {})",
+                                entry.getPath(), entry.getRetryAttempt());
+                        pendingDeletes.addLast(entry); // Add to end of queue for retry
+                    } else {
+                        // Max retries exceeded - emit failure metric
+                        emitFailureMetric(entry, failure);
+
+                        LOG.error("Object {} exceeded max retries ({}) - status={}, message={}",
+                                entry.getPath(),
+                                maxRetries,
+                                failure.getStatusCode(),
+                                failure.getErrorMessage());
+                        throw new IOException(
+                                "Object " + entry.getPath() +
+                                " failed after " + maxRetries +
+                                " retries: " + failure.getErrorMessage());
+                    }
+                }
+            }
+        }
+
+        LOG.info("Successfully deleted all {} files", filePaths.size());
+    }
+
+    public void dealWithDeleteFutures(List<Future<?>> deleteFutures, Path path) throws IOException {
+        for (Future<?> future : deleteFutures) {
+            try {
+                future.get();
+            } catch (Exception e) {
+                throw new IOException("Exception while deleting : " + path, e);
+            }
+        }
+        deleteFutures.clear();
+    }
+
+    /**
+     * Takes the next batch of DeletionEntry objects from the queue.
+     */
+    private List<DeletionEntry> takeNextBatch(final LinkedList<DeletionEntry> queue, final int batchSize) {
+        final List<DeletionEntry> batch = new ArrayList<>();
+        for (int i = 0; i < batchSize && !queue.isEmpty(); i++) {
+            batch.add(queue.removeFirst());
+        }
+        return batch;
+    }
+
+    /**
+     * Determines if a failed object should be retried using DefaultRetryCondition.
+     */
+    private boolean isRetryableFailure(final FailedObjectResult failure, final DefaultRetryCondition retryCondition) {
+        final Integer statusCode = failure.getStatusCode();
+
+        if (statusCode != null && statusCode == 404) {
+            return false;
+        }
+
+        if (statusCode != null) {
+            final BmcException syntheticException =
+                    new BmcException(
+                            statusCode,
+                            null,
+                            failure.getErrorMessage(),
+                            null);
+            return retryCondition.shouldBeRetried(syntheticException);
+        }
+        return true;
+    }
+
+    /**
+     * Executes a single batch delete operation and returns the result.
+     *
+     * @param batch List of paths to delete
+     * @return BatchDeleteObjectsResult containing deleted and failed objects
+     * @throws IOException if the operation cannot be completed
+     */
+    private BatchDeleteObjectsResult executeBatchDeleteAndGetResult(final List<Path> batch) throws IOException {
+        final BatchDeleteOperation operation =
+                new BatchDeleteOperation(
+                        objectStorage,
+                        requestBuilder,
+                        batch,
+                        statistics,
+                        ociMonitorPluginHandler,
+                        propertyAccessor);
+
+        try {
+            return operation.call();
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException(
+                    "Failed to execute batch delete for " + batch.size() + " files", e);
+        }
+    }
+
+    private Map<String, DeletionEntry> buildEntryIndex(final List<DeletionEntry> entries) {
+        final Map<String, DeletionEntry> index = new HashMap<>(entries.size());
+        for (final DeletionEntry entry : entries) {
+            index.put(entry.pathToObject(), entry);
+        }
+        return index;
+    }
+
+    /**
+     * Emits per-object DELETE success metrics after processing a batch delete result.
+     * Only emits for successfully deleted objects. Failure metrics are emitted separately
+     * when we determine the object should not be retried.
+     */
+    private void emitSuccessMetrics(
+            final BatchDeleteObjectsResult result,
+            final Map<String, DeletionEntry> entryIndex) {
+
+        if (!ociMonitorPluginHandler.isEnabled()) {
+            return;
+        }
+
+        if (entryIndex.isEmpty()) {
+            return;
+        }
+
+        // Emit success metrics for deleted objects
+        if (result.getDeleted() != null) {
+            for (DeletedObjectResult deleted : result.getDeleted()) {
+                if (deleted.getObjectName() == null) {
+                    continue;
+                }
+
+                final DeletionEntry entry = entryIndex.get(deleted.getObjectName());
+                if (entry != null) {
+                    ociMonitorPluginHandler.recordStats(
+                            OCIMetricKeys.DELETE,
+                            0.0,
+                            null,
+                            entry.getRetryAttempt(),
+                            entry.getRetry503Count(),
+                            entry.getRetry429Count()
+                    );
+                } else {
+                    LOG.warn("Could not find DeletionEntry for deleted object in metrics emission: {}",
+                            deleted.getObjectName());
+                }
+            }
+        }
+    }
+
+    /**
+     * Emits a DELETE error metric for a single failed object.
+     * Called when we determine the object should not be retried (either non-retryable error
+     * or max retries exceeded).
+     */
+    private void emitFailureMetric(final DeletionEntry entry, final FailedObjectResult failure) {
+        if (!ociMonitorPluginHandler.isEnabled()) {
+            return;
+        }
+
+        final BmcException exception = new BmcException(
+                failure.getStatusCode() != null ? failure.getStatusCode() : 0,
+                null,
+                failure.getErrorMessage(),
+                null
+        );
+
+        ociMonitorPluginHandler.recordStats(
+                OCIMetricKeys.DELETE,
+                0.0,
+                exception,
+                entry.getRetryAttempt(),
+                entry.getRetry503Count(),
+                entry.getRetry429Count()
+        );
     }
 
     /**
@@ -1802,7 +2073,7 @@ public class BmcDataStore implements AutoCloseable{
                     this.propertyAccessor,
                     multipartUploadRequest,
                     bufferSizeInBytes,
-                    this.parallelMd5executor,
+                    parallelUploadExecutor,
                     this.propertyAccessor.asInteger().get(BmcProperties.WRITE_MAX_RETRIES),
                     new RetryMetricsCollector(OCIMetricKeys.WRITE, retryTimeoutInSeconds, retryResetThresholdInSeconds),
                     true, uploadConfiguration),

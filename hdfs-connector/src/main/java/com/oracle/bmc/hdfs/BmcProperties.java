@@ -213,12 +213,7 @@ public enum BmcProperties {
      * per request). See {@link BmcConstants#MULTIPART_NUM_UPLOAD_THREADS_KEY} for config key name.
      */
     MULTIPART_NUM_UPLOAD_THREADS(MULTIPART_NUM_UPLOAD_THREADS_KEY, null),
-    /**
-     * (int, optional) The number of threads to use for parallel MD5 calculation. Note, any value less than or equal to
-     * 0 is interpreted as using a default value.A value of 1 means do not use parallel calculation (each hash will be
-     * calculated serially in a single thread). See {@link BmcConstants#MD5_NUM_THREADS_KEY} for config key name.
-     */
-    MD5_NUM_THREADS(MD5_NUM_THREADS_KEY, null),
+
     /**
      * (int, optional) The minimum size, in mebibytes, an object must be before its eligible for multi-part uploads.
      * Note, any value less than or equal to 0 is interpreted as using the default Java SDK value. See
@@ -725,6 +720,21 @@ public enum BmcProperties {
      * smaller than 0 is interpreted as using the default value. Default is 4.
      */
     NUM_DELETE_THREADS(NUM_DELETE_THREADS_KEY, 4),
+
+    /**
+     * (boolean, optional) Flag to enable Batch Delete API for recursive delete operations.
+     * When enabled, uses batch delete API to delete up to 1000 objects per request,
+     * providing significant performance improvements for large directory deletions.
+     * See {@link BmcConstants#BATCH_DELETE_ENABLED_KEY} for config key name. Default is false.
+     */
+    BATCH_DELETE_ENABLED(BATCH_DELETE_ENABLED_KEY, false),
+
+    /**
+     * (int, optional) Maximum number of objects to include in a single batch delete request.
+     * See {@link BmcConstants#BATCH_DELETE_SIZE_KEY} for config key name. Default is 1000.
+     */
+    BATCH_DELETE_SIZE(BATCH_DELETE_SIZE_KEY, 1000),
+
     /**
      * (boolean, optional) This boolean determines if a first 1MB chunk is read to minimize the time to first
      * byte time, in case of read ahead input streams. Default will be set to false.

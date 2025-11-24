@@ -89,6 +89,19 @@ public class OCIMonitorPluginHandler {
         handoff(metric);
     }
 
+    public void recordStats(String key, double elapsedTime, Exception e,
+                            int deletedCount, int failedCount,
+                            int retryAttempts, int retry503Count, int retry429Count) {
+        if (!enabled) {
+            return;
+        }
+
+        OCIMetricWithBatchCounts metric = new OCIMetricWithBatchCounts(
+                key, elapsedTime, e, deletedCount, failedCount,
+                bucketName, retryAttempts, retry503Count, retry429Count);
+        handoff(metric);
+    }
+
     private void handoff(OCIMetric metric) {
         if (!awaitingShutdown) {
             fixedSizeES.submit(() -> {

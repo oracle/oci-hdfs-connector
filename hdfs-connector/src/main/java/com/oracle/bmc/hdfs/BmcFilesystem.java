@@ -633,8 +633,58 @@ class BmcFilesystemImpl extends FileSystem {
         List<Path> zeroByteDirsToDelete = new ArrayList<>();
         RemoteIterator<LocatedFileStatus> iter = listFilesAndZeroByteDirs(path);
 
-        // Use directoryListingSize to wait on delete tasks that have been submitted to a threadpool
-        int directoryListingSize = dataStore.getRecursiveDirListingFetchSize();
+        if (dataStore.isBatchDeleteEnabled()) {
+            LOG.debug("Using batch delete API for recursive delete");
+            deleteFilesUsingBatchAPI(iter, zeroByteDirsToDelete);
+        } else {
+            LOG.debug("Using standard delete for recursive delete");
+            deleteFiles(iter, zeroByteDirsToDelete, path);
+        }
+
+        // Delete directories bottom-up
+        deleteDirectoriesByLevel(zeroByteDirsToDelete, path);
+
+        return true;
+    }
+
+    /**
+     * Deletes files using the Batch Delete API.
+     */
+    private void deleteFilesUsingBatchAPI(
+            RemoteIterator<LocatedFileStatus> iter, List<Path> zeroByteDirsToDelete)
+            throws IOException {
+        List<Path> fileBatch = new ArrayList<>();
+        final int batchSize = dataStore.getBatchDeleteSize();
+
+        while (iter.hasNext()) {
+            LocatedFileStatus lfs = iter.next();
+            Path absPath = ensureAbsolutePath(lfs.getPath());
+
+            if (lfs.isDirectory()) {
+                zeroByteDirsToDelete.add(absPath);
+            } else {
+                fileBatch.add(absPath);
+
+                // Delete in chunks
+                if (fileBatch.size() >= batchSize) {
+                    dataStore.deleteFilesInBatches(new ArrayList<>(fileBatch));
+                    fileBatch.clear();
+                }
+            }
+        }
+
+        // Delete remaining files
+        if (!fileBatch.isEmpty()) {
+            dataStore.deleteFilesInBatches(fileBatch);
+        }
+    }
+
+    private void deleteFiles(
+            RemoteIterator<LocatedFileStatus> iter,
+            List<Path> zeroByteDirsToDelete,
+            Path basePath)
+            throws IOException {
+        final int directoryListingSize = dataStore.getRecursiveDirListingFetchSize();
         List<Future<?>> deleteFutures = new ArrayList<>();
 
         while (iter.hasNext()) {
@@ -654,20 +704,26 @@ class BmcFilesystemImpl extends FileSystem {
             // Wait until all the deletes of one batch finish.
             if (deleteFutures.size() == directoryListingSize) {
                 LOG.debug("Dealing with one batch of delete tasks having size: {}", deleteFutures.size());
-                dealWithDeleteFutures(deleteFutures, path);
+                dataStore.dealWithDeleteFutures(deleteFutures, basePath);
             }
         }
 
         // Final batch of deletes.
         if (deleteFutures.size() > 0) {
             LOG.debug("Dealing with last batch of delete tasks having size: {}", deleteFutures.size());
-            dealWithDeleteFutures(deleteFutures, path);
+            dataStore.dealWithDeleteFutures(deleteFutures, basePath);
         }
+    }
 
-        // Sort the directories in descending order of their level. Example if you have the following directories:
-        // "test/12345/asdasdasd/", "test/1234/123123/", "a/b/c/d/e/", "a/b/c/d/e/f/", "a/b/c/d/", "a/"
-        // the sorted result would look like this:
-        // {6=[a/b/c/d/e/f/], 5=[a/b/c/d/e/], 4=[a/b/c/d/], 3=[test/12345/asdasdasd/, test/1234/123123/], 1=[a/]}
+    /**
+     * Deletes directories bottom-up by level.
+     * Ensures child directories are deleted before parent directories.
+     */
+    private void deleteDirectoriesByLevel(List<Path> zeroByteDirsToDelete, Path basePath)
+            throws IOException {
+        if (zeroByteDirsToDelete.isEmpty()) {
+            return;
+        }
 
         Map<Integer, List<Path>> zeroByteDirsByLevel = new HashMap<>();
         // Accumulate the zero byte objects (directories) indexed by their level.
@@ -688,26 +744,14 @@ class BmcFilesystemImpl extends FileSystem {
         entries.sort((e1, e2) -> e2.getKey().compareTo(e1.getKey()));
 
         // Delete the directories which are of same level and wait for the async jobs to complete.
+        List<Future<?>> deleteFutures = new ArrayList<>();
         for (Map.Entry<Integer, List<Path>> entry : entries) {
             List<Path> dirsToDelete = entry.getValue();
             for (Path zd : dirsToDelete) {
                 deleteFutures.add(dataStore.deleteDirAsync(zd));
             }
-            dealWithDeleteFutures(deleteFutures, path);
+            dataStore.dealWithDeleteFutures(deleteFutures, basePath);
         }
-
-        return true;
-    }
-
-    private void dealWithDeleteFutures(List<Future<?>> deleteFutures, Path path) throws IOException {
-        for (Future<?> future : deleteFutures) {
-            try {
-                future.get();
-            } catch (Exception e) {
-                throw new IOException("Exception while deleting directory: " + path, e);
-            }
-        }
-        deleteFutures.clear();
     }
 
     @Override

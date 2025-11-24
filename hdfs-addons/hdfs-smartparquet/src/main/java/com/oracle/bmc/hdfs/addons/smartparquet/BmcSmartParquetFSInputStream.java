@@ -93,14 +93,6 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
     }
 
     @Override
-    public int read(long position, byte[] buffer, int offset, int length) throws IOException {
-        this.checkNotClosed();
-        LOG.debug("{}: Reading {} bytes at position {}", this, length, position);
-        seek(position);
-        return read(buffer, offset, length);
-    }
-
-    @Override
     public int read(byte[] buffer, int offset, int length) throws IOException {
         LOG.debug("{}: Reading {} bytes at current position {}", this, length, this.currentPosition);
         this.checkNotClosed();
@@ -127,28 +119,6 @@ public class BmcSmartParquetFSInputStream extends AbstractBmcCustomFSInputStream
             drainStream();
         }
         return n;
-    }
-
-    @Override
-    public void readFully(long position, byte[] buffer) throws IOException {
-        readFully(position, buffer, 0, buffer.length);
-    }
-
-    @Override
-    public void readFully(long position, byte[] buffer, int offset, int length) throws IOException {
-        this.checkNotClosed();
-        LOG.debug("{}: ReadFully {} bytes from {}", this, position, length);
-        seek(position);
-        int nBytes = Math.min((int) (status.getLen() - position), length);
-        int pos = offset;
-        while (nBytes > 0) {
-            int n = read(buffer, pos, nBytes);
-            if (n == 0) {
-                throw new IOException("Read fully unexpected EOF");
-            }
-            pos += n;
-            nBytes -= n;
-        }
     }
 
     @Override

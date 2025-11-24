@@ -6,6 +6,7 @@ public class OCIMetricKeys {
     public static final String WRITE = "WRITE";
     public static final String READ = "READ";
     public static final String DELETE = "DELETE";
+    public static final String BATCH_DELETE = "BATCH_DELETE";
     public static final String RENAME = "RENAME";
     public static final String WRITE_PART = "WRITE_PART";
     public static final String WRITE_CREATE_MULTIPART = "WRITE_CREATE_MULTIPART";

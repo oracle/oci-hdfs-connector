@@ -103,9 +103,6 @@ public final class BmcConstants {
 
     public static final String MULTIPART_NUM_UPLOAD_THREADS_KEY =
             "fs.oci.client.multipart.numthreads";
-
-    public static final String MD5_NUM_THREADS_KEY =
-            "fs.oci.client.md5.numthreads";
     public static final String MULTIPART_MIN_SIZE_OF_OBJECT_IN_MB_KEY =
             "fs.oci.client.multipart.minobjectsize.mb";
 
@@ -232,6 +229,10 @@ public final class BmcConstants {
     public static final String SESSION_TOKEN_FILE_PATH_KEY = "fs.oci.client.auth.sessiontoken";
 
     public static final String NUM_DELETE_THREADS_KEY = "fs.oci.client.num.delete.threads";
+
+    public static final String BATCH_DELETE_ENABLED_KEY = "fs.oci.client.batch.delete.enabled";
+
+    public static final String BATCH_DELETE_SIZE_KEY = "fs.oci.client.batch.delete.size";
 
     public static final String OCI_FIRST_READ_OPTIMIZATION_FOR_TTFB_KEY = "fs.oci.first.read.optimization.for.ttfb";
 
