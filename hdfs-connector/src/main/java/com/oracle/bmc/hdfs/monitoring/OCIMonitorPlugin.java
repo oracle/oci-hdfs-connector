@@ -84,18 +84,22 @@ public class OCIMonitorPlugin extends OCIMonitorConsumerPlugin {
             String bunchKey = null;
 
             // Group the errors together so that we also emit the errorCode as a dimension.
-            if (m.isError()) {
-                bunchKey = m.getKey() + "_" + bucketName + "_" + m.getErrorStatusCode();
-            } else {
-                bunchKey = m.getKey() + "_" + bucketName;
-            }
+            if (m != null) {
+                if (m.isError()) {
+                    bunchKey = m.getKey() + "_" + bucketName + "_" + m.getErrorStatusCode();
+                } else {
+                    bunchKey = m.getKey() + "_" + bucketName;
+                }
 
-            List<OCIMetric> metricsList = bunchedMetrics.get(bunchKey);
-            if (metricsList == null) {
-                metricsList = new ArrayList<>();
-                bunchedMetrics.put(bunchKey, metricsList);
+                List<OCIMetric> metricsList = bunchedMetrics.get(bunchKey);
+                if (metricsList == null) {
+                    metricsList = new ArrayList<>();
+                    bunchedMetrics.put(bunchKey, metricsList);
+                }
+                metricsList.add(m);
+            } else {
+                    LOG.info("OCIMetric is null");
             }
-            metricsList.add(m);
         }
 
         for (String key : bunchedMetrics.keySet()) {
@@ -113,6 +117,8 @@ public class OCIMonitorPlugin extends OCIMonitorConsumerPlugin {
             int retry503Count = 0;
             int retry429Count = 0;
             int maxRetryCount = 0;
+            int totalDeletedCount = 0;
+            int totalFailedCount = 0;
 
             List<OCIMetric> metricsList = bunchedMetrics.get(key);
             String actualKey = null;
@@ -141,6 +147,9 @@ public class OCIMonitorPlugin extends OCIMonitorConsumerPlugin {
                     } else if (om instanceof OCIMetricWithThroughput) {
                         averageThroughput += ((OCIMetricWithThroughput) om).getThroughput();
                         totalBytesTransferred += ((OCIMetricWithThroughput) om).getBytesTransferred();
+                    } else if (om instanceof OCIMetricWithBatchCounts) {
+                        totalDeletedCount += ((OCIMetricWithBatchCounts) om).getDeletedCount();
+                        totalFailedCount += ((OCIMetricWithBatchCounts) om).getFailedCount();
                     }
 
                     if (retryCount > 0) {
@@ -202,6 +211,14 @@ public class OCIMonitorPlugin extends OCIMonitorConsumerPlugin {
 
                 if (totalBytesTransferred > 0) {
                     mdList.add(getMetricDataDetails(actualKey + "_BYTES", totalBytesTransferred, lastRecordedTime));
+                }
+
+                if (totalDeletedCount > 0) {
+                    mdList.add(getMetricDataDetails(actualKey + "_OBJECTS_DELETED", totalDeletedCount, lastRecordedTime));
+                }
+
+                if (totalFailedCount > 0) {
+                    mdList.add(getMetricDataDetails(actualKey + "_OBJECTS_FAILED", totalFailedCount, lastRecordedTime));
                 }
 
                 // A metric group is defined by a unique combination of:

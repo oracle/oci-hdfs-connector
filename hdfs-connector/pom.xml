@@ -12,7 +12,7 @@
   <parent>
     <groupId>com.oracle.oci.sdk</groupId>
     <artifactId>oci-hdfs</artifactId>
-    <version>3.4.1.0.0.3</version>
+    <version>3.4.1.0.0.4</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -42,6 +42,18 @@
         <file>
           <exists>src/test/resources/contract/oci-credentials.xml</exists>
         </file>
+      </activation>
+      <properties>
+        <excludedGroups></excludedGroups>
+      </properties>
+    </profile>
+    <profile>
+      <id>integration-tests-on-ssv2-credentials-fetcher</id>
+      <activation>
+        <property>
+          <name>ssv2.credentials.fetcher</name>
+          <value>true</value>
+        </property>
       </activation>
       <properties>
         <excludedGroups></excludedGroups>

@@ -61,7 +61,6 @@ public class BmcMultipartOutputStreamTest {
     public void setUp() {
         // Setup mockIntegerAccessor
         when(mockIntegerAccessor.get(eq(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS))).thenReturn(1);
-        when(mockIntegerAccessor.get(eq(BmcProperties.MD5_NUM_THREADS))).thenReturn(1);
         when(mockBooleanAccessor.get(eq(BmcProperties.MULTIPART_IN_MEMORY_WRITE_BUFFER_ENABLED)))
                 .thenReturn(true);
         when(
@@ -461,20 +460,20 @@ public class BmcMultipartOutputStreamTest {
                 mockPropAccessor
                         .asInteger()
                         .get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS);
-        final int numThreadsForParallelMd5Operation =
-                mockPropAccessor.asInteger().get(BmcProperties.MD5_NUM_THREADS);
+        final int numThreadsForParallelPartUpload =
+                mockPropAccessor.asInteger().get(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS);
         final BlockingRejectionHandler rejectedExecutionHandler =
                 new BlockingRejectionHandler(taskTimeout);
         final ExecutorService executorService;
-        if (numThreadsForParallelMd5Operation <= 1) {
+        if (numThreadsForParallelPartUpload <= 1) {
             executorService = new DirectExecutorService();
         } else {
             executorService = new ThreadPoolExecutor(
-                    numThreadsForParallelMd5Operation,
-                    numThreadsForParallelMd5Operation,
+                    numThreadsForParallelPartUpload,
+                    numThreadsForParallelPartUpload,
                     0L,
                     TimeUnit.MILLISECONDS,
-                    new LinkedBlockingQueue<Runnable>(numThreadsForParallelMd5Operation),
+                    new LinkedBlockingQueue<Runnable>(numThreadsForParallelPartUpload),
                     new ThreadFactoryBuilder()
                             .setDaemon(true)
                             .setNameFormat("bmcs-hdfs-multipart-md5-%d")

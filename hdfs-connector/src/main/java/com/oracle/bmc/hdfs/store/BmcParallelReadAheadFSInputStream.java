@@ -97,16 +97,6 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
     }
 
     @Override
-    public int read(long position, byte[] buffer, int offset, int length) throws IOException {
-        this.checkNotClosed();
-        // see https://issues.apache.org/jira/browse/HDFS-10277
-        if (length == 0) {
-            return 0;
-        }
-        return readAtPosition(position, buffer, offset, length);
-    }
-
-    @Override
     public int read(byte[] buffer, int offset, int length) throws IOException {
         this.checkNotClosed();
         LOG.debug("{}: Attempting to read offset {} length {} from position {}", this, offset, length, this.currentPosition);        // see https://issues.apache.org/jira/browse/HDFS-10277
@@ -140,27 +130,6 @@ public class BmcParallelReadAheadFSInputStream extends BmcFSInputStream {
                 throw (IOException) cause;
             }
             throw new IOException("Failed to read", e);
-        }
-    }
-
-    @Override
-    public void readFully(long position, byte[] buffer, int offset, int length) throws IOException {
-        this.checkNotClosed();
-        LOG.debug("{}: ReadFully {} bytes from {}", this, length, position);
-        // see https://issues.apache.org/jira/browse/HDFS-10277
-        if (length == 0) {
-            return;
-        }
-        int nBytes = Math.min((int) (status.getLen() - position), length);
-        int offsetPosition = offset;
-        while (nBytes > 0) {
-            int bytesRead = readAtPosition(position, buffer, offsetPosition, nBytes);
-            if (bytesRead == 0) {
-                throw new IOException("Read fully unexpected EOF");
-            }
-            position += bytesRead;
-            offsetPosition += bytesRead;
-            nBytes -= bytesRead;
         }
     }
 

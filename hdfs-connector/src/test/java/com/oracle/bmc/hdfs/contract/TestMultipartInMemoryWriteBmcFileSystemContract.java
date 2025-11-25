@@ -17,7 +17,7 @@ public class TestMultipartInMemoryWriteBmcFileSystemContract extends TestBmcFile
     @BeforeClass
     public static void setUpStatic() throws Exception {
         final Configuration configuration = new Configuration();
-        final BmcContract.InMemory contract = new BmcContract.InMemory(configuration);
+        final BmcContract.MultipartInMemoryWrite contract = new BmcContract.MultipartInMemoryWrite(configuration);
         contract.init();
         INITIAL_WORKING_DIRECTORY = contract.getTestFileSystem().getWorkingDirectory();
     }

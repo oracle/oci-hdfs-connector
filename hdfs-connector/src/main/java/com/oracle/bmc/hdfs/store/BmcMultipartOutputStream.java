@@ -6,14 +6,13 @@
 package com.oracle.bmc.hdfs.store;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.oracle.bmc.hdfs.BmcProperties;
 import com.oracle.bmc.hdfs.monitoring.OCIMetricKeys;
 import com.oracle.bmc.hdfs.monitoring.RetryMetricsCollector;
-import com.oracle.bmc.hdfs.util.BlockingRejectionHandler;
 import com.oracle.bmc.http.client.io.DuplicatableInputStream;
 import com.oracle.bmc.model.BmcException;
 import com.oracle.bmc.objectstorage.ObjectStorage;
+import com.oracle.bmc.objectstorage.internal.ObjectStorageUtils;
 import com.oracle.bmc.objectstorage.model.ChecksumAlgorithm;
 import com.oracle.bmc.objectstorage.model.CommitMultipartUploadDetails;
 import com.oracle.bmc.objectstorage.model.CommitMultipartUploadPartDetails;
@@ -28,7 +27,6 @@ import com.oracle.bmc.objectstorage.responses.PutObjectResponse;
 import com.oracle.bmc.objectstorage.responses.UploadPartResponse;
 import com.oracle.bmc.objectstorage.transfer.UploadConfiguration;
 import com.oracle.bmc.objectstorage.transfer.internal.StreamHelper;
-import com.oracle.bmc.retrier.RetryConfiguration;
 import lombok.extern.slf4j.Slf4j;
 import net.jodah.failsafe.Failsafe;
 import org.apache.commons.lang3.ArrayUtils;
@@ -46,12 +44,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Phaser;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.oracle.bmc.hdfs.BmcConstants.CHECKSUM_COMBINE_MODE_CRC;
@@ -72,9 +66,8 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
     private Phaser partUploadPhaser;
     private volatile boolean closed = false;
     private ExecutorService executor;
-    private ExecutorService parallelMd5executor;
+    private ExecutorService parallelUploadExecutor;
     private boolean shutdownExecutor;
-    private final BmcPropertyAccessor propertyAccessor;
     private final String additionalChecksumAlgorithm;
     private final RetryMetricsCollector retryMetricsCollector;
     protected final boolean isNewFlow;
@@ -187,7 +180,7 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
             final BmcPropertyAccessor propertyAccessor,
             final MultipartUploadRequest request,
             final int bufferSizeInBytes,
-            final ExecutorService parallelMd5executor,
+            final ExecutorService parallelUploadExecutor,
             int writeMaxRetires,
             RetryMetricsCollector retryMetricsCollector,
             boolean isNewFlow,
@@ -195,11 +188,10 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         super(null, null, writeMaxRetires, isNewFlow, uploadConfiguration);
 
         // delay creation until called in createOutputBufferStream
-        this.propertyAccessor = propertyAccessor;
         this.bufferSizeInBytes = bufferSizeInBytes;
         this.request = request;
         this.shutdownExecutor = false;
-        this.parallelMd5executor = parallelMd5executor;
+        this.parallelUploadExecutor = parallelUploadExecutor;
         this.objectStorage = request.getObjectStorage();
         this.namespaceName = request.getMultipartUploadRequest().getNamespaceName();
         this.bucketName = request.getMultipartUploadRequest().getBucketName();
@@ -235,11 +227,13 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
             try (RetryMetricsCollector collector = this.retryMetricsCollector){
                 Failsafe.with(retryPolicy()).run(() -> {
                     try (InputStream bbis = new ByteArrayInputStream(bytesToWrite)) {
+                        String ifNoneMatch = ObjectStorageUtils.getIfNoneMatchHeader(request.isAllowOverwrite());
                         PutObjectRequest.Builder putFileRequestBuilder = PutObjectRequest.builder()
                                 .putObjectBody(bbis)
                                 .contentLength((long) bytesToWrite.length)
                                 .namespaceName(namespaceName)
                                 .bucketName(bucketName)
+                                .ifNoneMatch(ifNoneMatch)
                                 .objectName(objectName);
 
                         if (ChecksumAlgorithm.Crc32C.getValue().equalsIgnoreCase(additionalChecksumAlgorithm)) {
@@ -248,7 +242,7 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
                             putFileRequestBuilder.contentMD5(computeMd5(bytesToWrite, bytesToWrite.length));
                         }
                         PutObjectRequest putFileRequest = putFileRequestBuilder.buildWithoutInvocationCallback();
-                        PutObjectResponse response = request.getObjectStorage().putObject(putFileRequest.toBuilder()
+                        PutObjectResponse response = objectStorage.putObject(putFileRequest.toBuilder()
                                 .retryConfiguration(collector.getRetryConfiguration()).build());
                         LOG.debug("Put new file with etag {}", response.getETag());
                     }
@@ -338,10 +332,10 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         this.bbos = null;
 
         // clean up our own resources
-        if (!this.executor.isShutdown() && this.shutdownExecutor) {
-            this.executor.shutdown();
+        if (!this.parallelUploadExecutor.isShutdown() && this.shutdownExecutor) {
+            this.parallelUploadExecutor.shutdown();
         }
-        this.executor = null;
+        this.parallelUploadExecutor = null;
     }
 
     private String computeMd5(byte[] bytes, int length) {
@@ -371,9 +365,8 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
         int writeLength = bytesToWrite.length;
         int partNumber = nextPartNumber.getAndIncrement();
 
-        Random random = new Random();
         partUploadPhaser.register();
-        parallelMd5executor.submit(() -> {
+        parallelUploadExecutor.submit(() -> {
             try (RetryMetricsCollector collector = new RetryMetricsCollector(OCIMetricKeys.WRITE_PART,
                     retryTimeoutInSeconds, retryResetThresholdInSeconds)){
                 Failsafe.with(retryPolicy()).run(() -> {
@@ -411,35 +404,6 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
                 partUploadPhaser.arriveAndDeregister();
             }
         });
-    }
-
-    /**
-     * Helper method to build a fixed executor and specify that we need to shut it down
-     */
-    private synchronized void initializeExecutorService() {
-        if (this.executor == null) {
-            final int taskTimeout =
-                    propertyAccessor
-                            .asInteger()
-                            .get(BmcProperties.MULTIPART_IN_MEMORY_WRITE_TASK_TIMEOUT_SECONDS);
-            final int numThreadsForParallelUpload =
-                    propertyAccessor.asInteger().get(BmcProperties.MULTIPART_NUM_UPLOAD_THREADS);
-            final BlockingRejectionHandler rejectedExecutionHandler =
-                    new BlockingRejectionHandler(taskTimeout);
-            this.executor =
-                    new ThreadPoolExecutor(
-                            numThreadsForParallelUpload,
-                            numThreadsForParallelUpload,
-                            0L,
-                            TimeUnit.MILLISECONDS,
-                            new SynchronousQueue<>(),
-                            new ThreadFactoryBuilder()
-                                    .setDaemon(true)
-                                    .setNameFormat("bmcs-hdfs-multipart-upload-%d")
-                                    .build(),
-                            rejectedExecutionHandler);
-            this.shutdownExecutor = true;
-        }
     }
 
     /**
@@ -527,7 +491,6 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
      */
     private void createMultipartUpload() {
         // this is delayed creation of our objects based on OCI semantics
-        initializeExecutorService();
         // perhaps enhance this to name certain things with defaults
         LOG.info("Creating multipart upload for object {}/{}", bucketName, objectName);
 
@@ -540,13 +503,15 @@ public class BmcMultipartOutputStream extends BmcOutputStream {
 
         try (RetryMetricsCollector collector = new RetryMetricsCollector(OCIMetricKeys.WRITE_CREATE_MULTIPART,
                 retryTimeoutInSeconds, retryResetThresholdInSeconds)) {
+            String ifNoneMatch = ObjectStorageUtils.getIfNoneMatchHeader(request.isAllowOverwrite());
             final CreateMultipartUploadRequest createMultipartUploadRequest =
                     createMultipartUploadRequestBuilder
                             .retryConfiguration(collector.getRetryConfiguration())
+                            .ifNoneMatch(ifNoneMatch)
                             .build();
 
             final CreateMultipartUploadResponse createMultipartUploadResponse =
-                    request.getObjectStorage().createMultipartUpload(createMultipartUploadRequest);
+                    objectStorage.createMultipartUpload(createMultipartUploadRequest);
 
             this.uploadId = createMultipartUploadResponse.getMultipartUpload().getUploadId();
             this.nextPartNumber = new AtomicInteger(1);
