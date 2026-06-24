@@ -5,30 +5,20 @@ import com.oracle.bmc.model.BmcException;
 import com.oracle.bmc.monitoring.MonitoringClient;
 import com.oracle.bmc.monitoring.requests.PostMetricDataRequest;
 import com.oracle.bmc.monitoring.responses.PostMetricDataResponse;
+import com.oracle.bmc.monitoring.model.MetricDataDetails;
+import com.oracle.bmc.monitoring.model.PostMetricDataDetails;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
+
+import java.util.List;
+import java.util.Optional;
 
 import static org.junit.Assert.*;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isA;
-import static org.mockito.Mockito.verify;
-import static org.powermock.api.mockito.PowerMockito.doReturn;
-import static org.powermock.api.mockito.PowerMockito.mock;
-import static org.powermock.api.mockito.PowerMockito.mockStatic;
-import static org.powermock.api.mockito.PowerMockito.spy;
-import static org.powermock.api.mockito.PowerMockito.verifyNew;
-import static org.powermock.api.mockito.PowerMockito.verifyStatic;
-import static org.powermock.api.mockito.PowerMockito.when;
-import static org.powermock.api.mockito.PowerMockito.whenNew;
 
 import org.mockito.Mockito;
 import org.powermock.api.mockito.PowerMockito;
@@ -193,6 +183,240 @@ public class OCIMonitorPluginTest {
         runOnce(plugin);
 
         verify(mc, times(3)).postMetricData(any(PostMetricDataRequest.class));
+        plugin.shutdown();
+    }
+
+    private Optional<Double> findMetricValue(List<PostMetricDataRequest> requests, String metricNameSuffix) {
+        for (PostMetricDataRequest req : requests) {
+            PostMetricDataDetails details = req.getPostMetricDataDetails();
+            if (details != null && details.getMetricData() != null) {
+                for (MetricDataDetails md : details.getMetricData()) {
+                    if (md.getName() != null && md.getName().endsWith(metricNameSuffix)) {
+                        if (md.getDatapoints() != null && !md.getDatapoints().isEmpty()) {
+                            return Optional.of(md.getDatapoints().get(0).getValue());
+                        }
+                    }
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    @Test
+    public void testWeightedThroughput_SingleOperation() throws Exception {
+        MonitoringClient mc = PowerMockito.mock(MonitoringClient.class);
+        PowerMockito.doNothing().when(mc).setEndpoint(anyString());
+        PowerMockito.when(mc.postMetricData(any(PostMetricDataRequest.class)))
+                .thenReturn(PostMetricDataResponse.builder().opcRequestId("ok").build());
+
+        OCIMonitorPlugin plugin = newPlugin(mc, true);
+
+        // Single operation: 10,000 bytes in 1000ms
+        double bytesTransferred = 10000.0;
+        double overallTimeMs = 1000.0;
+        double individualThroughput = bytesTransferred / (overallTimeMs / 1000.0);
+
+        plugin.accept(new OCIMetricWithThroughput(
+                "WRITE", overallTimeMs, individualThroughput, null, bytesTransferred, "bucketA", 0, 0, 0));
+
+        runOnce(plugin);
+
+        ArgumentCaptor<PostMetricDataRequest> captor = ArgumentCaptor.forClass(PostMetricDataRequest.class);
+        verify(mc, times(1)).postMetricData(captor.capture());
+
+        Optional<Double> throughputValue = findMetricValue(captor.getAllValues(), "_THROUGHPUT");
+        assertTrue("THROUGHPUT metric should be present", throughputValue.isPresent());
+
+        // Expected: 10,000 bytes / 1 second = 10,000 bytes/sec
+        double expectedThroughput = 10000.0;
+        assertEquals("Single operation throughput should be bytes/time",
+                expectedThroughput, throughputValue.get(), 0.01);
+
+        plugin.shutdown();
+    }
+
+    @Test
+    public void testWeightedThroughput_SameTimeDifferentBytes() throws Exception {
+        MonitoringClient mc = PowerMockito.mock(MonitoringClient.class);
+        PowerMockito.doNothing().when(mc).setEndpoint(anyString());
+        PowerMockito.when(mc.postMetricData(any(PostMetricDataRequest.class)))
+                .thenReturn(PostMetricDataResponse.builder().opcRequestId("ok").build());
+
+        OCIMonitorPlugin plugin = newPlugin(mc, true);
+
+        // Operation A: 100,000 bytes in 1000ms
+        double bytesA = 100000.0;
+        double timeA = 1000.0;
+        double throughputA = bytesA / (timeA / 1000.0);
+
+        // Operation B: 10,000 bytes in 1000ms
+        double bytesB = 10000.0;
+        double timeB = 1000.0;
+        double throughputB = bytesB / (timeB / 1000.0);
+
+        plugin.accept(new OCIMetricWithThroughput("WRITE", timeA, throughputA, null, bytesA, "bucketA", 0, 0, 0));
+        plugin.accept(new OCIMetricWithThroughput("WRITE", timeB, throughputB, null, bytesB, "bucketA", 0, 0, 0));
+
+        runOnce(plugin);
+
+        ArgumentCaptor<PostMetricDataRequest> captor = ArgumentCaptor.forClass(PostMetricDataRequest.class);
+        verify(mc, times(1)).postMetricData(captor.capture());
+
+        Optional<Double> throughputValue = findMetricValue(captor.getAllValues(), "_THROUGHPUT");
+        assertTrue("THROUGHPUT metric should be present", throughputValue.isPresent());
+
+        double expectedThroughput = (bytesA + bytesB) / ((timeA + timeB) / 1000.0);
+        assertEquals("Throughput should be total bytes / total time",
+                expectedThroughput, throughputValue.get(), 0.01);
+
+        plugin.shutdown();
+    }
+
+
+    @Test
+    public void testWeightedThroughput_DifferentTimes() throws Exception {
+        MonitoringClient mc = PowerMockito.mock(MonitoringClient.class);
+        PowerMockito.doNothing().when(mc).setEndpoint(anyString());
+        PowerMockito.when(mc.postMetricData(any(PostMetricDataRequest.class)))
+                .thenReturn(PostMetricDataResponse.builder().opcRequestId("ok").build());
+
+        OCIMonitorPlugin plugin = newPlugin(mc, true);
+
+        double bytesA = 1000000.0;
+        double timeA = 10000.0;
+        double throughputA = bytesA / (timeA / 1000.0);
+
+        double bytesB = 10000.0;
+        double timeB = 100000.0;
+        double throughputB = bytesB / (timeB / 1000.0);
+
+        plugin.accept(new OCIMetricWithThroughput("WRITE", timeA, throughputA, null, bytesA, "bucketA", 0, 0, 0));
+        plugin.accept(new OCIMetricWithThroughput("WRITE", timeB, throughputB, null, bytesB, "bucketA", 0, 0, 0));
+
+        runOnce(plugin);
+
+        ArgumentCaptor<PostMetricDataRequest> captor = ArgumentCaptor.forClass(PostMetricDataRequest.class);
+        verify(mc, times(1)).postMetricData(captor.capture());
+
+        Optional<Double> throughputValue = findMetricValue(captor.getAllValues(), "_THROUGHPUT");
+        assertTrue("THROUGHPUT metric should be present", throughputValue.isPresent());
+
+        double simpleAverage = (throughputA + throughputB) / 2;
+        double weightedAverage = (bytesA + bytesB) / ((timeA + timeB) / 1000.0);
+
+        assertEquals("Throughput MUST be weighted average (totalBytes/totalTime)",
+                weightedAverage, throughputValue.get(), 0.01);
+
+        assertNotEquals("Throughput must NOT be simple average",
+                simpleAverage, throughputValue.get(), 1000.0);
+
+        plugin.shutdown();
+    }
+
+    @Test
+    public void testWeightedThroughput_ReadWithTTFB() throws Exception {
+        MonitoringClient mc = PowerMockito.mock(MonitoringClient.class);
+        PowerMockito.doNothing().when(mc).setEndpoint(anyString());
+        PowerMockito.when(mc.postMetricData(any(PostMetricDataRequest.class)))
+                .thenReturn(PostMetricDataResponse.builder().opcRequestId("ok").build());
+
+        OCIMonitorPlugin plugin = newPlugin(mc, true);
+
+        // READ operation A: 500,000 bytes in 5000ms, TTFB = 100ms
+        double bytesA = 500000.0;
+        double timeA = 5000.0;
+        double ttfbA = 100.0;
+        double throughputA = bytesA / (timeA / 1000.0);
+
+        // READ operation B: 100,000 bytes in 20000ms, TTFB = 500ms
+        double bytesB = 100000.0;
+        double timeB = 20000.0;
+        double ttfbB = 500.0;
+        double throughputB = bytesB / (timeB / 1000.0);
+
+        plugin.accept(new OCIMetricWithFBLatency("READ", timeA, ttfbA, throughputA, null, bytesA, "bucketA", 0, 0, 0));
+        plugin.accept(new OCIMetricWithFBLatency("READ", timeB, ttfbB, throughputB, null, bytesB, "bucketA", 0, 0, 0));
+
+        runOnce(plugin);
+
+        ArgumentCaptor<PostMetricDataRequest> captor = ArgumentCaptor.forClass(PostMetricDataRequest.class);
+        verify(mc, times(1)).postMetricData(captor.capture());
+
+        Optional<Double> throughputValue = findMetricValue(captor.getAllValues(), "_THROUGHPUT");
+        assertTrue("THROUGHPUT metric should be present", throughputValue.isPresent());
+
+        double expectedThroughput = (bytesA + bytesB) / ((timeA + timeB) / 1000.0);
+        assertEquals("READ throughput should also use weighted average",
+                expectedThroughput, throughputValue.get(), 0.01);
+
+        plugin.shutdown();
+    }
+
+    @Test
+    public void testWeightedThroughput_ExcludesErrors() throws Exception {
+        MonitoringClient mc = PowerMockito.mock(MonitoringClient.class);
+        PowerMockito.doNothing().when(mc).setEndpoint(anyString());
+        PowerMockito.when(mc.postMetricData(any(PostMetricDataRequest.class)))
+                .thenReturn(PostMetricDataResponse.builder().opcRequestId("ok").build());
+
+        OCIMonitorPlugin plugin = newPlugin(mc, true);
+
+        double bytesSuccess = 50000.0;
+        double timeSuccess = 5000.0;
+        double throughputSuccess = bytesSuccess / (timeSuccess / 1000.0);
+
+        BmcException error = new BmcException(500, "InternalError", "msg", null);
+        double bytesError = 1000000.0;
+        double timeError = 1000.0;
+        double throughputError = bytesError / (timeError / 1000.0);
+
+        plugin.accept(new OCIMetricWithThroughput("WRITE", timeSuccess, throughputSuccess, null, bytesSuccess, "bucketA", 0, 0, 0));
+        plugin.accept(new OCIMetricWithThroughput("WRITE", timeError, throughputError, error, bytesError, "bucketA", 0, 0, 0));
+
+        runOnce(plugin);
+
+        ArgumentCaptor<PostMetricDataRequest> captor = ArgumentCaptor.forClass(PostMetricDataRequest.class);
+        verify(mc, times(2)).postMetricData(captor.capture());  // 2 posts: success group + error group
+
+        Optional<Double> throughputValue = findMetricValue(captor.getAllValues(), "_THROUGHPUT");
+        assertTrue("THROUGHPUT metric should be present", throughputValue.isPresent());
+
+        double expectedThroughput = bytesSuccess / (timeSuccess / 1000.0);
+        assertEquals("Throughput should only include successful operations",
+                expectedThroughput, throughputValue.get(), 0.01);
+
+        plugin.shutdown();
+    }
+
+    @Test
+    public void testTotalBytesMetric_IsSum() throws Exception {
+        MonitoringClient mc = PowerMockito.mock(MonitoringClient.class);
+        PowerMockito.doNothing().when(mc).setEndpoint(anyString());
+        PowerMockito.when(mc.postMetricData(any(PostMetricDataRequest.class)))
+                .thenReturn(PostMetricDataResponse.builder().opcRequestId("ok").build());
+
+        OCIMonitorPlugin plugin = newPlugin(mc, true);
+
+        double bytesA = 100000.0;
+        double bytesB = 50000.0;
+        double bytesC = 25000.0;
+
+        plugin.accept(new OCIMetricWithThroughput("WRITE", 1000.0, 100000.0, null, bytesA, "bucketA", 0, 0, 0));
+        plugin.accept(new OCIMetricWithThroughput("WRITE", 1000.0, 50000.0, null, bytesB, "bucketA", 0, 0, 0));
+        plugin.accept(new OCIMetricWithThroughput("WRITE", 1000.0, 25000.0, null, bytesC, "bucketA", 0, 0, 0));
+
+        runOnce(plugin);
+
+        ArgumentCaptor<PostMetricDataRequest> captor = ArgumentCaptor.forClass(PostMetricDataRequest.class);
+        verify(mc, times(1)).postMetricData(captor.capture());
+
+        Optional<Double> bytesValue = findMetricValue(captor.getAllValues(), "_BYTES");
+        assertTrue("BYTES metric should be present", bytesValue.isPresent());
+
+        double expectedTotalBytes = bytesA + bytesB + bytesC;
+        assertEquals("BYTES metric should be total (sum), not average",
+                expectedTotalBytes, bytesValue.get(), 0.01);
+
         plugin.shutdown();
     }
 }

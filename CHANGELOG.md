@@ -2,6 +2,15 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
+## 3.4.1.0.0.5 - 2026-06-22
+### Changed
+- Updated OCI Java SDK from `3.77.0` to `3.86.2` to pick up the IdleConnectionMonitor fix.
+
+### Fixed
+- Fixed `hdfs-full` shading so Jackson, Avro, Jakarta annotations/inject, Javassist, and OCI SDK circuit breaker classes are included and relocated correctly.
+- Fixed OCI Monitoring throughput aggregation to use weighted average throughput based on total bytes and elapsed time.
+- Improved `BmcFilesystem` initialization errors so the underlying filesystem creation failure is surfaced instead of only the Guava cache wrapper exception.
+
 # 3.4.1.0.0.4- 2025-11-24
 ### Added
 - Added support for Batch Delete API to optimize recursive delete operations.

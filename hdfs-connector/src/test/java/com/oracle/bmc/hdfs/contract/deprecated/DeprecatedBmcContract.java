@@ -9,6 +9,7 @@ import com.oracle.bmc.hdfs.BmcConstants;
 import com.oracle.bmc.hdfs.GlobalConfigHolder;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.contract.AbstractBondedFSContract;
+import org.junit.Assume;
 
 import java.util.Map;
 
@@ -24,9 +25,25 @@ public class DeprecatedBmcContract extends AbstractBondedFSContract {
         if (injected != null) {
             conf.addResource(injected);
         } else {
+            assumeDeprecatedCredentialsAvailable();
             this.addConfResource(CREDENTIALS_XML);
         }
         // convertToDeprecatedConfiguration(conf);
+    }
+
+    public static void assumeDeprecatedCredentialsAvailable() {
+        if (GlobalConfigHolder.getConf() != null) {
+            return;
+        }
+
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        if (classLoader == null) {
+            classLoader = DeprecatedBmcContract.class.getClassLoader();
+        }
+
+        Assume.assumeTrue(
+                "Skipping deprecated contract tests because contract/oci-credentials-deprecated.xml is not present",
+                classLoader.getResource(CREDENTIALS_XML) != null);
     }
 
     public static void convertToDeprecatedConfiguration(Configuration conf) {
