@@ -111,8 +111,9 @@ public class OCIMonitorPlugin extends OCIMonitorConsumerPlugin {
             double averageOverallTime = 0.0d;
             int errorCount = 0;
             double averageTTFB = 0.0d;
-            double averageThroughput = 0.0d;
             double totalBytesTransferred = 0.0d;
+            double totalTimeForThroughput = 0.0d;
+            int throughputOperationCount = 0;
             int retryAttemptCount = 0;
             int retry503Count = 0;
             int retry429Count = 0;
@@ -142,11 +143,13 @@ public class OCIMonitorPlugin extends OCIMonitorConsumerPlugin {
                             averageTTFB += ttfb;
                         }
 
-                        averageThroughput += ((OCIMetricWithFBLatency) om).getThroughput();
                         totalBytesTransferred += ((OCIMetricWithFBLatency) om).getBytesTransferred();
+                        totalTimeForThroughput += om.getOverallTime();
+                        throughputOperationCount++;
                     } else if (om instanceof OCIMetricWithThroughput) {
-                        averageThroughput += ((OCIMetricWithThroughput) om).getThroughput();
                         totalBytesTransferred += ((OCIMetricWithThroughput) om).getBytesTransferred();
+                        totalTimeForThroughput += om.getOverallTime();
+                        throughputOperationCount++;
                     } else if (om instanceof OCIMetricWithBatchCounts) {
                         totalDeletedCount += ((OCIMetricWithBatchCounts) om).getDeletedCount();
                         totalFailedCount += ((OCIMetricWithBatchCounts) om).getFailedCount();
@@ -175,15 +178,21 @@ public class OCIMonitorPlugin extends OCIMonitorConsumerPlugin {
                     maxRetryCount,
                     bunchedErrorStatusCode > 0 ? bunchedErrorStatusCode : "none");
 
+            // Calculate weighted average throughput: total bytes / total time
+            // This is more accurate than simple average of individual throughputs
+            double weightedAverageThroughput = 0.0d;
+            if (totalBytesTransferred > 0 && totalTimeForThroughput > 0) {
+                weightedAverageThroughput = totalBytesTransferred / (totalTimeForThroughput / 1000.0);
+                LOG.debug("Throughput calculation: key={}, totalBytes={}, totalTimeMs={}, throughputOps={}, weightedAvgThroughput={} bytes/sec",
+                        actualKey, totalBytesTransferred, totalTimeForThroughput, throughputOperationCount,
+                        String.format("%.2f", weightedAverageThroughput));
+            }
+
             if (successCount > 0) {
                 averageOverallTime = averageOverallTime / successCount;
 
                 if (averageTTFB > 0) {
                     averageTTFB = averageTTFB / successCount;
-                }
-
-                if (averageThroughput > 0) {
-                    averageThroughput = averageThroughput / successCount;
                 }
             }
 
@@ -205,8 +214,8 @@ public class OCIMonitorPlugin extends OCIMonitorConsumerPlugin {
                     mdList.add(getMetricDataDetails(actualKey + "_TTFB", averageTTFB, lastRecordedTime));
                 }
 
-                if (averageThroughput > 0) {
-                    mdList.add(getMetricDataDetails(actualKey + "_THROUGHPUT", averageThroughput, lastRecordedTime));
+                if (weightedAverageThroughput > 0) {
+                    mdList.add(getMetricDataDetails(actualKey + "_THROUGHPUT", weightedAverageThroughput, lastRecordedTime));
                 }
 
                 if (totalBytesTransferred > 0) {

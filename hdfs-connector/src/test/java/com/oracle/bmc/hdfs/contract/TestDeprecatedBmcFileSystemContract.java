@@ -32,6 +32,7 @@ public class TestDeprecatedBmcFileSystemContract extends FileSystemContractBaseT
 
     @BeforeClass
     public static void setUpStatic() throws Exception {
+        DeprecatedBmcContract.assumeDeprecatedCredentialsAvailable();
         final Configuration configuration =
                 new Configuration() {
                     @Override
@@ -47,6 +48,7 @@ public class TestDeprecatedBmcFileSystemContract extends FileSystemContractBaseT
 
     @Before
     public void setUp() throws Exception {
+        DeprecatedBmcContract.assumeDeprecatedCredentialsAvailable();
         final Configuration configuration =
                 new Configuration() {
                     @Override

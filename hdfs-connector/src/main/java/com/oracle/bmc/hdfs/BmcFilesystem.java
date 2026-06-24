@@ -48,6 +48,7 @@ import org.apache.hadoop.util.Progressable;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import com.google.common.util.concurrent.UncheckedExecutionException;
 
 import com.oracle.bmc.hdfs.store.BmcDataStore;
 import com.oracle.bmc.hdfs.store.BmcDataStoreFactory;
@@ -180,7 +181,21 @@ public class BmcFilesystem extends FileSystem {
         }
         setupFilesystemCache(configuration);
         delegteFSKey = new FSKey(uri, configuration);
-        delegate = fsCache.getUnchecked(delegteFSKey);
+        try {
+            delegate = fsCache.getUnchecked(delegteFSKey);
+        } catch (UncheckedExecutionException e) {
+            // Surface the loader-side failure instead of only the Guava wrapper.
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            throw new IOException(
+                    "Failed to initialize OCI filesystem for uri="
+                            + uri
+                            + " ("
+                            + cause.getClass().getSimpleName()
+                            + ": "
+                            + cause.getMessage()
+                            + ")",
+                    cause);
+        }
         delegate.addOwner(this);
     }
 

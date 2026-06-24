@@ -6,8 +6,6 @@
 package com.oracle.bmc.hdfs.contract;
 
 import com.oracle.bmc.hdfs.GlobalConfigHolder;
-
-import com.oracle.bmc.hdfs.contract.util.BuildConfigWriter;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.contract.AbstractBondedFSContract;
 import java.nio.file.Files;
@@ -28,62 +26,11 @@ public class BmcContract extends AbstractBondedFSContract {
         if (injected != null) {
             conf.addResource(injected);
         }
-        //Please NOT delete following comment, it is used to release to github.
-        //DELETE-BEFORE-RELEASE-BEGIN
-        else if (Boolean.parseBoolean(System.getProperty("resource.principal.credentials.fetcher", "false"))) {
-            String customConfigFile = generateCustomConfigFile();
-            this.addConfResource(customConfigFile);
-            this.addConfResource(CREDENTIALS_XML);
-        }
-        //DELETE-BEFORE-RELEASE-END
         else {
             this.addConfResource(CREDENTIALS_XML);
         }
     }
 
-    //Please NOT delete following comment, it is used to release to github.
-    //DELETE-BEFORE-RELEASE-BEGIN
-    public static void displayFiles(String relativePath) {
-        Path path = Paths.get(relativePath);
-        Path absolutePath = path.toAbsolutePath();
-        try {
-            if (Files.exists(absolutePath)) {
-                if (Files.isDirectory(absolutePath)) {
-                    Files.list(absolutePath).forEach(System.out::println);
-                } else {
-                    System.out.println("The path is not a directory: " + absolutePath);
-                }
-            } else {
-                System.out.println("The path does not exist: " + absolutePath);
-            }
-        } catch (Exception e) {
-            System.out.println("Error listing files: " + e.getMessage());
-        }
-    }
-
-    private static void displayDebugInfo() {
-        System.out.println("try contract/ folder");
-        displayFiles("contract/");
-        System.out.println("try . folder");
-        displayFiles(".");
-        System.out.println("try target/test-classes/ folder");
-        displayFiles("/sparta/input/hdfs-connector/target/test-classes/");
-        System.out.println("try target/test-classes/contract folder");
-        displayFiles("/sparta/input/hdfs-connector/target/test-classes/contract/");
-    }
-
-    private String generateCustomConfigFile() {
-        return cache.computeIfAbsent("customConfigFile", k -> {
-            Path savePath = Paths.get(getClass().getClassLoader().getResource("").getFile() + "/contract/");
-            BuildConfigWriter.saveConfigAndPrivateKey(savePath);
-
-            // displayDebugInfo();
-
-            BuildConfigWriter.saveUserDetails(savePath, "user-details.json");
-            return "contract/oci-credentials.xml";
-        });
-    }
-    //DELETE-BEFORE-RELEASE-END
 
     @Override
     public String getScheme() {
